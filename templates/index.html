@@ -51,51 +51,44 @@
 <body>
     <h1>Image Watermark Web</h1>
     
-    <!-- 文件选择框 -->
     <input type="file" id="fileInput">
     
     <h2>Uploaded Image</h2>
-    <!-- 显示上传的图片 -->
+
     <img id="imagePreview" src="" alt="No Image" style="display:none;">
     
-    <!-- 处理按钮 -->
     <button id="processBtn" style="display:none;">Process Image</button>
     
-    <!-- 加载动画 -->
     <div id="loader" class="loader"></div>
     
     <h2>Processed Image</h2>
-    <!-- 处理后的图片 -->
+
     <img id="processedImage" src="" alt="Processed Image" style="display:none;">
     
     <script>
         let selectedFile = null;
 
-        // 监听文件选择框的变化事件
         document.getElementById('fileInput').addEventListener('change', function(event) {
             const file = event.target.files[0];
             if (file) {
                 selectedFile = file;
 
-                // 使用FileReader读取文件并显示
                 const reader = new FileReader();
                 reader.onload = function(e) {
                     const imagePreview = document.getElementById('imagePreview');
                     imagePreview.src = e.target.result;
                     imagePreview.style.display = 'block';
                     
-                    // 显示处理按钮
+
                     document.getElementById('processBtn').style.display = 'inline';
                 };
                 reader.readAsDataURL(file);
             }
         });
 
-        // 点击处理按钮时上传图片并处理
         document.getElementById('processBtn').addEventListener('click', function() {
-            // 显示加载动画
             document.getElementById('loader').style.display = 'block';
-            document.getElementById('processedImage').style.display = 'none';  // 隐藏之前的处理图
+            document.getElementById('processedImage').style.display = 'none';
             
             const formData = new FormData();
             formData.append("file", selectedFile);
@@ -111,12 +104,11 @@
                     processedImage.src = data.processed_image;
                     processedImage.style.display = 'block';
                 }
-                // 隐藏加载动画
                 document.getElementById('loader').style.display = 'none';
             })
             .catch(error => {
                 console.error('Error uploading image:', error);
-                document.getElementById('loader').style.display = 'none';  // 如果出错也要隐藏加载动画
+                document.getElementById('loader').style.display = 'none';
             });
         });
     </script>
