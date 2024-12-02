@@ -59,6 +59,6 @@ if __name__ == "__main__":
 
     image_path = sys.argv[1]
     
-    notify = True
+    notify = False
     result = add_borders_logo_and_text(image_path, notify)
     print(f"Processed image saved to {result}") 
