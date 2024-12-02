@@ -1,5 +1,7 @@
 import os
 import time
+from datetime import datetime
+
 from flask import Flask, request, redirect, render_template, jsonify, send_from_directory
 import subprocess
 from werkzeug.utils import secure_filename
@@ -34,7 +36,7 @@ def upload_file():
     
     if file and allowed_file(file.filename):
         timestamp = int(time.time())
-        
+        timestamp = datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d_%H:%M:%S')
         # 获取文件名和扩展名
         filename = secure_filename(file.filename)
         extension = filename.rsplit('.', 1)[1]
