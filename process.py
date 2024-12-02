@@ -41,7 +41,7 @@ def add_borders_logo_and_text(image_path, notify = False,preview = False):
     if preview:
         return new_image
     else:
-        new_image.save(output_path, exif=exif_bytes)  # keep exif data
+        new_image.save(output_path, exif=exif_bytes, quality=90)  # keep exif data
         print("sending to server\n")
         if notify:
             url = "8.152.219.197:9010/watermark"
