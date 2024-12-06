@@ -27,8 +27,40 @@
             margin: 10px 0;
         }
 
-        input, button {
+        input[type="file"] {
+            display: none; /* 隐藏默认文件输入框 */
+        }
+
+        .custom-file-label {
+            padding: 10px 20px;
+            font-size: 16px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            background-color: #3498db;
+            color: white;
+            text-align: center;
+        }
+
+        .custom-file-label:hover {
+            background-color: #2980b9;
+        }
+
+        button, a {
             margin: 10px 0;
+            padding: 10px 20px;
+            font-size: 16px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            background-color: #3498db;
+            color: white;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        button:hover, a:hover {
+            background-color: #2980b9;
         }
 
         .loader {
@@ -51,44 +83,55 @@
 <body>
     <h1>Image Watermark Web</h1>
     
+    <!-- 自定义文件选择按钮 -->
+    <label for="fileInput" class="custom-file-label">Choose File</label>
     <input type="file" id="fileInput">
     
+    <!-- 上传的图片预览 -->
     <h2>Uploaded Image</h2>
-
     <img id="imagePreview" src="" alt="No Image" style="display:none;">
-    
     <button id="processBtn" style="display:none;">Process Image</button>
     
+    <!-- 加载动画 -->
     <div id="loader" class="loader"></div>
     
+    <!-- 处理后的图片显示 -->
     <h2>Processed Image</h2>
-
     <img id="processedImage" src="" alt="Processed Image" style="display:none;">
+    <a id="downloadBtn" style="display:none;">Download Processed Image</a>
     
     <script>
         let selectedFile = null;
 
+        // 文件选择事件
         document.getElementById('fileInput').addEventListener('change', function(event) {
             const file = event.target.files[0];
             if (file) {
                 selectedFile = file;
-
+        
+                // 隐藏旧的展示内容
+                document.getElementById('imagePreview').style.display = 'none';
+                document.getElementById('processBtn').style.display = 'none';
+                document.getElementById('processedImage').style.display = 'none';
+                document.getElementById('downloadBtn').style.display = 'none';
+        
+                // 更新新的图片预览
                 const reader = new FileReader();
                 reader.onload = function(e) {
                     const imagePreview = document.getElementById('imagePreview');
                     imagePreview.src = e.target.result;
                     imagePreview.style.display = 'block';
-                    
-
                     document.getElementById('processBtn').style.display = 'inline';
                 };
                 reader.readAsDataURL(file);
             }
         });
 
+        // 处理图片按钮事件
         document.getElementById('processBtn').addEventListener('click', function() {
             document.getElementById('loader').style.display = 'block';
             document.getElementById('processedImage').style.display = 'none';
+            document.getElementById('downloadBtn').style.display = 'none';
             
             const formData = new FormData();
             formData.append("file", selectedFile);
@@ -100,9 +143,23 @@
             .then(response => response.json())
             .then(data => {
                 if (data.processed_image) {
+                    // 显示处理后的图片
                     const processedImage = document.getElementById('processedImage');
-                    processedImage.src = data.processed_image;
+            
+                    // 为避免缓存问题，在 URL 后附加随机查询字符串
+                    const timestamp = new Date().getTime(); // 当前时间戳
+                    processedImage.src = `${data.processed_image}?t=${timestamp}`;
                     processedImage.style.display = 'block';
+            
+                    // 设置下载按钮
+                    const downloadBtn = document.getElementById('downloadBtn');
+                    downloadBtn.href = data.processed_image; // 下载链接
+            
+                    // 根据上传文件名生成下载文件名
+                    const originalName = selectedFile.name.split('.').slice(0, -1).join('.');
+                    const extension = selectedFile.name.split('.').pop();
+                    downloadBtn.download = `${originalName}_watermark.${extension}`;
+                    downloadBtn.style.display = 'inline'; // 显示按钮
                 }
                 document.getElementById('loader').style.display = 'none';
                 alert('Image processed successfully!');
