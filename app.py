@@ -63,7 +63,7 @@ def upload_file():
                 return jsonify(error=f'{result.stderr}'), 500
 
         except Exception as e:
-            return jsonify(error=f'Error calling process.py: {str(e)}'), 500
+            return jsonify(error=f'Error calling process.py'), 500
         
         # 处理后的图片路径
         # processed_filename = filename_with_timestamp.replace('.jpg', '_watermark.jpg')
