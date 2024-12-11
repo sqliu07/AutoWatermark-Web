@@ -10,7 +10,7 @@ app = Flask(__name__)
 
 UPLOAD_FOLDER = './uploads'
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-app.config['ALLOWED_EXTENSIONS'] = {'png', 'jpg', 'jpeg', 'gif'}
+app.config['ALLOWED_EXTENSIONS'] = {'png', 'jpg', 'jpeg'}
 app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 设置最大文件大小限制（例如 100MB）
 
 # 确保上传文件夹存在
@@ -27,16 +27,19 @@ def index():
 @app.route('/upload', methods=['POST'])
 def upload_file():
     if 'file' not in request.files:
-        return jsonify(error="No file part"), 400
+        return jsonify(error="No file uploaded!"), 400
     
     file = request.files['file']
     
     if file.filename == '':
-        return jsonify(error="No selected file"), 400
+        return jsonify(error="No selected file!"), 400
+    
+    if not allowed_file(file.filename):
+        return jsonify(error="Invalid file type! Please upload a PNG, JPG or JPEG file."), 400
     
     if file and allowed_file(file.filename):
         timestamp = int(time.time())
-        timestamp = datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d_%H:%M:%S')
+        timestamp = datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d_%H-%M-%S')
         # 获取文件名和扩展名
         filename = secure_filename(file.filename)
         extension = filename.rsplit('.', 1)[1]
@@ -57,14 +60,16 @@ def upload_file():
             )
 
             if result.returncode != 0:
-                return jsonify(error=f'Error processing file: {result.stderr}'), 500
+                return jsonify(error=f'{result.stderr}'), 500
 
         except Exception as e:
             return jsonify(error=f'Error calling process.py: {str(e)}'), 500
         
         # 处理后的图片路径
-        processed_filename = filename_with_timestamp.replace('.jpg', '_watermark.jpg')
-        processed_filepath = os.path.join(app.config['UPLOAD_FOLDER'], processed_filename)
+        # processed_filename = filename_with_timestamp.replace('.jpg', '_watermark.jpg')
+        original_name, extension = os.path.splitext(filename_with_timestamp)
+        processed_filename = f"{original_name}_watermark{extension}"
+        print(processed_filename)
 
         # 返回原图和处理后的图像路径
         return jsonify({
