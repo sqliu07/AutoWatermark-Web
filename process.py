@@ -18,9 +18,8 @@ def add_borders_logo_and_text(image_path, notify = False,preview = False):
         output_path = f"{original_name}_watermark{extension}"
         # Todo: Add more selections
         manufacturer = get_manufacturer(image_path)
-        if manufacturer is not None:
+        if manufacturer is not None and len(manufacturer) > 0:
             logo_path = find_logo(manufacturer)
-            print(f"Found logo for manufacturer: {logo_path}")
             if logo_path is None:
                 raise ValueError("Unspported manufacturer! Please wait for our update.")
         else:
@@ -70,4 +69,3 @@ if __name__ == "__main__":
     
     notify = False
     result = add_borders_logo_and_text(image_path, notify)
-    print(f"Processed image saved to {result}") 
