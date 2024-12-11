@@ -24,7 +24,7 @@ def add_borders_logo_and_text(image_path, notify = False,preview = False):
             if logo_path is None:
                 raise ValueError("Unspported manufacturer! Please wait for our update.")
         else:
-            raise ValueError("This imgae does not contain valid exif data!")
+            raise ValueError("This image does not contain valid exif data!")
         image = Image.open(image_path)
         image = reset_image_orientation(image)  # Reset orientation
         exif_dict = None
