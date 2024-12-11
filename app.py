@@ -69,7 +69,6 @@ def upload_file():
         # processed_filename = filename_with_timestamp.replace('.jpg', '_watermark.jpg')
         original_name, extension = os.path.splitext(filename_with_timestamp)
         processed_filename = f"{original_name}_watermark{extension}"
-        print(processed_filename)
 
         # 返回原图和处理后的图像路径
         return jsonify({
