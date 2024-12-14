@@ -33,9 +33,9 @@ def text_to_image(text, font_path, font_size, color='black'):
     draw.text((0, 0), text, font=font, fill=color)
     return image
 
-def generate_watermark_image(origin_image, logo_path, camera_info, shooting_info, font_path_thin, font_path_bold, font_size = 80):
+def generate_watermark_image(origin_image, logo_path, camera_info, shooting_info, font_path_thin, font_path_bold, font_size = 70):
     # origin_image = Image.open(origin_image_path).convert("RGB")
-    line_blank = 55
+    line_blank = 40
     ori_width, ori_height = origin_image.size
     bottom_width = int(ORIGIN_BOTTOM_BORDER_RATIO * ori_height)
     top_width = int(ORIGIN_TOP_BORDER_RATIO * ori_height)
