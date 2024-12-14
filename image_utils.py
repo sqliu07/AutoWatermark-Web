@@ -33,8 +33,9 @@ def text_to_image(text, font_path, font_size, color='black'):
     draw.text((0, 0), text, font=font, fill=color)
     return image
 
-def generate_watermark_image(origin_image, logo_path, camera_info, shooting_info, font_path_thin, font_path_bold, font_size = 90):
+def generate_watermark_image(origin_image, logo_path, camera_info, shooting_info, font_path_thin, font_path_bold, font_size = 80):
     # origin_image = Image.open(origin_image_path).convert("RGB")
+    line_blank = 80
     ori_width, ori_height = origin_image.size
     bottom_width = int(ORIGIN_BOTTOM_BORDER_RATIO * ori_height)
     top_width = int(ORIGIN_TOP_BORDER_RATIO * ori_height)
@@ -49,6 +50,7 @@ def generate_watermark_image(origin_image, logo_path, camera_info, shooting_info
  
     if (is_landscape(origin_image)):
         font_size = 150
+        line_blank = 100
         logo_ratio = 1
     left_top = text_to_image(camera_info[0], font_path_bold, font_size)
     left_bottom = text_to_image(camera_info[1], font_path_thin, font_size)
@@ -87,14 +89,15 @@ def generate_watermark_image(origin_image, logo_path, camera_info, shooting_info
                         top_width + ori_height + int(bottom_width / 2) + int(text_iamge_height / 8)))    
     
     draw = ImageDraw.Draw(origin_image)
-    draw.line((border_width + ori_width - right_top_width - 100,
+    
+    draw.line((border_width + ori_width - right_top_width - line_blank,
                top_width + ori_height + int(bottom_width / 2) - int(3 * text_iamge_height / 2),
-               border_width + ori_width - right_top_width - 100,
+               border_width + ori_width - right_top_width - line_blank,
                top_width + ori_height + int(bottom_width / 2) + int(3 * text_iamge_height / 2)),
               fill=(0, 0, 0),
               width=2) 
     
-    origin_image.paste(logo, (border_width + ori_width - right_top_width - logo.width - 200, 
+    origin_image.paste(logo, (border_width + ori_width - right_top_width - logo.width - 2 * line_blank, 
                        text_block_height + int (text_iamge_height / 8)))
     
     return origin_image
