@@ -78,14 +78,38 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+
+        .lang-buttons {
+            position: absolute;
+            top: 10px;
+            right: 20px;
+        }
+
+        .lang-buttons a {
+            margin: 0 10px;
+            font-size: 16px;
+            color: #000000;
+            text-decoration: underline;
+            cursor: pointer;
+            background: none;
+            border: none;
+            padding: 0;
+        }
+        
     </style>
 </head>
 <body>
+    <!-- 语言切换按钮 -->
+    <div class="lang-buttons">
+        <a id="langZh">中文</a>
+        <a id="langEn">English</a>
+    </div>
+
     <h1>Image Watermark Web</h1>
     
     <!-- 自定义文件选择按钮 -->
     <label for="fileInput" class="custom-file-label">Choose File</label>
-<input type="file" id="fileInput" accept="image/*">
+    <input type="file" id="fileInput" accept="image/*">
     
     <!-- 上传的图片预览 -->
     <h2>Uploaded Image</h2>
@@ -101,6 +125,48 @@
     <a id="downloadBtn" style="display:none;">Download Processed Image</a>
     
     <script>
+        const translations = {
+            en: {
+                title: "Image Watermark Web",
+                chooseFile: "Choose File",
+                uploadedImage: "Uploaded Image",
+                processImage: "Process Image",
+                processedImage: "Processed Image",
+                downloadImage: "Download Processed Image",
+                alerts: {
+                    uploadSuccess: "Image processed successfully!",
+                    uploadError: "Unexpected error occurred.",
+                }
+            },
+            zh: {
+                title: "边框水印",
+                chooseFile: "选择文件",
+                uploadedImage: "已上传图片",
+                processImage: "开始添加水印",
+                processedImage: "已添加水印的图片",
+                downloadImage: "下载已添加水印的图片",
+                alerts: {
+                    uploadSuccess: "图片处理成功！",
+                    uploadError: "发生意外错误。",
+                }
+            }
+        };
+
+        let currentLang = 'zh';
+
+        function switchLanguage(lang) {
+            currentLang = lang;
+            document.querySelector('h1').textContent = translations[lang].title;
+            document.querySelector('.custom-file-label').textContent = translations[lang].chooseFile;
+            document.querySelector('h2:nth-of-type(1)').textContent = translations[lang].uploadedImage;
+            document.getElementById('processBtn').textContent = translations[lang].processImage;
+            document.querySelector('h2:nth-of-type(2)').textContent = translations[lang].processedImage;
+            document.getElementById('downloadBtn').textContent = translations[lang].downloadImage;
+        }
+
+        document.getElementById('langEn').addEventListener('click', () => switchLanguage('en'));
+        document.getElementById('langZh').addEventListener('click', () => switchLanguage('zh'));
+
         let selectedFile = null;
 
         // 文件选择事件
@@ -109,13 +175,11 @@
             if (file) {
                 selectedFile = file;
         
-                // 隐藏旧的展示内容
                 document.getElementById('imagePreview').style.display = 'none';
                 document.getElementById('processBtn').style.display = 'none';
                 document.getElementById('processedImage').style.display = 'none';
                 document.getElementById('downloadBtn').style.display = 'none';
         
-                // 更新新的图片预览
                 const reader = new FileReader();
                 reader.onload = function(e) {
                     const imagePreview = document.getElementById('imagePreview');
@@ -127,7 +191,6 @@
             }
         });
 
-        // 处理图片按钮事件
         document.getElementById('processBtn').addEventListener('click', function() {
             document.getElementById('loader').style.display = 'block';
             document.getElementById('processedImage').style.display = 'none';
@@ -136,7 +199,7 @@
             const formData = new FormData();
             formData.append("file", selectedFile);
 
-            fetch('/upload', {
+            fetch('/upload?lang=' + currentLang, {
                 method: 'POST',
                 body: formData
             })
@@ -148,32 +211,30 @@
                     return;
                 }
                 if (data.processed_image) {
-                    // 显示处理后的图片
                     const processedImage = document.getElementById('processedImage');
-            
-                    // 为避免缓存问题，在 URL 后附加随机查询字符串
-                    const timestamp = new Date().getTime(); // 当前时间戳
+                    const timestamp = new Date().getTime();
                     processedImage.src = `${data.processed_image}?t=${timestamp}`;
                     processedImage.style.display = 'block';
             
-                    // 设置下载按钮
                     const downloadBtn = document.getElementById('downloadBtn');
-                    downloadBtn.href = data.processed_image; // 下载链接
-            
-                    // 根据上传文件名生成下载文件名
+                    downloadBtn.href = data.processed_image;
                     const originalName = selectedFile.name.split('.').slice(0, -1).join('.');
                     const extension = selectedFile.name.split('.').pop();
                     downloadBtn.download = `${originalName}_watermark.${extension}`;
-                    downloadBtn.style.display = 'inline'; // 显示按钮
+                    downloadBtn.style.display = 'inline';
                 }
                 document.getElementById('loader').style.display = 'none';
-                alert('Image processed successfully!');
+                alert(translations[currentLang].alerts.uploadSuccess);
             })
             .catch(error => {
-                alert('Unexpected error occurred: ' + error);
+                alert(translations[currentLang].alerts.uploadError);
                 console.error('Error uploading image:', error);
                 document.getElementById('loader').style.display = 'none';
             });
+        });
+
+        document.addEventListener('DOMContentLoaded', () => {
+            switchLanguage('zh');  // 默认语言
         });
     </script>
 </body>

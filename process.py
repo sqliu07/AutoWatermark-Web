@@ -12,7 +12,21 @@ FONT_SIZE = 100
 GLOBAL_FONT_PATH_BOLD = "./fonts/AlibabaPuHuiTi-2-85-Bold.otf"
 GLOBAL_FONT_PATH_LIGHT = "./fonts/AlibabaPuHuiTi-2-45-Light.otf"
 
-def add_borders_logo_and_text(image_path, notify = False,preview = False):
+ERROR_MESSAGES = {
+    "unsupported_manufacturer": {
+        'en': "Unsupported camera! Please wait for our update.",
+        'zh': "暂不支持该品牌相机！请等待我们的更新。"
+    },
+    "no_exif_data": {
+        'en': "This image does not contain valid exif data!",
+        'zh': "该图片不包含有效的exif数据！"
+    },
+}
+
+def get_message(key, lang='zh'):
+    return ERROR_MESSAGES.get(key, {}).get(lang)
+
+def add_borders_logo_and_text(image_path, lang = 'zh', notify = False, preview = False):
     try:
         original_name, extension = os.path.splitext(image_path)
         output_path = f"{original_name}_watermark{extension}"
@@ -21,9 +35,9 @@ def add_borders_logo_and_text(image_path, notify = False,preview = False):
         if manufacturer is not None and len(manufacturer) > 0:
             logo_path = find_logo(manufacturer)
             if logo_path is None:
-                raise ValueError("Unspported manufacturer! Please wait for our update.")
+                raise ValueError(get_message("unsupported_manufacturer", lang))
         else:
-            raise ValueError("This image does not contain valid exif data!")
+            raise ValueError(get_message("no_exif_data", lang))
         image = Image.open(image_path)
         image = reset_image_orientation(image)  # Reset orientation
         exif_dict = None
@@ -66,6 +80,7 @@ if __name__ == "__main__":
         sys.exit(1)
 
     image_path = sys.argv[1]
+    lang = sys.argv[2]
     
     notify = False
-    result = add_borders_logo_and_text(image_path, notify)
+    result = add_borders_logo_and_text(image_path, lang, notify)

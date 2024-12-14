@@ -30,7 +30,6 @@ def get_manufacturer(image_path):
     except KeyError:
         return None
     except Exception as e:
-        print(f"Error getting manufacturer: {e}")
         return None
 
 def find_logo(manufacturer):
@@ -65,7 +64,6 @@ def get_exif_table(image_path):
     except KeyError:
         return None, None, None, None
     except Exception as e:
-        print(f"Error getting EXIF table: {e}")
         return None, None, None, None
 
 def get_exif_data(image_path):
@@ -150,6 +148,5 @@ def get_exif_data(image_path):
     except KeyError:
         return None, None
     except Exception as e:
-        print(f"Error getting EXIF data: {e}")
         return None, None
 

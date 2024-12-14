@@ -2,7 +2,7 @@ import os
 import time
 from datetime import datetime
 
-from flask import Flask, request, redirect, render_template, jsonify, send_from_directory
+from flask import Flask, request, render_template, jsonify, send_from_directory
 import subprocess
 from werkzeug.utils import secure_filename
 
@@ -51,11 +51,12 @@ def upload_file():
         # 保存上传的文件
         file.save(filepath)
         
+        lang = request.args.get('lang', 'zh')
         # 处理图片（调用外部process.py脚本）
         try:
             # 确保传递正确的路径给 process.py
             result = subprocess.run(
-                ['python3', 'process.py', filepath],
+                ['python3', 'process.py', filepath, lang],
                 capture_output=True, text=True
             )
 
