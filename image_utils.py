@@ -35,7 +35,7 @@ def text_to_image(text, font_path, font_size, color='black'):
 
 def generate_watermark_image(origin_image, logo_path, camera_info, shooting_info, font_path_thin, font_path_bold, font_size = 80):
     # origin_image = Image.open(origin_image_path).convert("RGB")
-    line_blank = 80
+    line_blank = 55
     ori_width, ori_height = origin_image.size
     bottom_width = int(ORIGIN_BOTTOM_BORDER_RATIO * ori_height)
     top_width = int(ORIGIN_TOP_BORDER_RATIO * ori_height)
@@ -46,7 +46,7 @@ def generate_watermark_image(origin_image, logo_path, camera_info, shooting_info
        
     logo_ratio = LOGO_RATIO
     
-    text_resize_factor = int(bottom_width / ORIGIN_BOTTOM_HEIGHT)
+    text_resize_factor = bottom_width / ORIGIN_BOTTOM_HEIGHT
  
     if (is_landscape(origin_image)):
         font_size = 150
@@ -91,10 +91,10 @@ def generate_watermark_image(origin_image, logo_path, camera_info, shooting_info
     draw = ImageDraw.Draw(origin_image)
     
     draw.line((border_width + ori_width - right_top_width - line_blank,
-               top_width + ori_height + int(bottom_width / 2) - int(3 * text_iamge_height / 2),
+               top_width + ori_height + int(bottom_width / 2) - int(2 * text_iamge_height / 2),
                border_width + ori_width - right_top_width - line_blank,
-               top_width + ori_height + int(bottom_width / 2) + int(3 * text_iamge_height / 2)),
-              fill=(0, 0, 0),
+               top_width + ori_height + int(bottom_width / 2) + int(2 * text_iamge_height / 2)),
+              fill=(128,128,128),
               width=2) 
     
     origin_image.paste(logo, (border_width + ori_width - right_top_width - logo.width - 2 * line_blank, 
