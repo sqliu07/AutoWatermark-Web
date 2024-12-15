@@ -13,6 +13,24 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['ALLOWED_EXTENSIONS'] = {'png', 'jpg', 'jpeg'}
 app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 设置最大文件大小限制（例如 100MB）
 
+ERROR_MESSAGES = {
+    "invalid_file_type": {
+        'en': "Invalid file type! Please upload a PNG, JPG or JPEG file.",
+        'zh': "无效的文件类型！请上传PNG、JPG或JPEG文件。"
+    },
+    "no_file_uploaded": {
+        'en': "No file uploaded!",
+        'zh': "未上传文件！"
+    },
+    "no_file_selected": {
+        'en': "No file selected!",
+        'zh': "未选择文件！"
+    },
+}
+
+def get_message(key, lang='zh'):
+    return ERROR_MESSAGES.get(key, {}).get(lang)
+
 # 确保上传文件夹存在
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
@@ -27,17 +45,18 @@ def index():
 @app.route('/upload', methods=['POST'])
 def upload_file():
     if 'file' not in request.files:
-        return jsonify(error="No file uploaded!"), 400
+        return jsonify(error=get_message('no_file_uploaded', request.args.get('lang', 'zh'))), 400
     
     file = request.files['file']
     
     if file.filename == '':
-        return jsonify(error="No selected file!"), 400
+        return jsonify(error=get_message('no_file_selected', request.args.get('lang', 'zh'))), 400
     
     if not allowed_file(file.filename):
-        return jsonify(error="Invalid file type! Please upload a PNG, JPG or JPEG file."), 400
+        return jsonify(error=get_message('invalid_file_type', request.args.get('lang', 'zh'))), 400
     
     if file and allowed_file(file.filename):
+        lang = request.args.get('lang', 'zh')
         timestamp = int(time.time())
         timestamp = datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d_%H-%M-%S')
         # 获取文件名和扩展名
@@ -50,8 +69,7 @@ def upload_file():
         
         # 保存上传的文件
         file.save(filepath)
-        
-        lang = request.args.get('lang', 'zh')
+    
         # 处理图片（调用外部process.py脚本）
         try:
             # 确保传递正确的路径给 process.py
