@@ -21,7 +21,6 @@ jobs:
 
     - name: Deploy to Server
       run: |
-        ssh admin@8.152.219.197 << EOF
-          cd /home/admin/workspace/project/pythonProj/AutoWatermark-Web
-          git pull
-        EOF
+        ssh admin@8.152.219.197
+        cd /home/admin/workspace/project/pythonProj/AutoWatermark-Web
+        git pull
