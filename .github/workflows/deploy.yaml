@@ -17,12 +17,11 @@ jobs:
         mkdir -p ~/.ssh
         echo "${{ secrets.DEPLOY_KEY }}" > ~/.ssh/id_rsa
         chmod 600 ~/.ssh/id_rsa
-        ssh-keyscan -H 8.152.219.197 >> ~/.ssh/known_hosts
+        ssh-keyscan -H YOUR_SERVER_IP >> ~/.ssh/known_hosts
 
     - name: Deploy to Server
       run: |
-        ssh -i ~/.ssh/id_rsa admin@8.152.219.197 << 'EOF'
-        cd /home/admin/workspace/project/pythonProj/AutoWatermark-Web || exit 1
-        git pull origin main
-        systemctl restart my-web-service
-       EOF
+        ssh -i ~/.ssh/id_rsa admin@8.152.219.197 << EOF
+          cd /home/admin/workspace/project/pythonProj/AutoWatermark-Web
+          git pull origin main
+        EOF
