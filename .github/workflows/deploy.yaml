@@ -23,5 +23,5 @@ jobs:
       run: |
         ssh admin@8.152.219.197 << EOF
           cd /home/admin/workspace/project/pythonProj/AutoWatermark-Web
-          git pull origin main
+          git pull
         EOF
