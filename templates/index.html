@@ -148,6 +148,7 @@
                 alerts: {
                     uploadSuccess: "Image processed successfully!",
                     uploadError: "Unexpected error occurred.",
+                    selectWatermark: "Please select a watermark style!"
                 }
             },
             zh: {
@@ -160,6 +161,7 @@
                 alerts: {
                     uploadSuccess: "图片处理成功！",
                     uploadError: "发生意外错误。",
+                    selectWatermark: "请选择一种水印样式！"
                 }
             }
         };
@@ -218,7 +220,7 @@
             document.getElementById('downloadBtn').style.display = 'none';
             
             if (!selectedWatermark) {
-                alert("Please select a watermark style.");
+                alert(translations[currentLang].alerts.selectWatermark);
                 document.getElementById('loader').style.display = 'none';
                 return;
             }
