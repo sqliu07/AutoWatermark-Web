@@ -1,8 +1,8 @@
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
-ORIGIN_BOTTOM_BORDER_RATIO = 0.1
+ORIGIN_BOTTOM_BORDER_RATIO = 0.08
 ORIGIN_TOP_BORDER_RATIO = 0.03
-LOGO_RATIO = 0.8
+LOGO_RATIO = 0.07
 ORIGIN_BOTTOM_HEIGHT = 250
 
 def is_landscape(image):
@@ -33,9 +33,9 @@ def text_to_image(text, font_path, font_size, color='black'):
     draw.text((0, 0), text, font=font, fill=color)
     return image
 
-def generate_watermark_image(origin_image, logo_path, camera_info, shooting_info, font_path_thin, font_path_bold, font_size = 70):
+def generate_watermark_image(origin_image, logo_path, camera_info, shooting_info, font_path_thin, font_path_bold, font_size = 60):
     # origin_image = Image.open(origin_image_path).convert("RGB")
-    line_blank = 40
+    line_blank = 30
     ori_width, ori_height = origin_image.size
     bottom_width = int(ORIGIN_BOTTOM_BORDER_RATIO * ori_height)
     top_width = int(ORIGIN_TOP_BORDER_RATIO * ori_height)
@@ -46,18 +46,23 @@ def generate_watermark_image(origin_image, logo_path, camera_info, shooting_info
        
     logo_ratio = LOGO_RATIO
     
-    text_resize_factor = bottom_width / ORIGIN_BOTTOM_HEIGHT
+    logo_location_denominator = 4
+    
+    text_resize_factor = bottom_width * 1.5 / ORIGIN_BOTTOM_HEIGHT
  
     if (is_landscape(origin_image)):
-        font_size = 150
-        line_blank = 100
-        logo_ratio = 1
+        font_size = 120
+        line_blank = 70
+        logo_ratio = 0.085
+        logo_location_denominator = 0.6
+        bottom_width = bottom_width * 4
+        text_resize_factor = text_resize_factor / 1.5
     left_top = text_to_image(camera_info[0], font_path_bold, font_size)
     left_bottom = text_to_image(camera_info[1], font_path_thin, font_size)
     right_top = text_to_image(shooting_info[0], font_path_bold, font_size)
     right_bottom = text_to_image(shooting_info[1], font_path_thin, font_size)
     
-    logo_height = int(ori_height * ORIGIN_BOTTOM_BORDER_RATIO * logo_ratio)
+    logo_height = int(ori_height * logo_ratio)
     logo = Image.open(logo_path).convert("RGBA")
     ori_logo_width, ori_logo_height = logo.size
     
@@ -73,33 +78,62 @@ def generate_watermark_image(origin_image, logo_path, camera_info, shooting_info
     
     text_iamge_height = left_top.height
     right_top_width = right_top.width  
-    text_block_height = top_width + ori_height + int(bottom_width / 2) - int(5 * text_iamge_height / 4)
     
-    origin_image.paste(left_top, 
-                       (border_width, 
-                        top_width + ori_height + int(bottom_width / 2) - int(9 * text_iamge_height / 8))), 
-    origin_image.paste(left_bottom, 
-                       (border_width, 
-                        top_width + ori_height + int(bottom_width / 2) + int(text_iamge_height / 8)))
-    origin_image.paste(right_top, 
-                       (border_width + ori_width - right_top_width, 
-                        top_width + ori_height + int(bottom_width / 2) - int(9 * text_iamge_height / 8)))
-    origin_image.paste(right_bottom, 
-                       (border_width + ori_width - right_top_width, 
-                        top_width + ori_height + int(bottom_width / 2) + int(text_iamge_height / 8)))    
-    
-    draw = ImageDraw.Draw(origin_image)
-    
-    draw.line((border_width + ori_width - right_top_width - line_blank,
-               top_width + ori_height + int(bottom_width / 2) - int(2 * text_iamge_height / 2),
-               border_width + ori_width - right_top_width - line_blank,
-               top_width + ori_height + int(bottom_width / 2) + int(2 * text_iamge_height / 2)),
-              fill=(128,128,128),
-              width=2) 
-    
-    origin_image.paste(logo, (border_width + ori_width - right_top_width - logo.width - 2 * line_blank, 
-                       text_block_height + int (text_iamge_height / 8)))
-    
+    if (is_landscape(origin_image)):
+        text_block_height = top_width + ori_height + int(bottom_width / 2) - int(5 * text_iamge_height / 4)
+
+        origin_image.paste(left_top, 
+                           (border_width, 
+                            top_width + ori_height + int(bottom_width / 2) - int(20 * text_iamge_height / 3))), 
+        origin_image.paste(left_bottom, 
+                           (border_width, 
+                            top_width + ori_height + int(bottom_width / 2) - int(16.5 * text_iamge_height / 3)))
+        origin_image.paste(right_top, 
+                           (border_width + ori_width - right_top_width, 
+                            top_width + ori_height + int(bottom_width / 2) - int(20 * text_iamge_height / 3)))
+        origin_image.paste(right_bottom, 
+                           (border_width + ori_width - right_top_width, 
+                            top_width + ori_height + int(bottom_width / 2) - int(16.5 * text_iamge_height / 3)))    
+
+        draw = ImageDraw.Draw(origin_image)
+
+        draw.line((border_width + ori_width - right_top_width - line_blank,
+                   top_width + ori_height + int(bottom_width / 2) - int(19 * text_iamge_height / 3),
+                   border_width + ori_width - right_top_width - line_blank,
+                   top_width + ori_height + int(bottom_width / 2) - int(14 * text_iamge_height / 3)),
+                  fill=(128, 128, 128),
+                  width=2) 
+
+        origin_image.paste(logo, (border_width + ori_width - right_top_width - logo.width - 2 * line_blank, 
+                       top_width + ori_height + int(bottom_width / 2) - int(9 * text_iamge_height / 2) - logo.height))
+    else:
+        text_block_height = top_width + ori_height + int(bottom_width / 2) - int(5 * text_iamge_height / 4)
+
+        origin_image.paste(left_top, 
+                           (border_width, 
+                            top_width + ori_height + int(bottom_width / 2) - int(9 * text_iamge_height / 8))), 
+        origin_image.paste(left_bottom, 
+                           (border_width, 
+                            top_width + ori_height + int(bottom_width / 2) + int(1 * text_iamge_height / 8)))
+        origin_image.paste(right_top, 
+                           (border_width + ori_width - right_top_width, 
+                            top_width + ori_height + int(bottom_width / 2) - int(9 * text_iamge_height / 8)))
+        origin_image.paste(right_bottom, 
+                           (border_width + ori_width - right_top_width, 
+                            top_width + ori_height + int(bottom_width / 2) + int(1 * text_iamge_height / 8)))    
+
+        draw = ImageDraw.Draw(origin_image)
+
+        draw.line((border_width + ori_width - right_top_width - line_blank,
+                   top_width + ori_height + int(bottom_width / 2) - 1.8 * text_iamge_height / 2,
+                   border_width + ori_width - right_top_width - line_blank,
+                   top_width + ori_height + int(bottom_width / 2) + 2.3 * text_iamge_height / 2),
+                  fill=(128, 128, 128),
+                  width=2) 
+
+        origin_image.paste(logo, (border_width + ori_width - right_top_width - logo.width - 2 * line_blank, 
+                       text_block_height + int (text_iamge_height / logo_location_denominator)))
+        
     return origin_image
     
     
