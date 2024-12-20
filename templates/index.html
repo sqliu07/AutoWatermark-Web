@@ -13,7 +13,7 @@
             align-items: center;
             margin: 0;
             padding: 20px 0;
-            background-color: #f9f9f9;
+            background-color: #f0f0f0;
             min-height: 100vh;
         }
 
@@ -118,7 +118,19 @@
     
     <!-- 加载动画 -->
     <div id="loader" class="loader"></div>
-    
+
+    <div class="watermark-selection">
+        <input type="radio" name="watermark_type" id="watermark1" value="1">
+        <label for="watermark1">
+            <img src="{{ url_for('static', filename='t1.png') }}" alt="Watermark 1" width="200" height="200">
+        </label>
+
+        <input type="radio" name="watermark_type" id="watermark2" value="2">
+        <label for="watermark2">
+            <img src="{{ url_for('static', filename='t2.png') }}" alt="Watermark 2" width="200" height="200">
+        </label>
+    </div>
+
     <!-- 处理后的图片显示 -->
     <h2>Processed Image</h2>
     <img id="processedImage" src="" alt="Processed Image" style="display:none;">
@@ -191,13 +203,29 @@
             }
         });
 
+        let selectedWatermark = null;
+
+        const watermarkRadios = document.querySelectorAll('input[name="watermark_type"]');
+        watermarkRadios.forEach(radio => {
+            radio.addEventListener('change', function() {
+                selectedWatermark = this.value;  // 选中后更新水印类型
+            });
+        });
+        
         document.getElementById('processBtn').addEventListener('click', function() {
             document.getElementById('loader').style.display = 'block';
             document.getElementById('processedImage').style.display = 'none';
             document.getElementById('downloadBtn').style.display = 'none';
             
+            if (!selectedWatermark) {
+                alert("Please select a watermark style.");
+                document.getElementById('loader').style.display = 'none';
+                return;
+            }
+
             const formData = new FormData();
             formData.append("file", selectedFile);
+            formData.append("watermark_type", selectedWatermark);
 
             fetch('/upload?lang=' + currentLang, {
                 method: 'POST',
