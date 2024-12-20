@@ -6,7 +6,7 @@ from flask import Flask, request, render_template, jsonify, send_from_directory
 import subprocess
 from werkzeug.utils import secure_filename
 
-app = Flask(__name__)
+app = Flask(__name__, static_url_path='/types', static_folder='./types')
 
 UPLOAD_FOLDER = './uploads'
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
@@ -55,6 +55,10 @@ def upload_file():
     if not allowed_file(file.filename):
         return jsonify(error=get_message('invalid_file_type', request.args.get('lang', 'zh'))), 400
     
+    watermark_type = request.form.get('watermark_type', '1')
+    print('watermark_type =' + str(watermark_type))
+    if watermark_type is None:
+        return jsonify(error="Watermark style not selected!"), 400
     if file and allowed_file(file.filename):
         lang = request.args.get('lang', 'zh')
         timestamp = int(time.time())
@@ -74,15 +78,16 @@ def upload_file():
         try:
             # 确保传递正确的路径给 process.py
             result = subprocess.run(
-                ['python3', 'process.py', filepath, lang],
+                ['python3', 'process.py', filepath, lang, watermark_type],
                 capture_output=True, text=True
             )
+
 
             if result.returncode != 0:
                 return jsonify(error=f'{result.stderr}'), 500
 
         except Exception as e:
-            return jsonify(error=f'Error calling process.py'), 500
+            return jsonify(error=f'Error calling process.py' + str(e)), 500
         
         # 处理后的图片路径
         # processed_filename = filename_with_timestamp.replace('.jpg', '_watermark.jpg')

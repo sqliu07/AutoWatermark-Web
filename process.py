@@ -26,7 +26,7 @@ ERROR_MESSAGES = {
 def get_message(key, lang='zh'):
     return ERROR_MESSAGES.get(key, {}).get(lang)
 
-def add_borders_logo_and_text(image_path, lang = 'zh', notify = False, preview = False):
+def add_borders_logo_and_text(image_path, lang = 'zh', watermark_type = 1, notify = False, preview = False):
     try:
         original_name, extension = os.path.splitext(image_path)
         output_path = f"{original_name}_watermark{extension}"
@@ -56,7 +56,7 @@ def add_borders_logo_and_text(image_path, lang = 'zh', notify = False, preview =
 
         camera_info_lines, shooting_info_lines = camera_info.split('\n'), shooting_info.split('\n')
 
-        new_image = generate_watermark_image(image, logo_path, camera_info_lines, shooting_info_lines, GLOBAL_FONT_PATH_LIGHT, GLOBAL_FONT_PATH_BOLD)
+        new_image = generate_watermark_image(image, logo_path, camera_info_lines, shooting_info_lines, GLOBAL_FONT_PATH_LIGHT, GLOBAL_FONT_PATH_BOLD, watermark_type)
 
         if preview:
             return new_image
@@ -75,12 +75,13 @@ def add_borders_logo_and_text(image_path, lang = 'zh', notify = False, preview =
          sys.exit(1)
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("No file path provided!")
+    if len(sys.argv) < 3:
+        print("Invalid arguments!")
         sys.exit(1)
 
     image_path = sys.argv[1]
     lang = sys.argv[2]
-    
+    watermark_type = sys.argv[3] 
+ 
     notify = False
-    result = add_borders_logo_and_text(image_path, lang, notify)
+    result = add_borders_logo_and_text(image_path, lang, int(watermark_type), notify)
