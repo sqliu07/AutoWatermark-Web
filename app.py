@@ -56,7 +56,6 @@ def upload_file():
         return jsonify(error=get_message('invalid_file_type', request.args.get('lang', 'zh'))), 400
     
     watermark_type = request.form.get('watermark_type', '1')
-    print('watermark_type =' + str(watermark_type))
     if watermark_type is None:
         return jsonify(error="Watermark style not selected!"), 400
     if file and allowed_file(file.filename):
