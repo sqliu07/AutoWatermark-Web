@@ -1,0 +1,211 @@
+body {
+    font-family: Arial, sans-serif;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin: 0;
+    padding: 20px 0;
+    background-color: #f0f0f0;
+    min-height: 100vh;
+}
+
+h1 {
+    margin-bottom: 20px;
+}
+
+img {
+    max-width: 400px;
+    max-height: 400px;
+    margin: 10px 0;
+}
+
+input[type="file"] {
+    display: none;
+    /* 隐藏默认文件输入框 */
+}
+
+.custom-file-label {
+    padding: 10px 20px;
+    font-size: 16px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    background-color: #3498db;
+    color: white;
+    text-align: center;
+}
+
+.custom-file-label:hover {
+    background-color: #2980b9;
+}
+
+button,
+a {
+    margin: 10px 0;
+    padding: 10px 20px;
+    font-size: 16px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    background-color: #3498db;
+    color: white;
+    text-decoration: none;
+    display: inline-block;
+}
+
+button:hover,
+a:hover {
+    background-color: #2980b9;
+}
+
+.loader {
+    border: 8px solid #f3f3f3;
+    border-top: 8px solid #3498db;
+    border-radius: 50%;
+    width: 50px;
+    height: 50px;
+    animation: spin 2s linear infinite;
+    margin: 20px auto;
+    display: none;
+}
+
+@keyframes spin {
+    0% {
+        transform: rotate(0deg);
+    }
+
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+.lang-buttons {
+    position: absolute;
+    top: 10px;
+    right: 20px;
+}
+
+.lang-buttons a {
+    margin: 0 10px;
+    font-size: 16px;
+    color: #000000;
+    text-decoration: underline;
+    cursor: pointer;
+    background: none;
+    border: none;
+    padding: 0;
+}
+
+.watermark-selection {
+    display: flex;
+    flex-direction: row;
+    gap: 20px;
+    overflow-x: scroll;
+    overflow-y: hidden;
+    padding-bottom: 10px;
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+    justify-content: center;
+    padding-left: 10px;
+    /* 保持左边距 */
+    padding-right: 10px;
+    /* 保持右边距 */
+    width: 100%;
+}
+
+.watermark-selection::-webkit-scrollbar {
+    display: none;
+}
+
+.watermark-selection label {
+    outline: none;
+    -webkit-tap-highlight-color: transparent;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    cursor: pointer;
+    width: 200px;
+    position: relative;
+    transition: transform 0.3s ease;
+    flex-shrink: 0;
+    /* 防止图片被压缩 */
+    scroll-snap-align: start;
+    /* 滚动时对齐每个图片 */
+}
+
+.watermark-selection input[type="radio"] {
+    display: none;
+}
+
+.watermark-selection input[type="radio"]:not(:checked):hover + label img,
+.watermark-selection input[type="radio"]:not(:checked):focus + label img {
+    border: none;
+}
+
+.watermark-selection label:hover {
+    transform: scale(1.05);
+}
+
+.watermark-selection img {
+    max-width: 100%;
+    height: auto;
+    margin-bottom: 10px;
+    transition: border 0.3s ease, transform 0.3s ease;
+}
+
+.watermark-selection input[type="radio"]:checked + label img,
+.watermark-selection label:hover img {
+    border: 3px solid #3498db;
+    border-radius: 15px;
+}
+
+@media (max-width: 768px) {
+    .watermark-selection {
+        justify-content: flex-start;
+        gap: 12px;
+    }
+
+    .watermark-selection label {
+        outline: none;
+        -webkit-tap-highlight-color: transparent;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        cursor: pointer;
+        width: 140px;
+        position: relative;
+        transition: transform 0.3s ease;
+    }
+
+
+    .watermark-selection img {
+        width: 130px;
+        height: 130px;
+    }
+
+    .custom-file-label {
+        font-size: 14px;
+        padding: 8px 16px;
+    }
+
+    button,
+    a {
+        font-size: 14px;
+        padding: 8px 16px;
+    }
+
+    h1 {
+        font-size: 24px;
+    }
+
+    .lang-buttons {
+        top: 20px;
+        right: 10px;
+    }
+
+    .loader {
+        width: 40px;
+        height: 40px;
+    }
+}
