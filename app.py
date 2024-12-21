@@ -6,7 +6,7 @@ from flask import Flask, request, render_template, jsonify, send_from_directory
 import subprocess
 from werkzeug.utils import secure_filename
 
-app = Flask(__name__, static_url_path='/types', static_folder='./types')
+app = Flask(__name__, static_url_path='/static', static_folder='./static')
 
 UPLOAD_FOLDER = './uploads'
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
