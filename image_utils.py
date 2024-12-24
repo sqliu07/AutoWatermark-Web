@@ -72,14 +72,16 @@ def generate_watermark_image(origin_image, logo_path, camera_info, shooting_info
                         border=(border_width, top_width, border_width, int(1.5 * bottom_width)), 
                         fill='white')
     expanded_width, expanded_height = origin_image.size
-    line_blank = 40
+    line_blank_ratio = 0.017
+    ar_ratio = max(expanded_width, expanded_height) / min(expanded_width, expanded_height)
+    line_blank = int(line_blank_ratio * min(expanded_width, expanded_height))
     logo_ratio = LOGO_RATIO
     logo_location_denominator = 4
     text_resize_factor = bottom_width * 1.5 / ORIGIN_BOTTOM_HEIGHT
     
     if (is_landscape(origin_image)):
         font_size = 120
-        line_blank = 70
+        line_blank = int(line_blank / ar_ratio)
         logo_ratio = 0.085
         bottom_width = bottom_width * 4
         text_resize_factor = text_resize_factor / 1.5
