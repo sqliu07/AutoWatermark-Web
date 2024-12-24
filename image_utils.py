@@ -45,9 +45,9 @@ def paste_text_logo(img, positions):
     for text_img, pos in positions:
         img.paste(text_img, pos)     
 
-def draw_line(origin_image, start_x, start_y, end_x, end_y):
+def draw_line(origin_image, start_x, start_y, end_x, end_y, line_width):
     draw = ImageDraw.Draw(origin_image)
-    draw.line((start_x, start_y, end_x, end_y), fill=(128, 128, 128), width=2)
+    draw.line((start_x, start_y, end_x, end_y), fill=(128, 128, 128), width=line_width)
 
 def calculate_position(x, y_offset, x_adjust=0, y_adjust=0):
         return (x + x_adjust, y_offset + y_adjust)    
@@ -73,6 +73,7 @@ def generate_watermark_image(origin_image, logo_path, camera_info, shooting_info
                         fill='white')
     expanded_width, expanded_height = origin_image.size
     line_blank_ratio = 0.017
+    line_width = 1 if max(expanded_width, expanded_height) < 3000 else 2
     ar_ratio = max(expanded_width, expanded_height) / min(expanded_width, expanded_height)
     line_blank = int(line_blank_ratio * min(expanded_width, expanded_height))
     logo_ratio = LOGO_RATIO
@@ -172,7 +173,7 @@ def generate_watermark_image(origin_image, logo_path, camera_info, shooting_info
 
     paste_text_logo(origin_image, positions)
     if watermark_type != 3:
-        draw_line(origin_image, *line_coords)
+        draw_line(origin_image, *line_coords, line_width)
      
     return origin_image
     
