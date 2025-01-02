@@ -2,6 +2,7 @@ from PIL import Image
 import piexif
 import subprocess
 import os
+import re
 
 def convert_to_int(value):
     if isinstance(value, tuple):
@@ -22,7 +23,7 @@ def get_manufacturer(image_path):
         exif_dict = piexif.load(image.info['exif'])
         manufacturer = exif_dict['0th'].get(piexif.ImageIFD.Make, b"").decode().strip()
         for letter in manufacturer:
-            if letter in 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ':
+            if re.match(r'[a-zA-Z]', letter):
                 continue
             else:
                 manufacturer = manufacturer.replace(letter, '')
@@ -83,13 +84,13 @@ def get_exif_data(image_path):
         camera_model_code = exif_dict['0th'].get(piexif.ImageIFD.Model, b"Unknown Model").decode()
 
         for letter in camera_make:
-            if letter in 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ':
+            if re.match(r'[a-zA-Z]', letter):
                 continue
             else:
                 camera_make = camera_make.replace(letter, '')
 
         for letter in camera_model_code:
-            if letter in 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890- ':
+            if re.match(r'[a-zA-Z0-9\- ]', letter):
                 continue
             else:
                 camera_model_code = camera_model_code.replace(letter, '')
