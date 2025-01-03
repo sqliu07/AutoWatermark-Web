@@ -25,9 +25,12 @@ watermarkSelection.addEventListener('scroll', function () {
 const translations = {
     en: {
         title: "Image Watermark Web",
+        uploadWarn: "Notice: The uploaded image will be stored on our server. Please consider carefully before uploading.",
         chooseFile: "Choose File",
         uploadedImage: "Uploaded Image",
         watermarkTypes: "Watermark types",
+        burnAfterReading: "Burn After Reading",
+        burnAfterReadingText: "If you check \"Burn After Reading\", \n your uploaded image and the watermarked image will be deleted within two minutes after processing is completed. Please download them in time.",
         processImage: "Process Image",
         processedImage: "Processed Image",
         downloadImage: "Download Processed Image",
@@ -39,9 +42,12 @@ const translations = {
     },
     zh: {
         title: "边框水印",
+        uploadWarn: "注意：上传的图片会被存储在我们的服务器上，请您自行斟酌。",
         chooseFile: "选择文件",
         uploadedImage: "已上传图片",
         watermarkTypes: "水印样式",
+        burnAfterReading: "阅后即焚",
+        burnAfterReadingText: "若您勾选“阅后即焚”，您上传的图片以及添加水印的图片将在处理完成两分钟内被删除，请您及时下载。",
         processImage: "开始添加水印",
         processedImage: "已添加水印的图片",
         downloadImage: "下载已添加水印的图片",
@@ -58,12 +64,19 @@ let currentLang = 'zh';
 function switchLanguage(lang) {
     currentLang = lang;
     document.querySelector('h1').textContent = translations[lang].title;
+    document.getElementById('uploadWarning').textContent = translations[lang].uploadWarn;
     document.querySelector('.custom-file-label').textContent = translations[lang].chooseFile;
     document.querySelector('h2:nth-of-type(1)').textContent = translations[lang].uploadedImage;
     document.querySelector('h2:nth-of-type(2)').textContent = translations[lang].watermarkTypes;
     document.getElementById('processBtn').textContent = translations[lang].processImage;
     document.querySelector('h2:nth-of-type(3)').textContent = translations[lang].processedImage;
     document.getElementById('downloadBtn').textContent = translations[lang].downloadImage;
+    document.getElementById('burnAfterReadDivPrompt').textContent = translations[lang].burnAfterReadingText;
+
+    const burnAfterReadLabel = document.querySelector('#burnAfterReadDiv label');
+    if (burnAfterReadLabel) {
+        burnAfterReadLabel.textContent = translations[lang].burnAfterReading;
+    }
 }
 
 document.getElementById('langEn').addEventListener('click', () => switchLanguage('en'));
@@ -94,12 +107,20 @@ document.getElementById('fileInput').addEventListener('change', function (event)
 });
 
 let selectedWatermark = null;
+let burnAfterRead = null;
 
 const watermarkRadios = document.querySelectorAll('input[name="watermark_type"]');
 watermarkRadios.forEach(radio => {
     radio.addEventListener('change', function () {
         selectedWatermark = this.value;  // 选中后更新水印类型
     });
+});
+
+const burnAfterReadCheckbox = document.getElementById('burnAfterRead');
+burnAfterReadCheckbox.addEventListener('change', function () {
+    const isChecked = burnAfterReadCheckbox.checked;  // 获取复选框的选中状态
+    burnAfterRead = isChecked ? 1 : 0;  // 选中后更新是否删除上传的图片
+    console.log('Burn After Reading:', burnAfterRead);
 });
 
 document.getElementById('processBtn').addEventListener('click', function () {
@@ -116,6 +137,7 @@ document.getElementById('processBtn').addEventListener('click', function () {
     const formData = new FormData();
     formData.append("file", selectedFile);
     formData.append("watermark_type", selectedWatermark);
+    formData.append("burn_after_read", burnAfterRead);
 
     fetch('/upload?lang=' + currentLang, {
         method: 'POST',
