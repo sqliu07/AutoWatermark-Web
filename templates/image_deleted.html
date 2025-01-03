@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="{{ lang }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ translations[lang].title }}</title>
+</head>
+<body>
+    <h1>{{ translations[lang].imageDeleted }}</h1>
+    <p>{{ translations[lang].imageDeletedMessage }}</p>
+
+
+    <script>
+        // Step 1: 使用 tojson 过滤器确保 translations 是一个有效的 JSON 格式
+        const translations = {{ translations | tojson }};
+        
+        // Step 2: 获取当前语言
+        const currentLang = "{{ lang }}";  // 使用 Flask 渲染的 lang
+
+        // 使用传递的 currentLang 更新页面内容
+        document.title = translations[currentLang].title;
+        document.querySelector('h1').textContent = translations[currentLang].imageDeleted;
+        document.querySelector('p').textContent = translations[currentLang].imageDeletedMessage;
+    </script>
+</body>
+</html>

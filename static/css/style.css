@@ -5,11 +5,10 @@ body {
     flex-direction: column;
     align-items: center;
     margin: 0;
-    padding: 20px 0;
+    padding: 60px 0 20px;  /* 增加顶部间距，以腾出空间给语言按钮 */
     background-color: #f0f0f0;
     min-height: 100vh;
 }
-
 h1 {
     margin-bottom: 20px;
 }
