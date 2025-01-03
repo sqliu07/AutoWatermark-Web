@@ -131,7 +131,7 @@ def upload_file_served(filename):
     def delete_file(response):
         def delayed_delete():
             if burn_after_read == '1':  # 如果 burn_after_read 为 True，则延时10秒后删除文件
-                time.sleep(6)
+                time.sleep(120)
                 if os.path.exists(file_path):
                     os.remove(file_path)
                     
@@ -153,4 +153,4 @@ def upload_file_served(filename):
     return send_file(file_path)
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(debug=False)
