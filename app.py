@@ -56,6 +56,11 @@ def allowed_file(filename):
     """检查文件扩展名是否允许"""
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
 
+@app.errorhandler(404)
+def not_found_error(error):
+    lang = request.args.get('lang', 'zh').split('?')[0]
+    return render_template('image_deleted.html', lang=lang, translations=translations), 404
+
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -81,7 +86,6 @@ def upload_file():
         return jsonify(error="Watermark style not selected!"), 400
     if file and allowed_file(file.filename):
         lang = request.args.get('lang', 'zh')
-        print("current language: " + lang)
         timestamp = int(time.time())
         timestamp = datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d_%H-%M-%S')
         # 获取文件名和扩展名
@@ -137,7 +141,6 @@ def upload_file_served(filename):
                     
                 original_file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename.split('_watermark')[0])
                 original_file_path = original_file_path + os.path.splitext(filename)[1]
-                print(f"Delete original file: {original_file_path}")
                 if os.path.exists(original_file_path):
                     os.remove(original_file_path)  # 删除原图    
 
@@ -147,8 +150,7 @@ def upload_file_served(filename):
         return response
 
     if not os.path.exists(file_path):
-        print("lang from path:", lang)  # 打印 lang 参数，确保它正确传递
-        return render_template('image_deleted.html', lang=lang, translations=translations)
+        return abort(404)
     
     return send_file(file_path)
 
