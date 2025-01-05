@@ -10,7 +10,7 @@ import threading
 app = Flask(__name__, static_url_path='/static', static_folder='./static')
 
 # 确保上传文件夹存在
-UPLOAD_FOLDER = './uploads'
+UPLOAD_FOLDER = './upload'
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['ALLOWED_EXTENSIONS'] = {'png', 'jpg', 'jpeg'}
 app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 设置最大文件大小限制（例如 100MB）
@@ -119,12 +119,12 @@ def upload_file():
 
         # 返回图像的路径，带上 lang 查询参数
         return jsonify({
-            'processed_image': f'/uploads/{processed_filename}?lang={lang}'
+            'processed_image': f'/upload/{processed_filename}?lang={lang}'
         })
     
     return jsonify(error='Invalid file type'), 400
 
-@app.route('/uploads/<filename>')
+@app.route('/upload/<filename>')
 def upload_file_served(filename):
     # 获取 lang 参数并去除查询字符串部分
     lang = request.args.get('lang', 'zh').split('?')[0]
