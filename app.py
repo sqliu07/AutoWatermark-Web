@@ -1,3 +1,4 @@
+from constants import CommonConstants
 import os
 import time
 from datetime import datetime
@@ -9,9 +10,7 @@ import threading
 
 app = Flask(__name__, static_url_path='/static', static_folder='./static')
 
-# 确保上传文件夹存在
-UPLOAD_FOLDER = './upload'
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config['UPLOAD_FOLDER'] = CommonConstants.UPLOAD_FOLDER
 app.config['ALLOWED_EXTENSIONS'] = {'png', 'jpg', 'jpeg'}
 app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 设置最大文件大小限制（例如 100MB）
 
@@ -50,7 +49,7 @@ def get_message(key, lang='zh'):
     return ERROR_MESSAGES.get(key, {}).get(lang)
 
 # 确保上传文件夹存在
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+os.makedirs(CommonConstants.UPLOAD_FOLDER, exist_ok=True)
 
 def allowed_file(filename):
     """检查文件扩展名是否允许"""
