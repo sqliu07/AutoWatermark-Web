@@ -1,30 +1,12 @@
 from exif_utils import *
 from image_utils import *
+from constants import CommonConstants
 
 from PIL import Image
 import sys
 
-EDGE_WIDTH = 120
-EDGE_RATIO = 0.12
-EDGE_WIDTH_RATIO = 0.03
-FONT_SIZE = 100
-
-GLOBAL_FONT_PATH_BOLD = "./fonts/AlibabaPuHuiTi-2-85-Bold.otf"
-GLOBAL_FONT_PATH_LIGHT = "./fonts/AlibabaPuHuiTi-2-45-Light.otf"
-
-ERROR_MESSAGES = {
-    "unsupported_manufacturer": {
-        'en': "Unsupported camera! Please wait for our update.",
-        'zh': "暂不支持该品牌相机！请等待我们的更新。"
-    },
-    "no_exif_data": {
-        'en': "This image does not contain valid exif data!",
-        'zh': "该图片不包含有效的exif数据！"
-    },
-}
-
 def get_message(key, lang='zh'):
-    return ERROR_MESSAGES.get(key, {}).get(lang)
+    return CommonConstants.ERROR_MESSAGES.get(key, {}).get(lang)
 
 def add_borders_logo_and_text(image_path, lang = 'zh', watermark_type = 1, notify = False, preview = False):
     try:
@@ -56,7 +38,8 @@ def add_borders_logo_and_text(image_path, lang = 'zh', watermark_type = 1, notif
 
         camera_info_lines, shooting_info_lines = camera_info.split('\n'), shooting_info.split('\n')
 
-        new_image = generate_watermark_image(image, logo_path, camera_info_lines, shooting_info_lines, GLOBAL_FONT_PATH_LIGHT, GLOBAL_FONT_PATH_BOLD, watermark_type)
+        new_image = generate_watermark_image(image, logo_path, camera_info_lines, shooting_info_lines, 
+                                             CommonConstants.GLOBAL_FONT_PATH_LIGHT, CommonConstants.GLOBAL_FONT_PATH_BOLD, watermark_type)
 
         if preview:
             return new_image

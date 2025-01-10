@@ -1,9 +1,5 @@
+from constants import ImageConstants
 from PIL import Image, ImageDraw, ImageFont, ImageOps
-
-ORIGIN_BOTTOM_BORDER_RATIO = 0.08
-ORIGIN_TOP_BORDER_RATIO = 0.03
-LOGO_RATIO = 0.07
-ORIGIN_BOTTOM_HEIGHT = 250
 
 def is_landscape(image):
     return image.width >= image.height
@@ -54,8 +50,8 @@ def calculate_position(x, y_offset, x_adjust=0, y_adjust=0):
                 
 def generate_watermark_image(origin_image, logo_path, camera_info, shooting_info, font_path_thin, font_path_bold,  watermark_type = 3, font_size = 60):
     ori_width, ori_height = origin_image.size
-    bottom_width = int(ORIGIN_BOTTOM_BORDER_RATIO * ori_height)
-    top_width = int(ORIGIN_TOP_BORDER_RATIO * ori_height)
+    bottom_width = int(ImageConstants.ORIGIN_BOTTOM_BORDER_RATIO * ori_height)
+    top_width = int(ImageConstants.ORIGIN_TOP_BORDER_RATIO * ori_height)
     border_width = top_width
         
     if watermark_type == 1:
@@ -76,9 +72,9 @@ def generate_watermark_image(origin_image, logo_path, camera_info, shooting_info
     line_width = 1 if max(expanded_width, expanded_height) < 3000 else 2
     ar_ratio = max(expanded_width, expanded_height) / min(expanded_width, expanded_height)
     line_blank = int(line_blank_ratio * min(expanded_width, expanded_height))
-    logo_ratio = LOGO_RATIO
+    logo_ratio = ImageConstants.LOGO_RATIO
     logo_location_denominator = 4
-    text_resize_factor = bottom_width * 1.5 / ORIGIN_BOTTOM_HEIGHT
+    text_resize_factor = bottom_width * 1.5 / ImageConstants.ORIGIN_BOTTOM_HEIGHT
     
     if (is_landscape(origin_image)):
         font_size = 120
