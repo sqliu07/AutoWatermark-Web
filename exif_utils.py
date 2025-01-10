@@ -107,7 +107,7 @@ def get_exif_data(image_path):
             index = datetime.index(' ') 
             substring = datetime[:index]
             if ":" in substring:
-                new_substring = substring.replace(':', '-') 
+                new_substring = substring.replace(':', '.') 
                 datetime = datetime[:index].replace(substring, new_substring) + datetime[index:]
     
         if "T" in datetime:
@@ -115,7 +115,7 @@ def get_exif_data(image_path):
             index = datetime.index(" ")
             substring = datetime[:index]
             if ":" in substring:
-                new_substring = substring.replace(':', '-') 
+                new_substring = substring.replace(':', '.') 
                 datetime = datetime[:index].replace(substring, new_substring) + datetime[index:]
     
         if str(lens_info) == "Unknown Lens":
