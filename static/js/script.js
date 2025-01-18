@@ -34,6 +34,10 @@ const translations = {
         processImage: "Process Image",
         processedImage: "Processed Image",
         downloadImage: "Download Processed Image",
+        imageQuality: "Image Quality",
+        highQuality: "High",
+        mediumQuality: "Medium",
+        lowQuality: "Low",
         alerts: {
             uploadSuccess: "Watemark added successfully!",
             uploadError: "Unexpected error occurred.",
@@ -51,6 +55,10 @@ const translations = {
         processImage: "开始添加水印",
         processedImage: "已添加水印的图片",
         downloadImage: "下载已添加水印的图片",
+        imageQuality: "图像质量",
+        highQuality: "高",
+        mediumQuality: "中",
+        lowQuality: "低",
         alerts: {
             uploadSuccess: "水印添加成功！",
             uploadError: "发生意外错误。",
@@ -72,6 +80,10 @@ function switchLanguage(lang) {
     document.querySelector('h2:nth-of-type(3)').textContent = translations[lang].processedImage;
     document.getElementById('downloadBtn').textContent = translations[lang].downloadImage;
     document.getElementById('burnAfterReadDivPrompt').textContent = translations[lang].burnAfterReadingText;
+    document.getElementById('imgQuality').textContent = translations[lang].imageQuality;
+    document.getElementById('highQ').textContent = translations[lang].highQuality;
+    document.getElementById('mediumQ').textContent = translations[lang].mediumQuality;
+    document.getElementById('lowQ').textContent = translations[lang].lowQuality;
 
     const burnAfterReadLabel = document.querySelector('#burnAfterReadDiv label');
     if (burnAfterReadLabel) {
@@ -94,6 +106,7 @@ document.getElementById('fileInput').addEventListener('change', function (event)
         document.getElementById('processBtn').style.display = 'none';
         document.getElementById('processedImage').style.display = 'none';
         document.getElementById('downloadBtn').style.display = 'none';
+        document.getElementById('imageQuality').style.display = 'none';
 
         const reader = new FileReader();
         reader.onload = function (e) {
@@ -101,13 +114,21 @@ document.getElementById('fileInput').addEventListener('change', function (event)
             imagePreview.src = e.target.result;
             imagePreview.style.display = 'block';
             document.getElementById('processBtn').style.display = 'inline';
+            document.getElementById('imageQuality').style.display = 'flex';
         };
         reader.readAsDataURL(file);
     }
 });
 
+let selectedQuality = null;
 let selectedWatermark = null;
 let burnAfterRead = null;
+
+const qualitySelect = document.getElementById('imageQualitySelect');
+qualitySelect.addEventListener('change', function () {
+    selectedQuality = qualitySelect.value;
+    console.log('Selected quality:', selectedQuality);
+});
 
 const watermarkRadios = document.querySelectorAll('input[name="watermark_type"]');
 watermarkRadios.forEach(radio => {
@@ -138,6 +159,7 @@ document.getElementById('processBtn').addEventListener('click', function () {
     formData.append("file", selectedFile);
     formData.append("watermark_type", selectedWatermark);
     formData.append("burn_after_read", burnAfterRead);
+    formData.append("image_quality", selectedQuality || "high");
 
     fetch('/upload?lang=' + currentLang, {
         method: 'POST',

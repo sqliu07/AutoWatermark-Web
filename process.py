@@ -8,7 +8,7 @@ import sys
 def get_message(key, lang='zh'):
     return CommonConstants.ERROR_MESSAGES.get(key, {}).get(lang)
 
-def add_borders_logo_and_text(image_path, lang = 'zh', watermark_type = 1, notify = False, preview = False):
+def add_borders_logo_and_text(image_path, lang = 'zh', watermark_type = 1, image_quailty = 95, notify = False, preview = False):
     try:
         original_name, extension = os.path.splitext(image_path)
         output_path = f"{original_name}_watermark{extension}"
@@ -44,8 +44,8 @@ def add_borders_logo_and_text(image_path, lang = 'zh', watermark_type = 1, notif
         if preview:
             return new_image
         else:
-            new_image.save(output_path, exif=exif_bytes, quality=90)  # keep exif data
-            print("sending to server\n")
+            print(image_quailty)
+            new_image.save(output_path, exif=exif_bytes, quality=image_quailty)  # keep exif data
             if notify:
                 url = "8.152.219.197:9010/watermark"
                 title = "This is your image with watermark."
@@ -58,13 +58,14 @@ def add_borders_logo_and_text(image_path, lang = 'zh', watermark_type = 1, notif
          sys.exit(1)
 
 if __name__ == "__main__":
-    if len(sys.argv) < 3:
+    if len(sys.argv) < 4:
         print("Invalid arguments!")
         sys.exit(1)
 
     image_path = sys.argv[1]
     lang = sys.argv[2]
-    watermark_type = sys.argv[3] 
+    watermark_type = sys.argv[3]
+    image_quality = sys.argv[4]
  
     notify = False
-    result = add_borders_logo_and_text(image_path, lang, int(watermark_type), notify)
+    result = add_borders_logo_and_text(image_path, lang, int(watermark_type), int(image_quality), notify)

@@ -11,6 +11,7 @@ body {
 }
 h1 {
     margin-bottom: 20px;
+    font-size: 40px;
 }
 
 img {
@@ -159,6 +160,45 @@ a:hover {
     border-radius: 15px;
 }
 
+.image-quality {
+    margin-top: 20px;
+    display: flex;
+    /* flex-direction: column; */
+    align-items: center;
+    gap: 10px;
+    display: none;
+}
+
+.quality-label {
+    font-size: 16px;
+    font-weight: bold;
+    color: #333333;
+    margin-bottom: 5px;
+}
+
+.quality-select {
+    padding: 10px 20px;
+    font-size: 16px;
+    border: 1px solid #cccccc;
+    border-radius: 5px;
+    background-color: white;
+    color: #333333;
+    outline: none;
+    cursor: pointer;
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.quality-select:hover {
+    border-color: #3498db;
+    box-shadow: 0 0 5px rgba(52, 152, 219, 0.5);
+}
+
+.quality-select:focus {
+    border-color: #2980b9;
+    box-shadow: 0 0 8px rgba(41, 128, 185, 0.8);
+}
+
+
 @media (max-width: 768px) {
     .watermark-selection {
         justify-content: flex-start;
@@ -206,5 +246,14 @@ a:hover {
     .loader {
         width: 40px;
         height: 40px;
+    }
+
+    .quality-label {
+        font-size: 14px;
+    }
+
+    .quality-select {
+        font-size: 14px;
+        padding: 8px 16px;
     }
 }
