@@ -80,6 +80,13 @@ def upload_file():
     watermark_type = request.form.get('watermark_type', '1')
     global burn_after_read
     burn_after_read = request.form.get('burn_after_read', '0')
+    image_quality  = request.form.get('image_quality', "high")
+    if "high" == image_quality:
+        image_quality = '95'
+    elif "medium" == image_quality:
+        image_quality = '85'
+    else:
+        image_quality = '75'
     
     if watermark_type is None:
         return jsonify(error="Watermark style not selected!"), 400
@@ -101,8 +108,9 @@ def upload_file():
         # 处理图片（调用外部process.py脚本）
         try:
             # 确保传递正确的路径给 process.py
+            print(image_quality)
             result = subprocess.run(
-                ['python3', 'process.py', filepath, lang, watermark_type],
+                ['python3', 'process.py', filepath, lang, watermark_type, image_quality],
                 capture_output=True, text=True
             )
 

@@ -8,6 +8,9 @@
     <link rel="icon" href="{{ url_for('static', filename='images/favicon.ico') }}" type="image/x-icon">
 </head>
 <body>
+    
+    <h1>Image Watermark Web</h1>
+
     <div id="uploadWarning" style="color: red; font-weight: bold; margin-bottom: 20px;">
         <!-- Notice: The uploaded image will be stored on our server. Please consider carefully before uploading. -->
     </div>
@@ -19,16 +22,13 @@
     <div id="burnAfterReadDivPrompt">
         <!-- If you check \"Burn After Reading\", your uploaded image and the watermarked image will be deleted within five minutes after processing is completed. Please download them in time. -->
     </div>
-
+    <br>
     <div id="burnAfterReadText" style="color: red; font-weight: bold;"></div>
     <!-- 语言切换按钮 -->
     <div class="lang-buttons">
         <a id="langZh">中文</a>
         <a id="langEn">English</a>
     </div>
-
-    <h1>Image Watermark Web</h1>
-    
     <!-- 自定义文件选择按钮 -->
     <label for="fileInput" class="custom-file-label">Choose File</label>
     <input type="file" id="fileInput">
@@ -40,6 +40,16 @@
     
     <!-- 加载动画 -->
     <div id="loader" class="loader"></div>
+
+    
+    <div class="image-quality" id="imageQuality" style="display: none;">
+        <label for="imageQuality" id="imgQuality" class="quality-label">图像质量:</label>
+        <select id="imageQualitySelect" name="imageQuality" class="quality-select">
+            <option id="highQ" value="high">高</option>
+            <option id="mediumQ" value="medium">中</option>
+            <option id="lowQ" value="low">低</option>
+        </select>
+    </div>
 
     <h2>Watermark types</h2>
     <div class="watermark-selection">
@@ -88,6 +98,3 @@
     <script src="{{ url_for('static', filename='js/script.js') }}"></script>
 </body>
 </html>
-
-<!-- TODO:
-- 解耦CSS JS -->
