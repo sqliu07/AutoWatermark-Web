@@ -108,7 +108,6 @@ def upload_file():
         # 处理图片（调用外部process.py脚本）
         try:
             # 确保传递正确的路径给 process.py
-            print(image_quality)
             result = subprocess.run(
                 ['python3', 'process.py', filepath, lang, watermark_type, image_quality],
                 capture_output=True, text=True
