@@ -158,7 +158,7 @@ def generate_watermark_image(origin_image, logo_path, camera_info, shooting_info
         return positions
 
     def get_line_coordinates(orientation, watermark_type):
-        x = ori_width - right_top_width - line_blank + (border_width if watermark_type == 1 else -border_width)
+        x = ori_width - right_top_width - line_blank + (border_width if watermark_type == 1 else - border_width)
         if orientation == "landscape":
             return x, line_start_y_landscape, x, line_end_y_landscape
         return x, line_start_y_portrait, x, line_end_y_portrait
