@@ -36,18 +36,18 @@ def resize_logo(logo, height):
     return logo.resize(
         (int(ori_logo_width * resize_factor), int(ori_logo_height * resize_factor)), Image.LANCZOS
     )
-    
+
 def paste_text_logo(img, positions):
     for text_img, pos in positions:
-        img.paste(text_img, pos)     
+        img.paste(text_img, pos)
 
 def draw_line(origin_image, start_x, start_y, end_x, end_y, line_width):
     draw = ImageDraw.Draw(origin_image)
     draw.line((start_x, start_y, end_x, end_y), fill=(128, 128, 128), width=line_width)
 
 def calculate_position(x, y_offset, x_adjust=0, y_adjust=0):
-        return (x + x_adjust, y_offset + y_adjust)    
-                
+        return (x + x_adjust, y_offset + y_adjust)
+
 def generate_watermark_image(origin_image, logo_path, camera_info, shooting_info, font_path_thin, font_path_bold,  watermark_type = 3, font_size = 60):
     ori_width, ori_height = origin_image.size
     bottom_width = int(ImageConstants.ORIGIN_BOTTOM_BORDER_RATIO * ori_height)
@@ -75,7 +75,7 @@ def generate_watermark_image(origin_image, logo_path, camera_info, shooting_info
     logo_ratio = ImageConstants.LOGO_RATIO
     logo_location_denominator = 4
     text_resize_factor = bottom_width * 1.5 / ImageConstants.ORIGIN_BOTTOM_HEIGHT
-    
+
     if (is_landscape(origin_image)):
         font_size = 120
         line_blank = int(line_blank / ar_ratio)
@@ -85,32 +85,32 @@ def generate_watermark_image(origin_image, logo_path, camera_info, shooting_info
         
     if (watermark_type == 3):
         logo_ratio = 0.095
-        
+
     left_top = image_resize(text_to_image(camera_info[0], font_path_bold, font_size), text_resize_factor)
     left_bottom = image_resize(text_to_image(camera_info[1], font_path_thin, font_size), text_resize_factor)
     right_top = image_resize(text_to_image(shooting_info[0], font_path_bold, font_size), text_resize_factor)
     right_bottom = image_resize(text_to_image(shooting_info[1], font_path_thin, font_size), text_resize_factor)
 
-    
+
     logo = Image.open(logo_path).convert("RGBA")
     logo_height = int(ori_height * logo_ratio)
     ori_logo_width, ori_logo_height = logo.size
     
     logo_resize_factor = 0.5 * logo_height / ori_logo_height
-    logo = logo.resize((int(ori_logo_width * logo_resize_factor), 
-                        int(ori_logo_height * logo_resize_factor)), 
+    logo = logo.resize((int(ori_logo_width * logo_resize_factor),
+                        int(ori_logo_height * logo_resize_factor)),
                         Image.LANCZOS)
-    
+
     text_image_height = left_top.height
-    right_top_width = right_top.width  
+    right_top_width = right_top.width
     
     row_1 = logo
     row2 = right_top
-    
+
     text_block_height = top_width + ori_height + int(bottom_width / 2) - int(5 * text_image_height / 4)
     line_start_y_landscape = top_width + ori_height + int(bottom_width / 2) - int(19 * text_image_height / 3)
     line_end_y_landscape = top_width + ori_height + int(bottom_width / 2) - int(14 * text_image_height / 3)
-    
+
     line_start_y_portrait = top_width + ori_height + int(bottom_width / 2) - int(1.8 * text_image_height / 2)
     line_end_y_portrait = top_width + ori_height + int(bottom_width / 2) + int(2.3 * text_image_height / 2)
 
@@ -170,7 +170,7 @@ def generate_watermark_image(origin_image, logo_path, camera_info, shooting_info
     paste_text_logo(origin_image, positions)
     if watermark_type != 3:
         draw_line(origin_image, *line_coords, line_width)
-     
+
     return origin_image
-    
-    
+
+
