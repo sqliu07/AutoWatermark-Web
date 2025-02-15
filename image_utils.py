@@ -1,6 +1,9 @@
 from constants import ImageConstants
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
+import logging
+
+logger = logging.getLogger(__name__)
 def is_landscape(image):
     return image.width >= image.height
 
@@ -16,7 +19,7 @@ def reset_image_orientation(image):
             elif orientation == 8:
                 image = image.rotate(90, expand=True)
     except Exception as e:
-        print(f"Error resetting orientation: {e}")
+        logger.error(f"Error resetting orientation: {e}")
     return image
 
 def image_resize(image,ratio):
