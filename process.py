@@ -4,7 +4,9 @@ from constants import CommonConstants
 
 from PIL import Image
 import sys
+import logging
 
+logger = logging.getLogger(__name__)
 def get_message(key, lang='zh'):
     return CommonConstants.ERROR_MESSAGES.get(key, {}).get(lang)
 
@@ -44,7 +46,6 @@ def add_borders_logo_and_text(image_path, lang = 'zh', watermark_type = 1, image
         if preview:
             return new_image
         else:
-            print(image_quailty)
             new_image.save(output_path, exif=exif_bytes, quality=image_quailty)  # keep exif data
             if notify:
                 url = "8.152.219.197:9010/watermark"
@@ -54,12 +55,12 @@ def add_borders_logo_and_text(image_path, lang = 'zh', watermark_type = 1, image
                 os.system(command)
             return True
     except Exception as e:
-         print(f"{str(e)}", file=sys.stderr)
+         logger.error(f"{str(e)}", file=sys.stderr)
          sys.exit(1)
 
 if __name__ == "__main__":
-    if len(sys.argv) < 4:
-        print("Invalid arguments!")
+    if len(sys.argv) < 5:
+        logger.error("Invalid arguments!")
         sys.exit(1)
 
     image_path = sys.argv[1]
