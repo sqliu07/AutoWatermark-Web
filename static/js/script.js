@@ -145,13 +145,13 @@ burnAfterReadCheckbox.addEventListener('change', function () {
 });
 
 document.getElementById('processBtn').addEventListener('click', function () {
-    document.getElementById('loader').style.display = 'block';
+    // document.getElementById('loader').style.display = 'block';
     document.getElementById('processedImage').style.display = 'none';
     document.getElementById('downloadBtn').style.display = 'none';
 
     if (!selectedWatermark) {
         alert(translations[currentLang].alerts.selectWatermark);
-        document.getElementById('loader').style.display = 'none';
+        // document.getElementById('loader').style.display = 'none';
         return;
     }
 
@@ -169,30 +169,45 @@ document.getElementById('processBtn').addEventListener('click', function () {
         .then(data => {
             if (data.error) {
                 alert(data.error);
-                document.getElementById('loader').style.display = 'none';
+                // document.getElementById('loader').style.display = 'none';
                 return;
             }
             if (data.processed_image) {
                 const processedImage = document.getElementById('processedImage');
                 const timestamp = new Date().getTime();
-                processedImage.src = `${data.processed_image}?t=${timestamp}`;
-                
+
+                processedImage.src = `${data.low_quality_image}?t=${timestamp}`;
+                processedImage.style.display = 'block';
+                setTimeout(() => {
+                    processedImage.src = `${data.processed_image}?t=${timestamp}`;
+                }, 2000); 
+                // processedImage.style.display = 'block';
+                const downloadBtn = document.getElementById('downloadBtn');
+                downloadBtn.href = data.processed_image;
+                const originalName = selectedFile.name.split('.').slice(0, -1).join('.');
+                const extension = selectedFile.name.split('.').pop();
+                downloadBtn.download = `${originalName}_watermark.${extension}`;
+                downloadBtn.style.display = 'inline';
+
+                // // document.getElementById('loader').style.display = 'none';
+                // alert(translations[currentLang].alerts.uploadSuccess);
                 // 确保图片加载完成后再显示
-                processedImage.onload = function () {
-                    processedImage.style.display = 'block';
+                // processedImage.onload = function () {
+                //     processedImage.src = `${data.processed_image}?t=${timestamp}`;
+                //     processedImage.style.display = 'block';
 
-                    const downloadBtn = document.getElementById('downloadBtn');
-                    downloadBtn.href = data.processed_image;
-                    const originalName = selectedFile.name.split('.').slice(0, -1).join('.');
-                    const extension = selectedFile.name.split('.').pop();
-                    downloadBtn.download = `${originalName}_watermark.${extension}`;
-                    downloadBtn.style.display = 'inline';
+                //     const downloadBtn = document.getElementById('downloadBtn');
+                //     downloadBtn.href = data.processed_image;
+                //     const originalName = selectedFile.name.split('.').slice(0, -1).join('.');
+                //     const extension = selectedFile.name.split('.').pop();
+                //     downloadBtn.download = `${originalName}_watermark.${extension}`;
+                //     downloadBtn.style.display = 'inline';
 
-                    document.getElementById('loader').style.display = 'none';
-                    alert(translations[currentLang].alerts.uploadSuccess);
-                };
+                    // document.getElementById('loader').style.display = 'none';
+                    // alert(translations[currentLang].alerts.uploadSuccess);
+                // };
             } else {
-                document.getElementById('loader').style.display = 'none';
+                // document.getElementById('loader').style.display = 'none';
                 alert(translations[currentLang].alerts.uploadError);
             }
         })

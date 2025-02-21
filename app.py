@@ -122,9 +122,11 @@ def upload_file():
         # 处理后的图片路径
         original_name, extension = os.path.splitext(filename_with_timestamp)
         processed_filename = f"{original_name}_watermark{extension}"
+        low_quality_filename = f"{original_name}_low{extension}"
 
         # 返回图像的路径，带上 lang 查询参数
         return jsonify({
+            'low_quality_image': f'/upload/{low_quality_filename}?lang={lang}',
             'processed_image': f'/upload/{processed_filename}?lang={lang}'
         })
     
