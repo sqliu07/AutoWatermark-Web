@@ -46,9 +46,6 @@ def add_borders_logo_and_text(image_path, lang = 'zh', watermark_type = 1, image
         if preview:
             return new_image
         else:
-            low_quality_image = new_image.resize((int(new_image.width * 0.3), int(new_image.height * 0.3)))
-            low_quality_image_path = f"{original_name}_low{extension}" 
-            low_quality_image.save(low_quality_image_path, exif=exif_bytes, quality=15)
             new_image.save(output_path, exif=exif_bytes, quality=image_quailty)  # keep exif data
             if notify:
                 url = "8.152.219.197:9010/watermark"
