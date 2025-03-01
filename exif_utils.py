@@ -128,12 +128,10 @@ def get_exif_data(image_path):
                 if len(output) > 1:
                     lens_info = output[1].strip()
                     break
-            if "Asph" in lens_info:
-                index = lens_info.find("Asph")
-    
-                if index != -1:
-                    lens_info = lens_info[:index].strip()
-        
+
+        if 'f'in str(lens_info):
+            lens_info = lens_info.replace('f', '\u0192')
+
         if camera_model_code != "Unknown Model":
             camera_model = dji_models.get(camera_model_code, camera_model_code) #In case dji has unknown model code
 
