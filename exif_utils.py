@@ -117,11 +117,11 @@ def get_exif_data(image_path):
             if ":" in substring:
                 new_substring = substring.replace(':', '.') 
                 datetime = datetime[:index].replace(substring, new_substring) + datetime[index:]
-    
+
         if str(lens_info) == "Unknown Lens":
             exif_ids = ["-LensModel", "-Lens", "-LensType"]
             lens_info = "Unknown Lens"
-            exif_tool_path = "./exiftool/exiftool"
+            exif_tool_path = "./3rdparty/exiftool/exiftool"
             for exif_id in exif_ids:
                 output = subprocess.check_output([exif_tool_path, exif_id, image_path])
                 output = output.decode().strip().split(":")

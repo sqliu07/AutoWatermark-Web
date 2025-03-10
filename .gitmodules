@@ -1,0 +1,3 @@
+[submodule "3rdparty/exiftool"]
+	path = 3rdparty/exiftool
+	url = https://github.com/exiftool/exiftool.git
