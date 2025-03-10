@@ -137,7 +137,12 @@ def get_exif_data(image_path):
 
         # Format shooting_info only if values are valid
         if focal_length_value and f_number_value and exposure_time_value:
-            shooting_info = f"{focal_length_value}mm  \u0192/{f_number_value}  1/{int(1 / exposure_time_value)}s  ISO{iso_speed}\n{datetime}"
+            if int(exposure_time_value) == exposure_time_value:
+                exposure_time_value = int(exposure_time_value)
+            if exposure_time_value < 1:
+                shooting_info = f"{focal_length_value}mm  \u0192/{f_number_value}  1/{int(1 / exposure_time_value)}s  ISO{iso_speed}\n{datetime}"
+            else:
+                shooting_info = f"{focal_length_value}mm  \u0192/{f_number_value} {exposure_time_value}s  ISO{iso_speed}\n{datetime}"
         else:
             shooting_info = "Invalid shooting info\n" + datetime
 
