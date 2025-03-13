@@ -130,7 +130,7 @@ def get_exif_data(image_path):
                     break
 
         if 'f'in str(lens_info):
-            lens_info = lens_info.replace('f', '\u0192')
+            lens_info = lens_info.replace('f', '\u0192') #\u0192 means another type of "f" for the Aperture value, looks like that on iPhone.
 
         if camera_model_code != "Unknown Model":
             camera_model = dji_models.get(camera_model_code, camera_model_code) #In case dji has unknown model code
