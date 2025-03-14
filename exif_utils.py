@@ -68,12 +68,6 @@ def get_exif_table(image_path):
         return None, None, None, None
 
 def get_exif_data(image_path):
-    dji_models = {
-        'FC8482': 'DJI Mini 4 Pro',
-        'FC7703': 'DJI Mini 2 SE'
-        # todo: need to add more dji models
-    }
-
     try:
         image = Image.open(image_path)
         exif_dict = piexif.load(image.info['exif'])
@@ -98,11 +92,7 @@ def get_exif_data(image_path):
         focal_length_value, f_number_value, exposure_time_value, iso_speed = get_exif_table(image_path)
         
         datetime = exif_data.get(piexif.ExifIFD.DateTimeOriginal, b"Unknown Date").decode()
-        if camera_make.lower() == "dji":
-            lens_info = "DJI"
-            camera_model = dji_models.get(camera_model_code)
-        else:
-            camera_model = camera_model_code
+        camera_model = camera_model_code
         if ' ' in datetime:
             index = datetime.index(' ') 
             substring = datetime[:index]
@@ -131,9 +121,6 @@ def get_exif_data(image_path):
 
         if 'f'in str(lens_info):
             lens_info = lens_info.replace('f', '\u0192') #\u0192 means another type of "f" for the Aperture value, looks like that on iPhone.
-
-        if camera_model_code != "Unknown Model":
-            camera_model = dji_models.get(camera_model_code, camera_model_code) #In case dji has unknown model code
 
         # Format shooting_info only if values are valid
         if focal_length_value and f_number_value and exposure_time_value:
