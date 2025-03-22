@@ -16,7 +16,7 @@ def convert_to_int(value):
             raise ValueError(f"Cannot convert string to int: '{value}'")
     else:
         raise ValueError("Unsupported type")
-    
+
 def get_manufacturer(image_path):
     try:
         image = Image.open(image_path)
@@ -88,7 +88,7 @@ def get_exif_data(image_path):
                 continue
             else:
                 camera_model_code = camera_model_code.replace(letter, '')
-    
+
         focal_length_value, f_number_value, exposure_time_value, iso_speed = get_exif_table(image_path)
         
         datetime = exif_data.get(piexif.ExifIFD.DateTimeOriginal, b"Unknown Date").decode()
@@ -99,7 +99,7 @@ def get_exif_data(image_path):
             if ":" in substring:
                 new_substring = substring.replace(':', '.') 
                 datetime = datetime[:index].replace(substring, new_substring) + datetime[index:]
-    
+
         if "T" in datetime:
             datetime = datetime.replace("T", " ")
             index = datetime.index(" ")
