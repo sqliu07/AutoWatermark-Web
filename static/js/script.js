@@ -1,208 +1,195 @@
-
-const watermarkSelection = document.querySelector('.watermark-selection');
-const images = watermarkSelection.querySelectorAll('img');
-
-watermarkSelection.addEventListener('scroll', function () {
-    const scrollLeft = watermarkSelection.scrollLeft;
-    const scrollWidth = watermarkSelection.scrollWidth;
-    const clientWidth = watermarkSelection.clientWidth;
-
-    // 滚动到最左边时隐藏最左边图片
-    if (scrollLeft === 0) {
-        labels[0].style.visibility = 'hidden';  // 最左边的图片消失
-    } else {
-        labels[0].style.visibility = 'visible'; // 恢复显示
-    }
-
-    // 滚动到最右边时隐藏最右边图片
-    if (scrollLeft + clientWidth >= scrollWidth) {
-        labels[labels.length - 1].style.visibility = 'hidden';  // 最右边的图片消失
-    } else {
-        labels[labels.length - 1].style.visibility = 'visible'; // 恢复显示
-    }
-});
-
-const translations = {
-    en: {
-        title: "Image Watermark Web",
-        uploadWarn: "Notice: The uploaded image will be stored on our server. Please consider carefully before uploading.",
-        chooseFile: "Choose File",
-        uploadedImage: "Uploaded Image",
-        watermarkTypes: "Watermark types",
-        burnAfterReading: "Burn After Reading",
-        burnAfterReadingText: "If you check \"Burn After Reading\", \n your uploaded image and the watermarked image will be deleted within two minutes after processing is completed. Please download them in time.",
-        processImage: "Process Image",
-        processedImage: "Processed Image",
-        downloadImage: "Download Processed Image",
-        imageQuality: "Image Quality",
-        highQuality: "High",
-        mediumQuality: "Medium",
-        lowQuality: "Low",
-        alerts: {
-            uploadSuccess: "Watemark added successfully!",
-            uploadError: "Unexpected error occurred.",
-            selectWatermark: "Please select a watermark style!"
-        }
-    },
-    zh: {
-        title: "边框水印",
-        uploadWarn: "注意：上传的图片会被存储在我们的服务器上，请您自行斟酌。",
-        chooseFile: "选择文件",
-        uploadedImage: "已上传图片",
-        watermarkTypes: "水印样式",
-        burnAfterReading: "阅后即焚",
-        burnAfterReadingText: "若您勾选“阅后即焚”，您上传的图片以及添加水印的图片将在处理完成两分钟内被删除，请您及时下载。",
-        processImage: "开始添加水印",
-        processedImage: "已添加水印的图片",
-        downloadImage: "下载已添加水印的图片",
-        imageQuality: "图像质量",
-        highQuality: "高",
-        mediumQuality: "中",
-        lowQuality: "低",
-        alerts: {
-            uploadSuccess: "水印添加成功！",
-            uploadError: "发生意外错误。",
-            selectWatermark: "请选择一种水印样式！"
-        }
-    }
-};
-
 let currentLang = 'zh';
+let translations = {};
+
+fetch('/static/i18n/translations.json')
+  .then(res => res.json())
+  .then(data => {
+    translations = data;
+    switchLanguage(currentLang);
+  });
 
 function switchLanguage(lang) {
-    currentLang = lang;
-    document.querySelector('h1').textContent = translations[lang].title;
-    document.getElementById('uploadWarning').textContent = translations[lang].uploadWarn;
-    document.querySelector('.custom-file-label').textContent = translations[lang].chooseFile;
-    document.querySelector('h2:nth-of-type(1)').textContent = translations[lang].uploadedImage;
-    document.querySelector('h2:nth-of-type(2)').textContent = translations[lang].watermarkTypes;
-    document.getElementById('processBtn').textContent = translations[lang].processImage;
-    document.querySelector('h2:nth-of-type(3)').textContent = translations[lang].processedImage;
-    document.getElementById('downloadBtn').textContent = translations[lang].downloadImage;
-    document.getElementById('burnAfterReadDivPrompt').textContent = translations[lang].burnAfterReadingText;
-    document.getElementById('imgQuality').textContent = translations[lang].imageQuality;
-    document.getElementById('highQ').textContent = translations[lang].highQuality;
-    document.getElementById('mediumQ').textContent = translations[lang].mediumQuality;
-    document.getElementById('lowQ').textContent = translations[lang].lowQuality;
+  currentLang = lang;
+  const t = translations[lang];
+  document.querySelector('h1').textContent = t.title;
+  document.getElementById('uploadWarning').textContent = t.uploadWarn;
+  document.querySelector('.custom-file-label').textContent = t.chooseFile;
+  document.querySelector('h2:nth-of-type(1)').textContent = t.uploadedImage;
+  document.querySelector('h2:nth-of-type(2)').textContent = t.watermarkTypes;
+  document.querySelector('h2:nth-of-type(3)').textContent = t.processedImage;
+  document.getElementById('processBtn').textContent = t.processImage;
+  document.getElementById('burnAfterReadDivPrompt').textContent = t.burnAfterReadingText;
+  document.getElementById('imgQuality').textContent = t.imageQuality;
+  document.getElementById('highQ').textContent = t.highQuality;
+  document.getElementById('mediumQ').textContent = t.mediumQuality;
+  document.getElementById('lowQ').textContent = t.lowQuality;
 
-    const burnAfterReadLabel = document.querySelector('#burnAfterReadDiv label');
-    if (burnAfterReadLabel) {
-        burnAfterReadLabel.textContent = translations[lang].burnAfterReading;
-    }
+  const label = document.querySelector('#burnAfterReadDiv label');
+  if (label) label.textContent = t.burnAfterReading;
+
+  document.getElementById('previewNote').textContent = '';
+  document.getElementById('progressText').textContent = '';
 }
 
-document.getElementById('langEn').addEventListener('click', () => switchLanguage('en'));
 document.getElementById('langZh').addEventListener('click', () => switchLanguage('zh'));
+document.getElementById('langEn').addEventListener('click', () => switchLanguage('en'));
 
-let selectedFile = null;
+const fileInput = document.getElementById('fileInput');
+const previewContainer = document.getElementById('previewContainer');
+const resultContainer = document.getElementById('resultContainer');
+const zipButton = document.getElementById('zipDownloadBtn');
+const progressText = document.getElementById('progressText');
+const previewNote = document.getElementById('previewNote');
 
-// 文件选择事件
-document.getElementById('fileInput').addEventListener('change', function (event) {
-    const file = event.target.files[0];
-    if (file) {
-        selectedFile = file;
+let processedFilenames = [];
 
-        document.getElementById('imagePreview').style.display = 'none';
-        document.getElementById('processBtn').style.display = 'none';
-        document.getElementById('processedImage').style.display = 'none';
-        document.getElementById('downloadBtn').style.display = 'none';
-        document.getElementById('imageQuality').style.display = 'none';
+fileInput.addEventListener('change', function () {
+  const files = fileInput.files;
+  previewContainer.innerHTML = '';
+  resultContainer.innerHTML = '';
+  progressText.textContent = '';
+  previewNote.textContent = '';
+  processedFilenames = [];
+  zipButton.style.display = 'none';
 
-        const reader = new FileReader();
-        reader.onload = function (e) {
-            const imagePreview = document.getElementById('imagePreview');
-            imagePreview.src = e.target.result;
-            imagePreview.style.display = 'block';
-            document.getElementById('processBtn').style.display = 'inline';
-            document.getElementById('imageQuality').style.display = 'flex';
-        };
-        reader.readAsDataURL(file);
-    }
-});
+  if (files.length === 0) {
+    document.getElementById('processBtn').style.display = 'none';
+    return;
+  }
 
-let selectedQuality = null;
-let selectedWatermark = null;
-let burnAfterRead = null;
+  // 只展示前 3 张预览图
+  Array.from(files).slice(0, 3).forEach(file => {
+    const reader = new FileReader();
+    reader.onload = function (e) {
+      const img = document.createElement('img');
+      img.src = e.target.result;
+      img.style.maxWidth = '200px';
+      img.style.maxHeight = '200px';
+      img.style.border = '1px solid #ccc';
+      img.style.padding = '4px';
+      previewContainer.appendChild(img);
+    };
+    reader.readAsDataURL(file);
+  });
 
-const qualitySelect = document.getElementById('imageQualitySelect');
-qualitySelect.addEventListener('change', function () {
-    selectedQuality = qualitySelect.value;
-    console.log('Selected quality:', selectedQuality);
-});
+  // 超过 3 张图时显示提示信息
+  if (files.length > 3) {
+    const rest = files.length - 3;
+    previewNote.textContent = translations[currentLang].previewNote.replace('{rest}', rest);
+  }
 
-const watermarkRadios = document.querySelectorAll('input[name="watermark_type"]');
-watermarkRadios.forEach(radio => {
-    radio.addEventListener('change', function () {
-        selectedWatermark = this.value;  // 选中后更新水印类型
-    });
-});
-
-const burnAfterReadCheckbox = document.getElementById('burnAfterRead');
-burnAfterReadCheckbox.addEventListener('change', function () {
-    const isChecked = burnAfterReadCheckbox.checked;  // 获取复选框的选中状态
-    burnAfterRead = isChecked ? 1 : 0;  // 选中后更新是否删除上传的图片
-    console.log('Burn After Reading:', burnAfterRead);
+  document.getElementById('processBtn').style.display = 'inline';
 });
 
 document.getElementById('processBtn').addEventListener('click', function () {
-    document.getElementById('loader').style.display = 'block';
-    document.getElementById('processedImage').style.display = 'none';
-    document.getElementById('downloadBtn').style.display = 'none';
+  const files = fileInput.files;
+  const isSingleImage = files.length === 1;
 
-    if (!selectedWatermark) {
-        alert(translations[currentLang].alerts.selectWatermark);
-        document.getElementById('loader').style.display = 'none';
-        return;
-    }
+  const watermarkRadio = document.querySelector('input[name="watermark_type"]:checked');
+  const quality = document.getElementById('imageQualitySelect').value;
+  const burn = document.getElementById('burnAfterRead').checked ? 1 : 0;
 
+  if (!watermarkRadio) {
+    alert(translations[currentLang].alerts.selectWatermark);
+    return;
+  }
+
+  const watermarkType = watermarkRadio.value;
+  resultContainer.innerHTML = '';
+  processedFilenames = [];
+  zipButton.style.display = 'none';
+  progressText.textContent = '';
+
+  Array.from(files).forEach((file, index) => {
     const formData = new FormData();
-    formData.append("file", selectedFile);
-    formData.append("watermark_type", selectedWatermark);
-    formData.append("burn_after_read", burnAfterRead);
-    formData.append("image_quality", selectedQuality || "high");
+    formData.append('file', file);
+    formData.append('watermark_type', watermarkType);
+    formData.append('image_quality', quality || 'high');
+    formData.append('burn_after_read', burn);
 
     fetch('/upload?lang=' + currentLang, {
-        method: 'POST',
-        body: formData
+      method: 'POST',
+      body: formData
     })
-        .then(response => response.json())
-        .then(data => {
-            if (data.error) {
-                alert(data.error);
-                document.getElementById('loader').style.display = 'none';
-                return;
-            }
-            if (data.processed_image) {
-                const processedImage = document.getElementById('processedImage');
-                const timestamp = new Date().getTime();
-                processedImage.src = `${data.processed_image}?t=${timestamp}`;
-                
-                // 确保图片加载完成后再显示
-                processedImage.onload = function () {
-                    processedImage.style.display = 'block';
+      .then(res => res.json())
+      .then(data => {
+        if (data.error) {
+          const error = document.createElement('div');
+          error.textContent = file.name + ': ' + data.error;
+          error.style.color = 'red';
+          resultContainer.appendChild(error);
+          return;
+        }
 
-                    const downloadBtn = document.getElementById('downloadBtn');
-                    downloadBtn.href = data.processed_image;
-                    const originalName = selectedFile.name.split('.').slice(0, -1).join('.');
-                    const extension = selectedFile.name.split('.').pop();
-                    downloadBtn.download = `${originalName}_watermark.${extension}`;
-                    downloadBtn.style.display = 'inline';
+        if (data.processed_image) {
+          const processedName = data.processed_image.split('/').pop().split('?')[0];
+          processedFilenames.push(processedName);
 
-                    document.getElementById('loader').style.display = 'none';
-                    alert(translations[currentLang].alerts.uploadSuccess);
-                };
-            } else {
-                document.getElementById('loader').style.display = 'none';
-                alert(translations[currentLang].alerts.uploadError);
+          if (isSingleImage || index < 3) {
+            const wrapper = document.createElement('div');
+            wrapper.style.textAlign = 'center';
+
+            const img = document.createElement('img');
+            img.src = data.processed_image + `?t=${Date.now()}`;
+            img.style.maxWidth = '200px';
+            img.style.maxHeight = '200px';
+            wrapper.appendChild(img);
+
+            if (isSingleImage) {
+              const link = document.createElement('a');
+              link.href = data.processed_image;
+              link.download = file.name.replace(/\.[^/.]+$/, '') + '_watermark.jpg';
+              link.textContent = translations[currentLang].downloadImage;
+              link.style.display = 'block';
+              link.style.marginTop = '6px';
+              wrapper.appendChild(link);
             }
-        })
-        .catch(error => {
-            alert(translations[currentLang].alerts.uploadError);
-            console.error('Error uploading image:', error);
-            document.getElementById('loader').style.display = 'none';
-        });
+
+            resultContainer.appendChild(wrapper);
+          }
+
+          const progressTemplate = translations[currentLang].processingProgress;
+          const progressMessage = progressTemplate
+            .replace('{done}', processedFilenames.length)
+            .replace('{total}', files.length);
+          progressText.textContent = progressMessage;
+
+          if (!isSingleImage && processedFilenames.length === files.length) {
+            zipButton.style.display = 'inline';
+          }
+        }
+      })
+      .catch(err => {
+        const error = document.createElement('div');
+        error.textContent = file.name + ': ' + (err.message || 'Upload failed');
+        error.style.color = 'red';
+        resultContainer.appendChild(error);
+      });
+  });
 });
 
-document.addEventListener('DOMContentLoaded', () => {
-    switchLanguage('zh');  // 默认语言
+zipButton.addEventListener('click', () => {
+  if (processedFilenames.length === 0) return;
+
+  fetch('/download_zip', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      filenames: processedFilenames,
+      lang: currentLang
+    })
+  })
+    .then(res => res.json())
+    .then(data => {
+      if (data.zip_url) {
+        const a = document.createElement('a');
+        a.href = data.zip_url;
+        a.download = 'images_with_watermarks.zip';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      } else {
+        alert('打包失败');
+      }
+    });
 });

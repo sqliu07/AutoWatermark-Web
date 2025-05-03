@@ -1,8 +1,7 @@
 name: Deploy to Server
 
 on: 
-  push:
-    branches: [ main ]  # 触发分支（根据需要修改）
+  workflow_dispatch:
 
 jobs:
   deploy:

@@ -1,0 +1,55 @@
+{
+    "en": {
+      "title": "Image Watermark Web",
+      "uploadWarn": "Notice: The uploaded image will be stored on our server. Please consider carefully before uploading.",
+      "chooseFile": "Choose File",
+      "uploadedImage": "Uploaded Image",
+      "watermarkTypes": "Watermark types",
+      "burnAfterReading": "Burn After Reading",
+      "burnAfterReadingText": "If you check \"Burn After Reading\", your uploaded image and the watermarked image will be deleted within two minutes after processing is completed. Please download them in time.",
+      "processImage": "Process Image",
+      "processedImage": "Processed Image",
+      "downloadImage": "Download Processed Image",
+      "previewNote": "Only the first 3 images are previewed, the remaining {rest} will be processed",
+      "processingProgress": "Processed {done} / {total} images",
+      "alerts": {
+        "uploadSuccess": "Watemark added successfully!",
+        "uploadError": "Unexpected error occurred.",
+        "selectWatermark": "Please select a watermark style!"
+      },
+      "404": {
+        "title": "Image Deleted",
+        "imageDeleted": "The image has been deleted",
+        "imageDeletedMessage": "Sorry, the image you requested has been deleted or does not exist."
+      }
+    },
+    "zh": {
+      "title": "边框水印",
+      "uploadWarn": "注意：上传的图片会被存储在我们的服务器上，请您自行斟酌。",
+      "chooseFile": "选择文件",
+      "uploadedImage": "已上传图片",
+      "watermarkTypes": "水印样式",
+      "burnAfterReading": "阅后即焚",
+      "burnAfterReadingText": "若您勾选“阅后即焚”，您上传的图片以及添加水印的图片将在处理完成两分钟内被删除，请您及时下载。",
+      "processImage": "开始添加水印",
+      "processedImage": "已添加水印的图片",
+      "downloadImage": "下载已添加水印的图片",
+      "imageQuality": "图像质量",
+      "highQuality": "高",
+      "mediumQuality": "中",
+      "lowQuality": "低",
+      "previewNote": "仅展示前 3 张图片预览，剩余 {rest} 张将一并处理",
+      "processingProgress": "已处理 {done} / {total} 张",
+      "alerts": {
+        "uploadSuccess": "水印添加成功！",
+        "uploadError": "发生意外错误。",
+        "selectWatermark": "请选择一种水印样式！"
+      },
+      "404": {
+        "title": "图片已删除",
+        "imageDeleted": "图片已被删除",
+        "imageDeletedMessage": "抱歉，您请求的图片已被删除或不存在。"
+      }
+    }
+  }
+  

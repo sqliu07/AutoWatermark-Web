@@ -1,6 +1,9 @@
 from constants import CommonConstants
 import os
 import time
+import json
+import zipfile
+import tempfile
 from datetime import datetime
 
 from flask import Flask, after_this_request, request, render_template, jsonify, send_file, abort
@@ -30,18 +33,8 @@ ERROR_MESSAGES = {
 }
 
 # 语言翻译字典
-translations = {
-    'en': {
-        'title': "Image Deleted",
-        'imageDeleted': "The image has been deleted",
-        'imageDeletedMessage': "Sorry, the image you requested has been deleted or does not exist."
-    },
-    'zh': {
-        'title': "图片已删除",
-        'imageDeleted': "图片已被删除",
-        'imageDeletedMessage': "抱歉，您请求的图片已被删除或不存在。"
-    }
-}
+with open("static/i18n/translations.json", "r", encoding="utf-8") as f:
+    translations = json.load(f)
 
 burn_after_read = '1'
 
@@ -78,7 +71,8 @@ def upload_file():
         return jsonify(error=get_message('invalid_file_type', request.args.get('lang', 'zh'))), 400
     
     watermark_type = request.form.get('watermark_type', '1')
-    global burn_after_read
+    # global burn_after_read
+    # burn_after_read = request.form.get('burn_after_read', '0')
     burn_after_read = request.form.get('burn_after_read', '0')
     image_quality  = request.form.get('image_quality', "high")
     if "high" == image_quality:
@@ -125,22 +119,22 @@ def upload_file():
 
         # 返回图像的路径，带上 lang 查询参数
         return jsonify({
-            'processed_image': f'/upload/{processed_filename}?lang={lang}'
+            'processed_image': f'/upload/{processed_filename}?lang={lang}&burn={burn_after_read}'
         })
     
     return jsonify(error='Invalid file type'), 400
 
 @app.route('/upload/<filename>')
 def upload_file_served(filename):
-    # 获取 lang 参数并去除查询字符串部分
     lang = request.args.get('lang', 'zh').split('?')[0]
-
+    burn_after_read = request.args.get('burn', '0')
+    
     file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
 
     @after_this_request
     def delete_file(response):
         def delayed_delete():
-            if burn_after_read == '1':  # 如果 burn_after_read 为 True，则延时10秒后删除文件
+            if burn_after_read == '1':  # 如果 burn_after_read 为 True，则延时120秒后删除文件
                 time.sleep(120)
                 if os.path.exists(file_path):
                     os.remove(file_path)
@@ -160,5 +154,49 @@ def upload_file_served(filename):
     
     return send_file(file_path)
 
+@app.route('/download_zip', methods=['POST'])
+def download_zip():
+    data = request.json
+    filenames = data.get('filenames', [])
+    lang = data.get('lang', 'zh')
+
+    if not filenames:
+        return jsonify(error="No files provided"), 400
+
+    # 拼接打包文件名：Packed_Watermark_Images_{数量}_{时间}.zip
+    count = len(filenames)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    zip_filename = f"Packed_Watermark_Images_{count}_{timestamp}.zip"
+    zip_path = os.path.join(tempfile.gettempdir(), zip_filename)
+
+    try:
+        with zipfile.ZipFile(zip_path, 'w') as zipf:
+            for fname in filenames:
+                full_path = os.path.join(app.config['UPLOAD_FOLDER'], fname)
+                if os.path.exists(full_path):
+                    zipf.write(full_path, arcname=fname)
+    except Exception as e:
+        return jsonify(error=str(e)), 500
+
+    zip_url = f"/download_temp_zip/{zip_filename}"
+    return jsonify(zip_url=zip_url)
+
+# 提供 ZIP 文件下载
+@app.route('/download_temp_zip/<filename>')
+def download_temp_zip(filename):
+    file_path = os.path.join(tempfile.gettempdir(), filename)
+    if not os.path.exists(file_path):
+        return "File not found", 404
+    return send_file(file_path, as_attachment=True, download_name=filename)
+
 if __name__ == '__main__':
-    app.run(debug=False)
+    import os
+
+    is_production = os.environ.get("FLASK_ENV") == "production"
+
+    if is_production:
+        # 生产环境不在这里启动，由 gunicorn 启动
+        print("请使用 gunicorn 启动：gunicorn -w 4 -b 0.0.0.0:5000 app:app")
+    else:
+        # 本地开发模式：默认 localhost，仅开发使用
+        app.run(host='0.0.0.0', port=5000, debug=True)
