@@ -31,11 +31,12 @@
     </div>
     <!-- 自定义文件选择按钮 -->
     <label for="fileInput" class="custom-file-label">Choose File</label>
-    <input type="file" id="fileInput">
+    <input type="file" id="fileInput" multiple>
     
     <!-- 上传的图片预览 -->
     <h2>Uploaded Image</h2>
-    <img id="imagePreview" src="" alt="No Image" style="display:none;">
+    <div id="previewContainer" style="display:flex; flex-wrap:wrap; gap:10px;"></div>
+    <div id="previewNote" style="margin-top: 5px; color: #888; font-size: 14px;"></div>
     <button id="processBtn" style="display:none;">Process Image</button>
     
     <!-- 加载动画 -->
@@ -92,8 +93,10 @@
 
     <!-- 处理后的图片显示 -->
     <h2>Processed Image</h2>
-    <img id="processedImage" src="" alt="Processed Image" style="display:none;">
+    <div id="resultContainer" style="display:flex; flex-wrap:wrap; gap:10px;"></div>
+    <div id="progressText" style="margin-top: 10px; color: #888; font-size: 14px;"></div>
     <a id="downloadBtn" style="display:none;">Download Processed Image</a>
+    <button id="zipDownloadBtn" style="display: none;">打包下载全部</button>
     
     <script src="{{ url_for('static', filename='js/script.js') }}"></script>
 </body>
