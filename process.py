@@ -8,11 +8,25 @@ import sys
 def get_message(key, lang='zh'):
     return CommonConstants.ERROR_MESSAGES.get(key, {}).get(lang)
 
-def add_borders_logo_and_text(image_path, lang = 'zh', watermark_type = 1, image_quailty = 95, notify = False, preview = False):
+def process_image(image_path, lang='zh', watermark_type=1, image_quality=95, notify=False, preview=False):
+    """
+    Adds a watermark to the given image.
+
+    Args:
+        image_path (str): The path to the image file.
+        lang (str, optional): The language for error messages. Defaults to 'zh'.
+        watermark_type (int, optional): The type of watermark to add. Defaults to 1.
+        image_quality (int, optional): The quality of the output image. Defaults to 95.
+        notify (bool, optional): Whether to send a notification. Defaults to False.
+        preview (bool, optional): Whether to return the image object for preview. Defaults to False.
+
+    Returns:
+        bool or Image: True if successful, or the image object if preview is True.
+    """
     try:
         original_name, extension = os.path.splitext(image_path)
         output_path = f"{original_name}_watermark{extension}"
-        # Todo: Add more selections
+        
         manufacturer = get_manufacturer(image_path)
         if manufacturer is not None and len(manufacturer) > 0:
             logo_path = find_logo(manufacturer)
@@ -20,32 +34,31 @@ def add_borders_logo_and_text(image_path, lang = 'zh', watermark_type = 1, image
                 raise ValueError(get_message("unsupported_manufacturer", lang))
         else:
             raise ValueError(get_message("no_exif_data", lang))
-        image = Image.open(image_path)
-        image = reset_image_orientation(image)  # Reset orientation
-        exif_dict = None
-        exif_bytes = None
 
+        image = Image.open(image_path)
+        image = reset_image_orientation(image)
+
+        exif_bytes = image.info.get('exif', b'')
         try:
-            exif_dict = piexif.load(image.info.get('exif', b''))
-            exif_bytes = piexif.dump(exif_dict)
+            # Verify that exif data is valid
+            piexif.load(exif_bytes)
         except Exception:
-            return None
+            exif_bytes = b'' # Reset exif bytes if invalid
 
         result = get_exif_data(image_path)
+        if result is None or result == (None, None):
+             raise ValueError("Could not read EXIF data from image.")
 
-        if result is not None:
-            camera_info, shooting_info = result
-
+        camera_info, shooting_info = result
         camera_info_lines, shooting_info_lines = camera_info.split('\n'), shooting_info.split('\n')
 
-        new_image = generate_watermark_image(image, logo_path, camera_info_lines, shooting_info_lines, 
+        new_image = generate_watermark_image(image, logo_path, camera_info_lines, shooting_info_lines,
                                              CommonConstants.GLOBAL_FONT_PATH_LIGHT, CommonConstants.GLOBAL_FONT_PATH_BOLD, watermark_type)
 
         if preview:
             return new_image
         else:
-            print(image_quailty)
-            new_image.save(output_path, exif=exif_bytes, quality=image_quailty)  # keep exif data
+            new_image.save(output_path, exif=exif_bytes, quality=image_quality)
             if notify:
                 url = "8.152.219.197:9010/watermark"
                 title = "This is your image with watermark."
@@ -54,18 +67,32 @@ def add_borders_logo_and_text(image_path, lang = 'zh', watermark_type = 1, image
                 os.system(command)
             return True
     except Exception as e:
-         print(f"{str(e)}", file=sys.stderr)
-         sys.exit(1)
+        print(f"{str(e)}", file=sys.stderr)
+        # In a script context, we exit. In a library context, we might re-raise or return None.
+        # For testing, re-raising is better to see the failure.
+        # For the script, exiting is fine.
+        if __name__ == "__main__":
+            sys.exit(1)
+        else:
+            raise e
 
-if __name__ == "__main__":
-    if len(sys.argv) < 4:
-        print("Invalid arguments!")
+def main():
+    """Main function to handle command-line arguments."""
+    if len(sys.argv) < 5:
+        print("Usage: python process.py <image_path> <lang> <watermark_type> <image_quality>", file=sys.stderr)
         sys.exit(1)
 
     image_path = sys.argv[1]
     lang = sys.argv[2]
-    watermark_type = sys.argv[3]
-    image_quality = sys.argv[4]
+    try:
+        watermark_type = int(sys.argv[3])
+        image_quality = int(sys.argv[4])
+    except ValueError:
+        print("Error: watermark_type and image_quality must be integers.", file=sys.stderr)
+        sys.exit(1)
  
-    notify = False
-    result = add_borders_logo_and_text(image_path, lang, int(watermark_type), int(image_quality), notify)
+    notify = False # Or get from args if needed
+    process_image(image_path, lang, watermark_type, image_quality, notify)
+
+if __name__ == "__main__":
+    main()

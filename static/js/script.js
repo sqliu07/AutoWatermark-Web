@@ -40,6 +40,7 @@ const resultContainer = document.getElementById('resultContainer');
 const zipButton = document.getElementById('zipDownloadBtn');
 const progressText = document.getElementById('progressText');
 const previewNote = document.getElementById('previewNote');
+const loader = document.getElementById('loader');
 
 let processedFilenames = [];
 
@@ -99,6 +100,17 @@ document.getElementById('processBtn').addEventListener('click', function () {
   processedFilenames = [];
   zipButton.style.display = 'none';
   progressText.textContent = '';
+  loader.style.display = 'block'; // Show loader
+
+  let processedCount = 0;
+  const totalFiles = files.length;
+
+  const onComplete = () => {
+    processedCount++;
+    if (processedCount === totalFiles) {
+      loader.style.display = 'none'; // Hide loader when all are done
+    }
+  };
 
   Array.from(files).forEach((file, index) => {
     const formData = new FormData();
@@ -106,6 +118,12 @@ document.getElementById('processBtn').addEventListener('click', function () {
     formData.append('watermark_type', watermarkType);
     formData.append('image_quality', quality || 'high');
     formData.append('burn_after_read', burn);
+
+    const progressTemplate = translations[currentLang].processingProgress;
+    const progressInitialMessage = progressTemplate
+      .replace('{done}', index)
+      .replace('{total}', totalFiles);
+    progressText.textContent = progressInitialMessage;
 
     fetch('/upload?lang=' + currentLang, {
       method: 'POST',
@@ -118,6 +136,7 @@ document.getElementById('processBtn').addEventListener('click', function () {
           error.textContent = file.name + ': ' + data.error;
           error.style.color = 'red';
           resultContainer.appendChild(error);
+          onComplete(); // Mark as complete even on error
           return;
         }
 
@@ -158,12 +177,14 @@ document.getElementById('processBtn').addEventListener('click', function () {
             zipButton.style.display = 'inline';
           }
         }
+        onComplete(); // Mark as complete on success
       })
       .catch(err => {
         const error = document.createElement('div');
         error.textContent = file.name + ': ' + (err.message || 'Upload failed');
         error.style.color = 'red';
         resultContainer.appendChild(error);
+        onComplete(); // Mark as complete on fetch error
       });
   });
 });
