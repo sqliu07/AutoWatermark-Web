@@ -153,16 +153,36 @@ document.getElementById('processBtn').addEventListener('click', function () {
             img.style.maxWidth = '200px';
             img.style.maxHeight = '200px';
             wrapper.appendChild(img);
-
             if (isSingleImage) {
               const link = document.createElement('a');
-              link.href = data.processed_image;
-              link.download = file.name.replace(/\.[^/.]+$/, '') + '_watermark.jpg';
+              link.href = "#";
               link.textContent = translations[currentLang].downloadImage;
               link.style.display = 'block';
               link.style.marginTop = '6px';
+
+              link.addEventListener('click', (e) => {
+                e.preventDefault();
+                fetch(data.processed_image)
+                  .then(res => {
+                    if (!res.ok) {
+                      window.location.href = "/not_found?lang=" + currentLang;
+                      throw new Error("File not found");
+                    }
+                    return res.blob();
+                  })
+                  .then(blob => {
+                    const a = document.createElement("a");
+                    a.href = URL.createObjectURL(blob);
+                    a.download = file.name.replace(/\.[^/.]+$/, '') + '_watermark.jpg';
+                    a.click();
+                    URL.revokeObjectURL(a.href);
+                  })
+                  .catch(err => console.error(err));
+              });
+
               wrapper.appendChild(link);
             }
+
 
             resultContainer.appendChild(wrapper);
           }
