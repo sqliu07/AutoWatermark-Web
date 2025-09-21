@@ -132,7 +132,7 @@ def upload_file_served(filename):
     def delete_file(response):
         def delayed_delete():
             if str(burn_after_read).strip() == '1':
-                time.sleep(10)
+                time.sleep(120)
                 if os.path.exists(file_path):
                     os.remove(file_path)
 
