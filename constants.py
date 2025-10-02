@@ -15,6 +15,14 @@ class CommonConstants:
         'en': "This image does not contain valid exif data!",
         'zh': "该图片不包含有效的exif数据！"
     },
+    "exif_read_error": {
+        'en': "Failed to parse EXIF information from the image.",
+        'zh': "无法从图片中解析 EXIF 信息。"
+    },
+    "unexpected_error": {
+        'en': "An unexpected error occurred while processing the watermark.",
+        'zh': "处理水印时发生未知错误。"
+    },
 }
 
 class ImageConstants:

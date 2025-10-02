@@ -41,6 +41,9 @@ _BRAND_ALIASES = {
     "panasoniccorporationimaging": "panasonic",
     "leicacameraag": "leica",
     "pentaxricohimaging": "pentax",
+    "xiaomi":  "xiaomi",
+    "apple": "apple",
+    "oppo": "oppo"
 }
 
 
@@ -83,6 +86,23 @@ def get_manufacturer(image_path, exif_dict=None):
         return ' '.join(sanitized.split())
     except Exception:
         return None
+
+def get_camera_model(exif_dict):
+    if not exif_dict:
+        return None
+
+    try:
+        model_bytes = exif_dict.get('0th', {}).get(piexif.ImageIFD.Model, b"")
+        if isinstance(model_bytes, (bytes, bytearray)):
+            model = model_bytes.decode(errors='ignore')
+        else:
+            model = str(model_bytes)
+        sanitized = ''.join(ch for ch in model if re.match(r'[a-zA-Z0-9\- ]', ch))
+        sanitized = ' '.join(sanitized.split())
+        return sanitized or None
+    except Exception:
+        return None
+
 
 def find_logo(manufacturer):
     if not manufacturer:
@@ -132,6 +152,8 @@ def get_exif_table(image_path, exif_dict=None):
         focal_length_value = focal_length_35
         f_number_value = f_number[0] / f_number[1] if f_number[1] != 0 else 0
         exposure_time_value = exposure_time[0] / exposure_time[1] if exposure_time[1] != 0 else 0
+
+        f_number_value = round(f_number_value, 2) if f_number_value else 0
 
         return focal_length_value, f_number_value, exposure_time_value, iso_speed
     except KeyError:
@@ -209,5 +231,6 @@ def get_exif_data(image_path, exif_dict=None):
         return camera_info, shooting_info
     except KeyError:
         return None, None
-    except Exception:
+    except Exception as e:
+        print(f"error: {e}")
         return None, None

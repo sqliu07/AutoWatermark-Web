@@ -7,9 +7,11 @@ import tempfile
 from datetime import datetime
 
 from flask import Flask, after_this_request, request, render_template, jsonify, send_file, abort
-import subprocess
 from werkzeug.utils import secure_filename
 import threading
+
+from process import process_image
+from errors import WatermarkError
 
 app = Flask(__name__, static_url_path='/static', static_folder='./static')
 
@@ -39,6 +41,9 @@ with open("static/i18n/translations.json", "r", encoding="utf-8") as f:
 
 def get_message(key, lang='zh'):
     return ERROR_MESSAGES.get(key, {}).get(lang)
+
+def get_common_message(key, lang='zh'):
+    return CommonConstants.ERROR_MESSAGES.get(key, {}).get(lang)
 
 # 确保上传文件夹存在
 os.makedirs(CommonConstants.UPLOAD_FOLDER, exist_ok=True)
@@ -96,19 +101,27 @@ def upload_file():
         # 保存上传的文件
         file.save(filepath)
 
-        # 处理图片（调用外部process.py脚本）
         try:
-            # 确保传递正确的路径给 process.py
-            result = subprocess.run(
-                ['python3', 'process.py', filepath, lang, watermark_type, image_quality],
-                capture_output=True, text=True
-            )
+            watermark_type_int = int(watermark_type)
+            image_quality_int = int(image_quality)
+        except ValueError:
+            return jsonify(error=get_common_message('unexpected_error', lang)), 400
 
-            if result.returncode != 0:
-                return jsonify(error=f'{result.stderr}'), 500
-
-        except Exception as e:
-            return jsonify(error=f'Error calling process.py: {str(e)}'), 500
+        try:
+            process_image(filepath, lang=lang, watermark_type=watermark_type_int, image_quality=image_quality_int)
+        except WatermarkError as err:
+            message_key = err.get_message_key()
+            detail = err.get_detail()
+            message = get_common_message(message_key, lang) or detail or get_common_message('unexpected_error', lang)
+            if message_key == 'unsupported_manufacturer' and detail:
+                message = f"{message} ({detail})"
+            status_code = 500 if message_key == 'unexpected_error' else 400
+            if detail:
+                app.logger.warning("Watermark processing error (%s): %s", message_key, detail)
+            return jsonify(error=message), status_code
+        except Exception as exc:
+            app.logger.exception("Unexpected error when processing image")
+            return jsonify(error=get_common_message('unexpected_error', lang)), 500
 
         # 处理后的图片路径
         original_name, extension = os.path.splitext(filename_with_timestamp)
