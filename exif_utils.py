@@ -232,5 +232,4 @@ def get_exif_data(image_path, exif_dict=None):
     except KeyError:
         return None, None
     except Exception as e:
-        print(f"error: {e}")
         return None, None
