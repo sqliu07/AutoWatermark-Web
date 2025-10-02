@@ -1,5 +1,9 @@
 import os
+from pathlib import Path
+
 import piexif
+from PIL import Image
+import sys
 
 from exif_utils import find_logo, get_manufacturer, get_exif_data, get_camera_model
 from image_utils import *
@@ -11,9 +15,7 @@ from errors import (
     ExifProcessingError,
     UnexpectedProcessingError,
 )
-
-from PIL import Image
-import sys
+from motion_photo_utils import prepare_motion_photo
 
 def get_message(key, lang='zh'):
     return CommonConstants.ERROR_MESSAGES.get(key, {}).get(lang)
@@ -37,7 +39,14 @@ def process_image(image_path, lang='zh', watermark_type=1, image_quality=95, not
         original_name, extension = os.path.splitext(image_path)
         output_path = f"{original_name}_watermark{extension}"
         
-        image = Image.open(image_path)
+        motion_session = prepare_motion_photo(image_path)
+        working_image_path = image_path
+        if motion_session and motion_session.has_motion:
+            working_image_path = str(motion_session.still_path)
+        else:
+            motion_session = None
+
+        image = Image.open(working_image_path)
         image = reset_image_orientation(image)
 
         exif_bytes = image.info.get('exif')
@@ -53,7 +62,7 @@ def process_image(image_path, lang='zh', watermark_type=1, image_quality=95, not
         if exif_dict is None:
             raise MissingExifDataError()
 
-        manufacturer = get_manufacturer(image_path, exif_dict)
+        manufacturer = get_manufacturer(working_image_path, exif_dict)
         if not manufacturer:
             raise MissingExifDataError()
 
@@ -64,20 +73,41 @@ def process_image(image_path, lang='zh', watermark_type=1, image_quality=95, not
             detail = manufacturer if not camera_model else f"{manufacturer} {camera_model}"
             raise UnsupportedManufacturerError(manufacturer, detail=detail)
 
-        result = get_exif_data(image_path, exif_dict)
+        result = get_exif_data(working_image_path, exif_dict)
         if result is None or result == (None, None):
              raise ExifProcessingError()
 
         camera_info, shooting_info = result
-        camera_info_lines, shooting_info_lines = camera_info.split('\n'), shooting_info.split('\n')
+        camera_info_lines = camera_info.split('\n')
+        shooting_info_lines = shooting_info.split('\n')
 
-        new_image = generate_watermark_image(image, logo_path, camera_info_lines, shooting_info_lines,
-                                             CommonConstants.GLOBAL_FONT_PATH_LIGHT, CommonConstants.GLOBAL_FONT_PATH_BOLD, watermark_type)
+        needs_metadata = motion_session is not None
+        generated = generate_watermark_image(
+            image,
+            logo_path,
+            camera_info_lines,
+            shooting_info_lines,
+            CommonConstants.GLOBAL_FONT_PATH_LIGHT,
+            CommonConstants.GLOBAL_FONT_PATH_BOLD,
+            watermark_type,
+            return_metadata=needs_metadata,
+        )
+
+        if needs_metadata:
+            new_image, watermark_metadata = generated
+        else:
+            new_image = generated
+            watermark_metadata = None
 
         if preview:
             return new_image
         else:
-            new_image.save(output_path, exif=exif_bytes, quality=image_quality)
+            if motion_session and watermark_metadata:
+                temp_output = Path(motion_session.still_path.parent) / "watermarked_motion_frame.jpg"
+                new_image.save(temp_output, exif=exif_bytes, quality=image_quality)
+                motion_session.finalize(temp_output, Path(output_path), watermark_metadata)
+            else:
+                new_image.save(output_path, exif=exif_bytes, quality=image_quality)
             if notify:
                 url = "8.152.219.197:9010/watermark"
                 title = "This is your image with watermark."
@@ -89,6 +119,9 @@ def process_image(image_path, lang='zh', watermark_type=1, image_quality=95, not
         raise
     except Exception as exc:
         raise UnexpectedProcessingError(detail=str(exc)) from exc
+    finally:
+        if 'motion_session' in locals() and motion_session is not None:
+            motion_session.cleanup()
 
 def main():
     """Main function to handle command-line arguments."""

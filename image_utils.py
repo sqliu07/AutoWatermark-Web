@@ -48,24 +48,40 @@ def draw_line(origin_image, start_x, start_y, end_x, end_y, line_width):
 def calculate_position(x, y_offset, x_adjust=0, y_adjust=0):
         return (x + x_adjust, y_offset + y_adjust)
 
-def generate_watermark_image(origin_image, logo_path, camera_info, shooting_info, font_path_thin, font_path_bold,  watermark_type = 3, font_size = 60):
+def generate_watermark_image(origin_image, logo_path, camera_info, shooting_info,
+                             font_path_thin, font_path_bold, watermark_type=3,
+                             font_size=60, return_metadata=False):
     ori_width, ori_height = origin_image.size
     bottom_width = int(ImageConstants.ORIGIN_BOTTOM_BORDER_RATIO * ori_height)
     top_width = int(ImageConstants.ORIGIN_TOP_BORDER_RATIO * ori_height)
     border_width = top_width
+
+    border_left = 0
+    border_top = 0
+    border_right = 0
+    border_bottom = 0
         
     if watermark_type == 1:
+        border_left = border_right = border_width
+        border_top = top_width
+        border_bottom = bottom_width
         origin_image = ImageOps.expand(origin_image, 
                         border=(border_width, top_width, border_width, bottom_width), 
                         fill='white')
     elif watermark_type == 2:
         top_width = 0
+        border_left = border_right = 0
+        border_top = 0
+        border_bottom = bottom_width
         origin_image = ImageOps.expand(origin_image, 
                         border=(0, 0, 0, bottom_width), 
                         fill='white')
     else:
+        border_left = border_right = border_width
+        border_top = top_width
+        border_bottom = int(1.5 * bottom_width)
         origin_image = ImageOps.expand(origin_image, 
-                        border=(border_width, top_width, border_width, int(1.5 * bottom_width)), 
+                        border=(border_width, top_width, border_width, border_bottom), 
                         fill='white')
     expanded_width, expanded_height = origin_image.size
     line_blank_ratio = 0.017
@@ -171,6 +187,27 @@ def generate_watermark_image(origin_image, logo_path, camera_info, shooting_info
     if watermark_type != 3:
         draw_line(origin_image, *line_coords, line_width)
 
+    # Ensure even dimensions for downstream video processing (YUV420 requirement)
+    pad_right = 1 if origin_image.width % 2 else 0
+    pad_bottom = 1 if origin_image.height % 2 else 0
+    if pad_right or pad_bottom:
+        origin_image = ImageOps.expand(origin_image, border=(0, 0, pad_right, pad_bottom), fill='white')
+
+    if return_metadata:
+        content_box = (
+            border_left,
+            border_top,
+            border_left + ori_width,
+            border_top + ori_height,
+        )
+        overlay_image = origin_image.copy().convert("RGBA")
+        transparent_region = Image.new("RGBA", (ori_width, ori_height), (0, 0, 0, 0))
+        overlay_image.paste(transparent_region, content_box)
+        metadata = {
+            "overlay_image": overlay_image,
+            "content_box": content_box,
+            "final_size": origin_image.size,
+        }
+        return origin_image, metadata
+
     return origin_image
-
-
