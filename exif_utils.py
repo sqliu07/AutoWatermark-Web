@@ -1,51 +1,123 @@
 from PIL import Image
 import piexif
 import subprocess
-import os
 import re
+from pathlib import Path
+
+
+LOGO_DIR = Path("./logos")
+
+
+def _normalize_brand(value):
+    cleaned = re.sub(r"[^a-z0-9]", "", value.lower())
+    return cleaned
+
+
+def _build_logo_index():
+    index = {}
+    if not LOGO_DIR.exists():
+        return index
+
+    for file_path in LOGO_DIR.rglob("*"):
+        if file_path.is_file():
+            stem = _normalize_brand(file_path.stem)
+            if stem and stem not in index:
+                index[stem] = str(file_path)
+    return index
+
+
+_LOGO_INDEX = _build_logo_index()
+
+_BRAND_ALIASES = {
+    "sonycamera": "sony",
+    "sonycorporation": "sony",
+    "nikoncorporation": "nikon",
+    "canoninc": "canon",
+    "canoncamera": "canon",
+    "fujifilmcorporation": "fujifilm",
+    "fujifilmholdings": "fujifilm",
+    "olympuscorporation": "olympus",
+    "panasoniccorporation": "panasonic",
+    "panasoniccorporationimaging": "panasonic",
+    "leicacameraag": "leica",
+    "pentaxricohimaging": "pentax",
+}
+
 
 def convert_to_int(value):
     if isinstance(value, tuple):
         return int(value[0])
-    elif isinstance(value, int):
+    if isinstance(value, int):
         return value
-    elif isinstance(value, str):
+    if isinstance(value, str):
         try:
             return int(value)
         except ValueError:
             raise ValueError(f"Cannot convert string to int: '{value}'")
-    else:
-        raise ValueError("Unsupported type")
+    raise ValueError("Unsupported type")
 
-def get_manufacturer(image_path):
+
+def _ensure_exif_dict(image_path, exif_dict):
+    if exif_dict is not None:
+        return exif_dict
+
     try:
-        image = Image.open(image_path)
-        exif_dict = piexif.load(image.info['exif'])
-        manufacturer = exif_dict['0th'].get(piexif.ImageIFD.Make, b"").decode().strip()
-        for letter in manufacturer:
-            if re.match(r'[a-zA-Z]', letter):
-                continue
-            else:
-                manufacturer = manufacturer.replace(letter, '')
-        return manufacturer
-    except KeyError:
+        with Image.open(image_path) as image:
+            exif_bytes = image.info.get('exif')
+            if not exif_bytes:
+                return None
+            return piexif.load(exif_bytes)
+    except Exception:
         return None
-    except Exception as e:
+
+
+def get_manufacturer(image_path, exif_dict=None):
+    exif_dict = _ensure_exif_dict(image_path, exif_dict)
+    if not exif_dict:
+        return None
+
+    try:
+        manufacturer_bytes = exif_dict.get('0th', {}).get(piexif.ImageIFD.Make, b"")
+        manufacturer = manufacturer_bytes.decode(errors='ignore').strip()
+        sanitized = ''.join(ch for ch in manufacturer if re.match(r'[a-zA-Z ]', ch))
+        return ' '.join(sanitized.split())
+    except Exception:
         return None
 
 def find_logo(manufacturer):
-    logo_dir = "./logos"
-    for root, dirs, files in os.walk(logo_dir):
-        for file in files:
-            if file.lower().startswith(manufacturer.lower().split()[0]) or manufacturer.lower().startswith(file.lower().split('.')[0]):
-                return os.path.join(root, file)
+    if not manufacturer:
+        return None
+
+    normalized = _normalize_brand(manufacturer)
+    candidates = []
+    if normalized:
+        candidates.append(normalized)
+
+    alias = _BRAND_ALIASES.get(normalized)
+    if alias:
+        alias_normalized = _normalize_brand(alias)
+        if alias_normalized:
+            candidates.append(alias_normalized)
+
+    for token in manufacturer.split():
+        token_normalized = _normalize_brand(token)
+        if token_normalized and token_normalized not in candidates:
+            candidates.append(token_normalized)
+
+    for candidate in candidates:
+        if candidate in _LOGO_INDEX:
+            return _LOGO_INDEX[candidate]
+
     return None
 
-def get_exif_table(image_path):
+
+def get_exif_table(image_path, exif_dict=None):
+    exif_dict = _ensure_exif_dict(image_path, exif_dict)
+    if not exif_dict:
+        return None, None, None, None
+
     try:
-        image = Image.open(image_path)
-        exif_dict = piexif.load(image.info['exif'])
-        exif_data = exif_dict['Exif']
+        exif_data = exif_dict.get('Exif', {})
 
         focal_length_35 = exif_data.get(piexif.ExifIFD.FocalLengthIn35mmFilm, (0, 1))
         #Some photos don't have focal length in 35mm film
@@ -67,37 +139,37 @@ def get_exif_table(image_path):
     except Exception as e:
         return None, None, None, None
 
-def get_exif_data(image_path):
+def get_exif_data(image_path, exif_dict=None):
+    exif_dict = _ensure_exif_dict(image_path, exif_dict)
+    if not exif_dict:
+        return None, None
+
     try:
-        image = Image.open(image_path)
-        exif_dict = piexif.load(image.info['exif'])
-        exif_data = exif_dict['Exif']
+        exif_data = exif_dict.get('Exif', {})
 
-        lens_info = exif_data.get(piexif.ExifIFD.LensModel, b"Unknown Lens").decode()
-        camera_make = exif_dict['0th'].get(piexif.ImageIFD.Make, b"Unknown Make").decode()
-        camera_model_code = exif_dict['0th'].get(piexif.ImageIFD.Model, b"Unknown Model").decode()
+        lens_raw = exif_data.get(piexif.ExifIFD.LensModel, b"Unknown Lens")
+        lens_info = lens_raw.decode(errors='ignore') if isinstance(lens_raw, (bytes, bytearray)) else str(lens_raw)
 
-        for letter in camera_make:
-            if re.match(r'[a-zA-Z]', letter):
-                continue
-            else:
-                camera_make = camera_make.replace(letter, '')
+        camera_make_raw = exif_dict.get('0th', {}).get(piexif.ImageIFD.Make, b"Unknown Make")
+        camera_model_raw = exif_dict.get('0th', {}).get(piexif.ImageIFD.Model, b"Unknown Model")
 
-        for letter in camera_model_code:
-            if re.match(r'[a-zA-Z0-9\- ]', letter):
-                continue
-            else:
-                camera_model_code = camera_model_code.replace(letter, '')
+        camera_make = camera_make_raw.decode(errors='ignore') if isinstance(camera_make_raw, (bytes, bytearray)) else str(camera_make_raw)
+        camera_model_code = camera_model_raw.decode(errors='ignore') if isinstance(camera_model_raw, (bytes, bytearray)) else str(camera_model_raw)
 
-        focal_length_value, f_number_value, exposure_time_value, iso_speed = get_exif_table(image_path)
-        
-        datetime = exif_data.get(piexif.ExifIFD.DateTimeOriginal, b"Unknown Date").decode()
+        camera_make = ''.join(ch for ch in camera_make if re.match(r'[a-zA-Z ]', ch))
+        camera_model_code = ''.join(ch for ch in camera_model_code if re.match(r'[a-zA-Z0-9\- ]', ch))
+
+        focal_length_value, f_number_value, exposure_time_value, iso_speed = get_exif_table(image_path, exif_dict)
+
+        datetime_raw = exif_data.get(piexif.ExifIFD.DateTimeOriginal, b"Unknown Date")
+        datetime = datetime_raw.decode(errors='ignore') if isinstance(datetime_raw, (bytes, bytearray)) else str(datetime_raw)
         camera_model = camera_model_code
+
         if ' ' in datetime:
-            index = datetime.index(' ') 
+            index = datetime.index(' ')
             substring = datetime[:index]
             if ":" in substring:
-                new_substring = substring.replace(':', '.') 
+                new_substring = substring.replace(':', '.')
                 datetime = datetime[:index].replace(substring, new_substring) + datetime[index:]
 
         if "T" in datetime:
@@ -105,7 +177,7 @@ def get_exif_data(image_path):
             index = datetime.index(" ")
             substring = datetime[:index]
             if ":" in substring:
-                new_substring = substring.replace(':', '.') 
+                new_substring = substring.replace(':', '.')
                 datetime = datetime[:index].replace(substring, new_substring) + datetime[index:]
 
         if str(lens_info) == "Unknown Lens":
@@ -119,10 +191,9 @@ def get_exif_data(image_path):
                     lens_info = output[1].strip()
                     break
 
-        if 'f'in str(lens_info):
-            lens_info = lens_info.replace('f', '\u0192') #\u0192 means another type of "f" for the Aperture value, looks like that on iPhone.
+        if 'f' in str(lens_info):
+            lens_info = str(lens_info).replace('f', '\u0192')  # \u0192 resembles the aperture symbol seen on iOS.
 
-        # Format shooting_info only if values are valid
         if focal_length_value and f_number_value and exposure_time_value:
             if int(exposure_time_value) == exposure_time_value:
                 exposure_time_value = int(exposure_time_value)
@@ -138,6 +209,5 @@ def get_exif_data(image_path):
         return camera_info, shooting_info
     except KeyError:
         return None, None
-    except Exception as e:
+    except Exception:
         return None, None
-

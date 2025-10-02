@@ -1,4 +1,7 @@
-from exif_utils import *
+import os
+import piexif
+
+from exif_utils import find_logo, get_manufacturer, get_exif_data
 from image_utils import *
 from constants import CommonConstants
 
@@ -27,7 +30,23 @@ def process_image(image_path, lang='zh', watermark_type=1, image_quality=95, not
         original_name, extension = os.path.splitext(image_path)
         output_path = f"{original_name}_watermark{extension}"
         
-        manufacturer = get_manufacturer(image_path)
+        image = Image.open(image_path)
+        image = reset_image_orientation(image)
+
+        exif_bytes = image.info.get('exif')
+        exif_dict = None
+        if exif_bytes:
+            try:
+                exif_dict = piexif.load(exif_bytes)
+            except Exception:
+                exif_bytes = b''
+        else:
+            exif_bytes = b''
+
+        if exif_dict is None:
+            raise ValueError(get_message("no_exif_data", lang))
+
+        manufacturer = get_manufacturer(image_path, exif_dict)
         if manufacturer is not None and len(manufacturer) > 0:
             logo_path = find_logo(manufacturer)
             if logo_path is None:
@@ -35,17 +54,7 @@ def process_image(image_path, lang='zh', watermark_type=1, image_quality=95, not
         else:
             raise ValueError(get_message("no_exif_data", lang))
 
-        image = Image.open(image_path)
-        image = reset_image_orientation(image)
-
-        exif_bytes = image.info.get('exif', b'')
-        try:
-            # Verify that exif data is valid
-            piexif.load(exif_bytes)
-        except Exception:
-            exif_bytes = b'' # Reset exif bytes if invalid
-
-        result = get_exif_data(image_path)
+        result = get_exif_data(image_path, exif_dict)
         if result is None or result == (None, None):
              raise ValueError("Could not read EXIF data from image.")
 
