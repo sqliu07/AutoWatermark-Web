@@ -1,9 +1,16 @@
 import os
 import piexif
 
-from exif_utils import find_logo, get_manufacturer, get_exif_data
+from exif_utils import find_logo, get_manufacturer, get_exif_data, get_camera_model
 from image_utils import *
 from constants import CommonConstants
+from errors import (
+    WatermarkError,
+    MissingExifDataError,
+    UnsupportedManufacturerError,
+    ExifProcessingError,
+    UnexpectedProcessingError,
+)
 
 from PIL import Image
 import sys
@@ -44,19 +51,22 @@ def process_image(image_path, lang='zh', watermark_type=1, image_quality=95, not
             exif_bytes = b''
 
         if exif_dict is None:
-            raise ValueError(get_message("no_exif_data", lang))
+            raise MissingExifDataError()
 
         manufacturer = get_manufacturer(image_path, exif_dict)
-        if manufacturer is not None and len(manufacturer) > 0:
-            logo_path = find_logo(manufacturer)
-            if logo_path is None:
-                raise ValueError(get_message("unsupported_manufacturer", lang))
-        else:
-            raise ValueError(get_message("no_exif_data", lang))
+        if not manufacturer:
+            raise MissingExifDataError()
+
+        camera_model = get_camera_model(exif_dict)
+
+        logo_path = find_logo(manufacturer)
+        if logo_path is None:
+            detail = manufacturer if not camera_model else f"{manufacturer} {camera_model}"
+            raise UnsupportedManufacturerError(manufacturer, detail=detail)
 
         result = get_exif_data(image_path, exif_dict)
         if result is None or result == (None, None):
-             raise ValueError("Could not read EXIF data from image.")
+             raise ExifProcessingError()
 
         camera_info, shooting_info = result
         camera_info_lines, shooting_info_lines = camera_info.split('\n'), shooting_info.split('\n')
@@ -75,15 +85,10 @@ def process_image(image_path, lang='zh', watermark_type=1, image_quality=95, not
                 command = f'curl -H "Title: {title}" -H"Priority: {priority}" -T {output_path} {url}'
                 os.system(command)
             return True
-    except Exception as e:
-        print(f"{str(e)}", file=sys.stderr)
-        # In a script context, we exit. In a library context, we might re-raise or return None.
-        # For testing, re-raising is better to see the failure.
-        # For the script, exiting is fine.
-        if __name__ == "__main__":
-            sys.exit(1)
-        else:
-            raise e
+    except WatermarkError:
+        raise
+    except Exception as exc:
+        raise UnexpectedProcessingError(detail=str(exc)) from exc
 
 def main():
     """Main function to handle command-line arguments."""
@@ -101,7 +106,15 @@ def main():
         sys.exit(1)
  
     notify = False # Or get from args if needed
-    process_image(image_path, lang, watermark_type, image_quality, notify)
+    try:
+        process_image(image_path, lang, watermark_type, image_quality, notify)
+    except WatermarkError as err:
+        message = get_message(err.get_message_key(), lang) or err.get_detail() or err.get_message_key()
+        print(message, file=sys.stderr)
+        sys.exit(1)
+    except Exception as exc:
+        print(str(exc), file=sys.stderr)
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()
