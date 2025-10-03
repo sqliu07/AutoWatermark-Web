@@ -7,7 +7,7 @@ ENV TZ=Asia/Shanghai
 # 安装系统依赖和 Python 依赖
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        libglib2.0-0 libsm6 libxext6 libxrender-dev curl tzdata && \
+        curl ffmpeg tzdata perl-base && \
     rm -rf /var/lib/apt/lists/*
 
 # 设置工作目录
@@ -18,6 +18,10 @@ COPY . /app
 
 # 安装 Python 依赖
 RUN pip install --no-cache-dir -r requirements.txt
+
+# Normalize bundled exiftool script to Unix line endings and drop unused assets to shrink the image
+RUN sed -i 's/\r$//' /app/3rdparty/exiftool/exiftool && \
+    rm -rf /app/3rdparty/exiftool/{Changes,MANIFEST,META.json,META.yml,Makefile.PL,README,build_geolocation,build_tag_lookup,html,t,validate,windows_exiftool,windows_exiftool.txt}
 
 # 默认 Flask 环境为 production
 ENV FLASK_ENV=production
