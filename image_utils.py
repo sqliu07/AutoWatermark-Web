@@ -1,5 +1,9 @@
 from constants import ImageConstants
 from PIL import Image, ImageDraw, ImageFont, ImageOps
+from logging_utils import get_logger
+
+
+logger = get_logger("autowatermark.image_utils")
 
 def is_landscape(image):
     return image.width >= image.height
@@ -16,7 +20,7 @@ def reset_image_orientation(image):
             elif orientation == 8:
                 image = image.rotate(90, expand=True)
     except Exception as e:
-        print(f"Error resetting orientation: {e}")
+        logger.warning("Error resetting orientation: %s", e)
     return image
 
 def image_resize(image,ratio):

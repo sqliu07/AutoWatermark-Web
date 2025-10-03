@@ -12,8 +12,16 @@ import threading
 
 from process import process_image
 from errors import WatermarkError
+from logging_utils import get_logger
+
+logger = get_logger("autowatermark.app")
 
 app = Flask(__name__, static_url_path='/static', static_folder='./static')
+app.logger.handlers.clear()
+for handler in logger.handlers:
+    app.logger.addHandler(handler)
+app.logger.setLevel(logger.level)
+app.logger.propagate = False
 
 app.config['UPLOAD_FOLDER'] = CommonConstants.UPLOAD_FOLDER
 app.config['ALLOWED_EXTENSIONS'] = {'png', 'jpg', 'jpeg'}
@@ -117,10 +125,10 @@ def upload_file():
                 message = f"{message} ({detail})"
             status_code = 500 if message_key == 'unexpected_error' else 400
             if detail:
-                app.logger.warning("Watermark processing error (%s): %s", message_key, detail)
+                logger.warning("Watermark processing error (%s): %s", message_key, detail)
             return jsonify(error=message), status_code
         except Exception as exc:
-            app.logger.exception("Unexpected error when processing image")
+            logger.exception("Unexpected error when processing image")
             return jsonify(error=get_common_message('unexpected_error', lang)), 500
 
         # 处理后的图片路径
@@ -218,7 +226,7 @@ if __name__ == '__main__':
 
     if is_production:
         # 生产环境不在这里启动，由 gunicorn 启动
-        print("请使用 gunicorn 启动：gunicorn -w 4 -b 0.0.0.0:5000 app:app")
+        logger.info("请使用 gunicorn 启动：gunicorn -w 4 -b 0.0.0.0:5000 app:app")
     else:
         # 本地开发模式：默认 localhost，仅开发使用
         app.run(host='0.0.0.0', port=5000, debug=True)
