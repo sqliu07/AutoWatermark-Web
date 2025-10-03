@@ -16,6 +16,10 @@ from errors import (
     UnexpectedProcessingError,
 )
 from motion_photo_utils import prepare_motion_photo
+from logging_utils import get_logger
+
+
+logger = get_logger("autowatermark.process")
 
 def get_message(key, lang='zh'):
     return CommonConstants.ERROR_MESSAGES.get(key, {}).get(lang)
@@ -126,7 +130,7 @@ def process_image(image_path, lang='zh', watermark_type=1, image_quality=95, not
 def main():
     """Main function to handle command-line arguments."""
     if len(sys.argv) < 5:
-        print("Usage: python process.py <image_path> <lang> <watermark_type> <image_quality>", file=sys.stderr)
+        logger.error("Usage: python process.py <image_path> <lang> <watermark_type> <image_quality>")
         sys.exit(1)
 
     image_path = sys.argv[1]
@@ -135,7 +139,7 @@ def main():
         watermark_type = int(sys.argv[3])
         image_quality = int(sys.argv[4])
     except ValueError:
-        print("Error: watermark_type and image_quality must be integers.", file=sys.stderr)
+        logger.error("Error: watermark_type and image_quality must be integers.")
         sys.exit(1)
  
     notify = False # Or get from args if needed
@@ -143,10 +147,10 @@ def main():
         process_image(image_path, lang, watermark_type, image_quality, notify)
     except WatermarkError as err:
         message = get_message(err.get_message_key(), lang) or err.get_detail() or err.get_message_key()
-        print(message, file=sys.stderr)
+        logger.error(message)
         sys.exit(1)
     except Exception as exc:
-        print(str(exc), file=sys.stderr)
+        logger.error(str(exc))
         sys.exit(1)
 
 if __name__ == "__main__":
