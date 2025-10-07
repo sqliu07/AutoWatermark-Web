@@ -50,6 +50,7 @@ def process_image(image_path, lang='zh', watermark_type=1, image_quality=95, not
         else:
             motion_session = None
 
+        logger.info("Received image: %s, output: %s, is_motion: %s, start processing...", image_path, output_path, None!=motion_session)
         image = Image.open(working_image_path)
         image = reset_image_orientation(image)
 
@@ -86,6 +87,7 @@ def process_image(image_path, lang='zh', watermark_type=1, image_quality=95, not
         shooting_info_lines = shooting_info.split('\n')
 
         needs_metadata = motion_session is not None
+        logger.info("Generating watermark, current manufacturer: %s", manufacturer)
         generated = generate_watermark_image(
             image,
             logo_path,
@@ -112,12 +114,13 @@ def process_image(image_path, lang='zh', watermark_type=1, image_quality=95, not
                 motion_session.finalize(temp_output, Path(output_path), watermark_metadata)
             else:
                 new_image.save(output_path, exif=exif_bytes, quality=image_quality)
-            if notify:
-                url = "8.152.219.197:9010/watermark"
-                title = "This is your image with watermark."
-                priority = "high"
-                command = f'curl -H "Title: {title}" -H"Priority: {priority}" -T {output_path} {url}'
-                os.system(command)
+            # comment this, no need notify.
+            # if notify:
+            #     url = "ntfy_url"
+            #     title = "This is your image with watermark."
+            #     priority = "high"
+            #     command = f'curl -H "Title: {title}" -H"Priority: {priority}" -T {output_path} {url}'
+            #     os.system(command)
             return True
     except WatermarkError:
         raise
