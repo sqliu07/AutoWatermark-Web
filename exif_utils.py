@@ -161,6 +161,16 @@ def get_exif_table(image_path, exif_dict=None):
     except Exception as e:
         return None, None, None, None
 
+def round_floats_in_string(s, decimal_places=2):
+    float_pattern = r'-?\d+\.\d+'
+    def round_match(match):
+        float_value = match.group(0)
+        rounded_float = round(float(float_value), decimal_places)
+        return str(rounded_float)
+
+    result = re.sub(float_pattern, round_match, s)
+
+    return result
 def get_exif_data(image_path, exif_dict=None):
     exif_dict = _ensure_exif_dict(image_path, exif_dict)
     if not exif_dict:
@@ -226,7 +236,10 @@ def get_exif_data(image_path, exif_dict=None):
         else:
             shooting_info = "Invalid shooting info\n" + datetime
 
+        round_floats_in_string(lens_info)
         camera_info = f"{lens_info}\n{camera_model}"
+        if "xiaomi" in camera_make.lower():
+            camera_info = f"{camera_make}\n{camera_model}"
 
         return camera_info, shooting_info
     except KeyError:
