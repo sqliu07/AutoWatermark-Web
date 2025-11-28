@@ -1,6 +1,14 @@
+/**
+ * static/js/script.js
+ * 完整版：包含异步任务轮询、交互式预览、多语言支持
+ */
+
 let currentLang = 'zh';
 let translations = {};
 
+// === 1. 初始化与多语言支持 ===
+
+// 获取翻译文件
 fetch('/static/i18n/translations.json')
   .then(res => res.json())
   .then(data => {
@@ -11,12 +19,21 @@ fetch('/static/i18n/translations.json')
 function switchLanguage(lang) {
   currentLang = lang;
   const t = translations[lang];
+  if (!t) return;
+
+  // 更新页面文本
   document.querySelector('h1').textContent = t.title;
-  document.getElementById('uploadWarning').textContent = t.uploadWarn;
+  const uploadWarn = document.getElementById('uploadWarning');
+  if (uploadWarn) uploadWarn.textContent = t.uploadWarn;
+  
   document.querySelector('.custom-file-label').textContent = t.chooseFile;
-  document.querySelector('h2:nth-of-type(1)').textContent = t.uploadedImage;
-  document.querySelector('h2:nth-of-type(2)').textContent = t.watermarkTypes;
-  document.querySelector('h2:nth-of-type(3)').textContent = t.processedImage;
+  
+  // 更新各个标题
+  const h2s = document.querySelectorAll('h2');
+  if (h2s.length > 0) h2s[0].textContent = t.uploadedImage;
+  if (h2s.length > 1) h2s[1].textContent = t.watermarkTypes;
+  if (h2s.length > 2) h2s[2].textContent = t.processedImage;
+
   document.getElementById('processBtn').textContent = t.processImage;
   document.getElementById('burnAfterReadDivPrompt').textContent = t.burnAfterReadingText;
   document.getElementById('imgQuality').textContent = t.imageQuality;
@@ -24,15 +41,19 @@ function switchLanguage(lang) {
   document.getElementById('mediumQ').textContent = t.mediumQuality;
   document.getElementById('lowQ').textContent = t.lowQuality;
 
-  const label = document.querySelector('#burnAfterReadDiv label');
-  if (label) label.textContent = t.burnAfterReading;
+  const burnLabel = document.querySelector('#burnAfterReadDiv label');
+  if (burnLabel) burnLabel.textContent = t.burnAfterReading;
 
+  // 清空动态提示
   document.getElementById('previewNote').textContent = '';
   document.getElementById('progressText').textContent = '';
 }
 
 document.getElementById('langZh').addEventListener('click', () => switchLanguage('zh'));
 document.getElementById('langEn').addEventListener('click', () => switchLanguage('en'));
+
+
+// === 2. 全局变量与 DOM 元素 ===
 
 const fileInput = document.getElementById('fileInput');
 const previewContainer = document.getElementById('previewContainer');
@@ -43,22 +64,105 @@ const previewNote = document.getElementById('previewNote');
 const loader = document.getElementById('loader');
 
 let processedFilenames = [];
+// 存储当前用于预览的源文件名（服务器上的文件名）
+let currentSourceFilename = null;
+
+// 存储当前的高级设置配置
+let currentConfig = {
+    font_ratio: 0.19,
+    logo_ratio: 0.55,
+    border_ratio: 0.25,
+    item_spacing_ratio: 0.2
+};
+
+
+// === 3. 高级设置与实时预览逻辑 ===
+
+// 防抖函数：避免滑块拖动时频繁请求
+function debounce(func, wait) {
+    let timeout;
+    return function(...args) {
+        clearTimeout(timeout);
+        timeout = setTimeout(() => func.apply(this, args), wait);
+    };
+}
+
+// 执行预览更新
+const updatePreview = debounce(() => {
+    // 只有当有图片处理成功，且页面上显示了结果图时，才进行预览更新
+    if (!currentSourceFilename) return;
+    
+    // 找到结果区域的第一张图片（通常我们只预览第一张）
+    const resultImg = document.querySelector('#resultContainer img');
+    if (!resultImg) return;
+    
+    // 获取当前选中的水印类型
+    const watermarkTypeInput = document.querySelector('input[name="watermark_type"]:checked');
+    const watermarkType = watermarkTypeInput ? watermarkTypeInput.value : '1';
+    
+    // 构建查询参数
+    const params = new URLSearchParams({
+        filename: currentSourceFilename,
+        watermark_type: watermarkType,
+        ...currentConfig // 展开当前配置
+    });
+    
+    // 更新图片 src，添加时间戳防止浏览器缓存
+    // 注意：这里调用的是 /preview 接口，返回的是二进制流
+    resultImg.src = `/preview?${params.toString()}&t=${Date.now()}`;
+    
+}, 300); // 300ms 延迟
+
+// 绑定滑块事件
+const sliders = ['font_ratio', 'logo_ratio', 'border_ratio', 'item_spacing_ratio'];
+sliders.forEach(id => {
+    const slider = document.getElementById(id);
+    const labelSpan = document.getElementById('val_' + id);
+    
+    if (slider && labelSpan) {
+        // 初始化显示的数值
+        labelSpan.textContent = Math.round(slider.value * 100) + '%';
+        
+        slider.addEventListener('input', (e) => {
+            const val = e.target.value;
+            // 更新百分比显示
+            labelSpan.textContent = Math.round(val * 100) + '%';
+            // 更新配置对象
+            currentConfig[id] = val;
+            // 触发预览
+            updatePreview();
+        });
+    }
+});
+
+
+// === 4. 文件选择与预处理 ===
 
 fileInput.addEventListener('change', function () {
   const files = fileInput.files;
+  
+  // 重置界面状态
   previewContainer.innerHTML = '';
   resultContainer.innerHTML = '';
   progressText.textContent = '';
   previewNote.textContent = '';
   processedFilenames = [];
+  currentSourceFilename = null; // 重置预览源
   zipButton.style.display = 'none';
 
   if (files.length === 0) {
     document.getElementById('processBtn').style.display = 'none';
+    // 隐藏高级设置（可选）
+    const advSettings = document.getElementById('advancedSettings');
+    if(advSettings) advSettings.style.display = 'none';
     return;
   }
 
-  // 只展示前 3 张预览图
+  // 显示高级设置面板
+  const advSettings = document.getElementById('advancedSettings');
+  if(advSettings) advSettings.style.display = 'block';
+
+  // 预览前 3 张上传的图片
   Array.from(files).slice(0, 3).forEach(file => {
     const reader = new FileReader();
     reader.onload = function (e) {
@@ -73,14 +177,18 @@ fileInput.addEventListener('change', function () {
     reader.readAsDataURL(file);
   });
 
-  // 超过 3 张图时显示提示信息
   if (files.length > 3) {
     const rest = files.length - 3;
-    previewNote.textContent = translations[currentLang].previewNote.replace('{rest}', rest);
+    if (translations[currentLang] && translations[currentLang].previewNote) {
+        previewNote.textContent = translations[currentLang].previewNote.replace('{rest}', rest);
+    }
   }
 
   document.getElementById('processBtn').style.display = 'inline';
 });
+
+
+// === 5. 核心处理逻辑 (Process Button) ===
 
 document.getElementById('processBtn').addEventListener('click', function () {
   const files = fileInput.files;
@@ -96,35 +204,165 @@ document.getElementById('processBtn').addEventListener('click', function () {
   }
 
   const watermarkType = watermarkRadio.value;
+  
+  // 清空结果区域，准备显示新结果
   resultContainer.innerHTML = '';
   processedFilenames = [];
+  currentSourceFilename = null;
   zipButton.style.display = 'none';
   progressText.textContent = '';
-  loader.style.display = 'block'; // Show loader
+  loader.style.display = 'block';
 
   let processedCount = 0;
   const totalFiles = files.length;
 
-  const onComplete = () => {
+  // 检查是否所有任务完成
+  const checkAllCompleted = () => {
     processedCount++;
+    
+    const t = translations[currentLang];
+    if (t && t.processingProgress) {
+        const progressMessage = t.processingProgress
+          .replace('{done}', processedFilenames.length) // 显示成功的数量
+          .replace('{total}', totalFiles);
+        progressText.textContent = progressMessage;
+    }
+
     if (processedCount === totalFiles) {
-      loader.style.display = 'none'; // Hide loader when all are done
+      loader.style.display = 'none';
+      if (!isSingleImage && processedFilenames.length > 0) {
+        zipButton.style.display = 'inline';
+      }
     }
   };
 
+  // 渲染成功图片
+  const renderSuccessImage = (processedImageUrl, sourceFilename, originalFile, index) => {
+      // 记录第一个成功的文件名，用于实时预览
+      if (!currentSourceFilename) {
+          currentSourceFilename = sourceFilename;
+      }
+
+      const processedName = processedImageUrl.split('/').pop().split('?')[0];
+      processedFilenames.push(processedName);
+
+      // 仅展示前3张结果，或者是单图模式
+      if (isSingleImage || index < 3) {
+        const wrapper = document.createElement('div');
+        wrapper.style.textAlign = 'center';
+        wrapper.style.margin = '10px';
+        wrapper.style.display = 'inline-block';
+        wrapper.style.verticalAlign = 'top';
+
+        const img = document.createElement('img');
+        img.src = processedImageUrl + `&t=${Date.now()}`;
+        img.style.maxWidth = '200px';
+        img.style.maxHeight = '200px';
+        img.style.boxShadow = '0 2px 5px rgba(0,0,0,0.1)';
+        wrapper.appendChild(img);
+
+        // 单图模式提供直接下载链接
+        if (isSingleImage) {
+          const link = document.createElement('a');
+          link.href = "#";
+          link.textContent = translations[currentLang].downloadImage;
+          link.style.display = 'block';
+          link.style.marginTop = '6px';
+          
+          // 点击下载逻辑
+          link.addEventListener('click', (e) => {
+            e.preventDefault();
+            // 获取当前显示的图片 src (可能已经被预览修改过，所以从 img.src 取)
+            // 但 img.src 是 blob 或 预览 url，为了稳定下载，最好用原始 processedImageUrl
+            // 或者：如果用户调整了预览，下载的应该是调整后的参数生成的图。
+            // 简单起见，这里下载的是基于初始参数生成的图。
+            // 优化方案：如果处于预览状态，重新生成并下载。这里保持简单。
+            
+            // 如果用户调整了滑块，img.src 是 /preview?...，可以直接下载这个流
+            const downloadUrl = img.src; 
+
+            fetch(downloadUrl)
+              .then(res => {
+                if (!res.ok) throw new Error("File not found");
+                return res.blob();
+              })
+              .then(blob => {
+                const a = document.createElement("a");
+                a.href = URL.createObjectURL(blob);
+                a.download = originalFile.name.replace(/\.[^/.]+$/, '') + '_watermark.jpg';
+                a.click();
+                URL.revokeObjectURL(a.href);
+              })
+              .catch(err => console.error(err));
+          });
+          wrapper.appendChild(link);
+        }
+        resultContainer.appendChild(wrapper);
+      }
+  };
+
+  const renderError = (fileName, errorMessage) => {
+    const error = document.createElement('div');
+    error.textContent = fileName + ': ' + errorMessage;
+    error.style.color = 'red';
+    error.style.fontSize = '14px';
+    resultContainer.appendChild(error);
+  };
+
+  // 轮询任务状态
+  const pollTaskStatus = (taskId, file, index) => {
+    const intervalId = setInterval(() => {
+      fetch(`/status/${taskId}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.status === 'succeeded') {
+            clearInterval(intervalId);
+            renderSuccessImage(
+                data.result.processed_image, 
+                data.result.source_filename, // 后端返回的源文件名
+                file, 
+                index
+            );
+            checkAllCompleted();
+          } else if (data.status === 'failed') {
+            clearInterval(intervalId);
+            renderError(file.name, data.error || 'Unknown error');
+            checkAllCompleted();
+          } 
+          // status 'queued' or 'processing' -> continue polling
+        })
+        .catch(err => {
+          clearInterval(intervalId);
+          renderError(file.name, "Network error");
+          checkAllCompleted();
+        });
+    }, 1000); // 1秒轮询一次
+  };
+
+  // 遍历上传所有文件
   Array.from(files).forEach((file, index) => {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('watermark_type', watermarkType);
     formData.append('image_quality', quality || 'high');
     formData.append('burn_after_read', burn);
+    
+    // 将当前的高级配置也传给后端
+    Object.keys(currentConfig).forEach(key => {
+        formData.append(key, currentConfig[key]);
+    });
 
-    const progressTemplate = translations[currentLang].processingProgress;
-    const progressInitialMessage = progressTemplate
-      .replace('{done}', index)
-      .replace('{total}', totalFiles);
-    progressText.textContent = progressInitialMessage;
+    // 初始化进度文字
+    if (index === 0) {
+        const t = translations[currentLang];
+        if (t && t.processingProgress) {
+            progressText.textContent = t.processingProgress
+              .replace('{done}', 0)
+              .replace('{total}', totalFiles);
+        }
+    }
 
+    // 发起上传请求
     fetch('/upload?lang=' + currentLang, {
       method: 'POST',
       body: formData
@@ -132,86 +370,32 @@ document.getElementById('processBtn').addEventListener('click', function () {
       .then(res => res.json())
       .then(data => {
         if (data.error) {
-          const error = document.createElement('div');
-          error.textContent = file.name + ': ' + data.error;
-          error.style.color = 'red';
-          resultContainer.appendChild(error);
-          onComplete(); // Mark as complete even on error
-          return;
+          renderError(file.name, data.error);
+          checkAllCompleted();
+        } else if (data.task_id) {
+          // 上传成功，开始轮询
+          pollTaskStatus(data.task_id, file, index);
+        } else {
+          renderError(file.name, "Unknown server response");
+          checkAllCompleted();
         }
-
-        if (data.processed_image) {
-          const processedName = data.processed_image.split('/').pop().split('?')[0];
-          processedFilenames.push(processedName);
-
-          if (isSingleImage || index < 3) {
-            const wrapper = document.createElement('div');
-            wrapper.style.textAlign = 'center';
-
-            const img = document.createElement('img');
-            img.src = data.processed_image + `?t=${Date.now()}`;
-            img.style.maxWidth = '200px';
-            img.style.maxHeight = '200px';
-            wrapper.appendChild(img);
-            if (isSingleImage) {
-              const link = document.createElement('a');
-              link.href = "#";
-              link.textContent = translations[currentLang].downloadImage;
-              link.style.display = 'block';
-              link.style.marginTop = '6px';
-
-              link.addEventListener('click', (e) => {
-                e.preventDefault();
-                fetch(data.processed_image)
-                  .then(res => {
-                    if (!res.ok) {
-                      window.location.href = "/not_found?lang=" + currentLang;
-                      throw new Error("File not found");
-                    }
-                    return res.blob();
-                  })
-                  .then(blob => {
-                    const a = document.createElement("a");
-                    a.href = URL.createObjectURL(blob);
-                    a.download = file.name.replace(/\.[^/.]+$/, '') + '_watermark.jpg';
-                    a.click();
-                    URL.revokeObjectURL(a.href);
-                  })
-                  .catch(err => console.error(err));
-              });
-
-              wrapper.appendChild(link);
-            }
-
-
-            resultContainer.appendChild(wrapper);
-          }
-
-          const progressTemplate = translations[currentLang].processingProgress;
-          const progressMessage = progressTemplate
-            .replace('{done}', processedFilenames.length)
-            .replace('{total}', files.length);
-          progressText.textContent = progressMessage;
-
-          if (!isSingleImage && processedFilenames.length === files.length) {
-            zipButton.style.display = 'inline';
-          }
-        }
-        onComplete(); // Mark as complete on success
       })
       .catch(err => {
-        const error = document.createElement('div');
-        error.textContent = file.name + ': ' + (err.message || 'Upload failed');
-        error.style.color = 'red';
-        resultContainer.appendChild(error);
-        onComplete(); // Mark as complete on fetch error
+        renderError(file.name, err.message || 'Upload failed');
+        checkAllCompleted();
       });
   });
 });
 
+
+// === 6. ZIP 打包下载 ===
+
 zipButton.addEventListener('click', () => {
   if (processedFilenames.length === 0) return;
 
+  // 提示：ZIP 打包的是初始处理的图片，不会包含仅在预览模式下调整的变更
+  // 如果需要下载调整后的，用户应该点击"处理"按钮重新生成
+  
   fetch('/download_zip', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -230,7 +414,11 @@ zipButton.addEventListener('click', () => {
         a.click();
         document.body.removeChild(a);
       } else {
-        alert('打包失败');
+        alert(data.error || 'Packaging failed');
       }
+    })
+    .catch(err => {
+        console.error(err);
+        alert('Network error during zip download');
     });
 });
