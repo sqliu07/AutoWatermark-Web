@@ -270,30 +270,43 @@ document.getElementById('processBtn').addEventListener('click', function () {
           link.style.marginTop = '6px';
           
           // 点击下载逻辑
+// 点击下载逻辑
           link.addEventListener('click', (e) => {
             e.preventDefault();
-            // 获取当前显示的图片 src (可能已经被预览修改过，所以从 img.src 取)
-            // 但 img.src 是 blob 或 预览 url，为了稳定下载，最好用原始 processedImageUrl
-            // 或者：如果用户调整了预览，下载的应该是调整后的参数生成的图。
-            // 简单起见，这里下载的是基于初始参数生成的图。
-            // 优化方案：如果处于预览状态，重新生成并下载。这里保持简单。
             
-            // 如果用户调整了滑块，img.src 是 /preview?...，可以直接下载这个流
+            // 获取下载链接（如果开启了预览，这通常是带参数的 URL）
             const downloadUrl = img.src; 
 
             fetch(downloadUrl)
               .then(res => {
-                if (!res.ok) throw new Error("File not found");
+                // === 关键修改 ===
+                if (!res.ok) {
+                    // 如果后端返回错误（如 404），直接让浏览器跳转到该 URL
+                    // 此时浏览器会发送 Accept: text/html 请求
+                    // 后端 app.py 检测到 text/html 请求且文件不存在，就会渲染 image_deleted.html
+                    window.location.href = downloadUrl;
+                    return null; // 中断后续 Promise 链
+                }
                 return res.blob();
               })
               .then(blob => {
+                if (!blob) return; // 如果上面跳转了，这里直接返回
+
+                // 正常下载流程：创建临时链接触发下载
                 const a = document.createElement("a");
                 a.href = URL.createObjectURL(blob);
+                // 尝试提取原文件名并保留 _watermark 后缀
                 a.download = originalFile.name.replace(/\.[^/.]+$/, '') + '_watermark.jpg';
+                document.body.appendChild(a); // 兼容性修复：部分浏览器需要将节点加入 DOM 才能点击
                 a.click();
+                document.body.removeChild(a);
                 URL.revokeObjectURL(a.href);
               })
-              .catch(err => console.error(err));
+              .catch(err => {
+                console.error("Download error:", err);
+                // 如果是网络错误等导致 fetch 完全失败，也可以选择尝试跳转
+                // window.location.href = downloadUrl;
+              });
           });
           wrapper.appendChild(link);
         }
