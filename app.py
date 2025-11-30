@@ -12,7 +12,9 @@ from concurrent.futures import ThreadPoolExecutor
 from flask import Flask, after_this_request, request, render_template, jsonify, send_file, abort, Response, stream_with_context
 from werkzeug.utils import secure_filename
 import threading
-import mimetypes
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+from flask_limiter.errors import RateLimitExceeded
 
 from process import process_image
 from errors import WatermarkError
@@ -88,6 +90,20 @@ app.logger.propagate = False
 app.config['UPLOAD_FOLDER'] = CommonConstants.UPLOAD_FOLDER
 app.config['ALLOWED_EXTENSIONS'] = {'png', 'jpg', 'jpeg'}
 app.config['MAX_CONTENT_LENGTH'] = 200 * 1024 * 1024  # 最大文件 200MB
+
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    default_limits=["2000 per day", "500 per hour"], # 全局默认限制（宽松）
+    storage_uri="memory://" 
+)
+
+@app.errorhandler(RateLimitExceeded)
+def handle_rate_limit_error(e):
+    # 获取当前的语言设置，以便返回对应语言的错误提示
+    lang = request.args.get('lang', 'zh').split('?')[0]
+    msg = "请求过于频繁，请稍后再试。" if lang == 'zh' else "Too many requests, please try again later."
+    return jsonify(error=msg), 429
 
 # --- 异步处理配置 ---
 executor = ThreadPoolExecutor(max_workers=4)  # 限制最大并发数为4
@@ -184,6 +200,7 @@ def index():
     return render_template('index.html')
 
 @app.route('/upload', methods=['POST'])
+@limiter.limit("10 per minute")
 def upload_file():
     # 顺便清理旧任务
     cleanup_old_tasks()
@@ -303,6 +320,7 @@ def not_found_page():
     return render_template('image_deleted.html', lang=lang, translations=translations), 404
 
 @app.route('/download_zip', methods=['POST'])
+@limiter.limit("10 per minute")
 def download_zip():
     data = request.json
     filenames = data.get('filenames', [])
