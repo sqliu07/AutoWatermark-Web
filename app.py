@@ -5,6 +5,7 @@ import json
 import zipfile
 import tempfile
 import uuid
+import glob
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
 
@@ -21,47 +22,56 @@ burn_queue = {}
 burn_queue_lock = threading.Lock()
 
 def background_cleaner():
-    """后台守护线程：定期清理过期的阅后即焚文件"""
+    """全能后台清洁工：清理阅后即焚、过期临时文件、过期的普通上传"""
     while True:
-        time.sleep(5)  # 每 5 秒检查一次
+        time.sleep(10) # 检查频率
         current_time = time.time()
-        to_delete = []
-
-        # 1. 找出过期文件
+        
+        # --- 1. 处理阅后即焚 (保留原有逻辑) ---
+        to_burn = []
         with burn_queue_lock:
-            # 转换为 list 避免遍历时字典大小改变报错
-            for file_path, expire_at in list(burn_queue.items()):
+            for fp, expire_at in list(burn_queue.items()):
                 if current_time > expire_at:
-                    to_delete.append(file_path)
-                    del burn_queue[file_path]  # 从队列中移除
+                    to_burn.append(fp)
+                    del burn_queue[fp]
+        
+        for fp in to_burn:
+            cleanup_file_and_original(fp) # 封装删除逻辑
 
-        # 2. 执行删除操作 (释放锁后执行 I/O，避免阻塞)
-        for file_path in to_delete:
-            # 删除带水印的结果图
-            if os.path.exists(file_path):
-                try:
-                    os.remove(file_path)
-                    logger.info(f"[Burn] Deleted processed file: {os.path.basename(file_path)}")
-                except OSError as e:
-                    logger.error(f"Error deleting file {file_path}: {e}")
-
-            # 尝试删除原图 (逻辑复用原代码)
-            # 注意：这里需要重新推断原图路径
+        # --- 2. 清理遗留的 ZIP 压缩包 (新增) ---
+        # 假设 ZIP 文件保留 1 小时
+        temp_dir = tempfile.gettempdir()
+        # 匹配对应模式的文件
+        zip_pattern = os.path.join(temp_dir, "Packed_Watermark_Images_*.zip")
+        for zip_file in glob.glob(zip_pattern):
             try:
-                filename = os.path.basename(file_path)
-                # 假设格式为 xxx_watermark.ext，分割出原文件名
-                if '_watermark' in filename:
-                    original_name_part = filename.split('_watermark')[0]
-                    # 遍历可能的扩展名寻找原图
-                    for ext in app.config['ALLOWED_EXTENSIONS']:
-                        # 这是一个简化的查找，严谨做法是在队列里同时也记录原图路径
-                        original_path = os.path.join(app.config['UPLOAD_FOLDER'], f"{original_name_part}.{ext}")
-                        if os.path.exists(original_path):
-                            os.remove(original_path)
-                            logger.info(f"[Burn] Deleted original file: {os.path.basename(original_path)}")
-                            break
-            except Exception as e:
-                logger.error(f"Error cleaning up original file: {e}")
+                # 获取文件最后修改时间
+                if current_time - os.path.getmtime(zip_file) > 3600:
+                    os.remove(zip_file)
+                    logger.info(f"[Auto-Clean] Deleted old zip: {zip_file}")
+            except OSError:
+                pass
+
+        # --- 3. 兜底清理：清理 UPLOAD_FOLDER 中超过 24小时 的所有文件 (新增) ---
+        # 防止非阅后即焚文件的无限堆积
+        upload_dir = app.config['UPLOAD_FOLDER']
+        for filename in os.listdir(upload_dir):
+            file_path = os.path.join(upload_dir, filename)
+            try:
+                # 如果文件超过 24 小时 (86400秒)
+                if os.path.isfile(file_path) and (current_time - os.path.getmtime(file_path) > 86400):
+                    os.remove(file_path)
+                    logger.info(f"[Auto-Clean] Deleted stale file: {filename}")
+            except OSError:
+                pass
+
+def cleanup_file_and_original(file_path):
+    """封装的删除单个文件及其原图的逻辑"""
+    if os.path.exists(file_path):
+        try:
+            os.remove(file_path)
+            logger.info(f"[Burn] Deleted: {os.path.basename(file_path)}")
+        except OSError: pass
 
 # 启动后台线程 (Daemon 线程会随主程序退出而退出)
 threading.Thread(target=background_cleaner, daemon=True).start()
@@ -331,6 +341,7 @@ def download_temp_zip(filename):
     # 同样进行安全检查
     safe_filename = secure_filename(filename)
     file_path = os.path.join(tempfile.gettempdir(), safe_filename)
+    logger.info(f"zip file path: {file_path}")
     if not os.path.exists(file_path):
         return "File not found", 404
     return send_file(file_path, as_attachment=True, download_name=safe_filename)
