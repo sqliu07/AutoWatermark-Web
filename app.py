@@ -8,13 +8,63 @@ import uuid
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
 
-from flask import Flask, after_this_request, request, render_template, jsonify, send_file, abort
+from flask import Flask, after_this_request, request, render_template, jsonify, send_file, abort, Response, stream_with_context
 from werkzeug.utils import secure_filename
 import threading
+import mimetypes
 
 from process import process_image
 from errors import WatermarkError
 from logging_utils import get_logger
+
+burn_queue = {}
+burn_queue_lock = threading.Lock()
+
+def background_cleaner():
+    """后台守护线程：定期清理过期的阅后即焚文件"""
+    while True:
+        time.sleep(5)  # 每 5 秒检查一次
+        current_time = time.time()
+        to_delete = []
+
+        # 1. 找出过期文件
+        with burn_queue_lock:
+            # 转换为 list 避免遍历时字典大小改变报错
+            for file_path, expire_at in list(burn_queue.items()):
+                if current_time > expire_at:
+                    to_delete.append(file_path)
+                    del burn_queue[file_path]  # 从队列中移除
+
+        # 2. 执行删除操作 (释放锁后执行 I/O，避免阻塞)
+        for file_path in to_delete:
+            # 删除带水印的结果图
+            if os.path.exists(file_path):
+                try:
+                    os.remove(file_path)
+                    logger.info(f"[Burn] Deleted processed file: {os.path.basename(file_path)}")
+                except OSError as e:
+                    logger.error(f"Error deleting file {file_path}: {e}")
+
+            # 尝试删除原图 (逻辑复用原代码)
+            # 注意：这里需要重新推断原图路径
+            try:
+                filename = os.path.basename(file_path)
+                # 假设格式为 xxx_watermark.ext，分割出原文件名
+                if '_watermark' in filename:
+                    original_name_part = filename.split('_watermark')[0]
+                    # 遍历可能的扩展名寻找原图
+                    for ext in app.config['ALLOWED_EXTENSIONS']:
+                        # 这是一个简化的查找，严谨做法是在队列里同时也记录原图路径
+                        original_path = os.path.join(app.config['UPLOAD_FOLDER'], f"{original_name_part}.{ext}")
+                        if os.path.exists(original_path):
+                            os.remove(original_path)
+                            logger.info(f"[Burn] Deleted original file: {os.path.basename(original_path)}")
+                            break
+            except Exception as e:
+                logger.error(f"Error cleaning up original file: {e}")
+
+# 启动后台线程 (Daemon 线程会随主程序退出而退出)
+threading.Thread(target=background_cleaner, daemon=True).start()
 
 logger = get_logger("autowatermark.app")
 
@@ -204,37 +254,28 @@ def upload_file_served(filename):
     lang = request.args.get('lang', 'zh').split('?')[0]
     burn_after_read = request.args.get('burn', '0')
     
-    # 安全检查：确保 filename 不包含路径分隔符
     filename = secure_filename(filename) 
     file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
 
-    @after_this_request
-    def delete_file(response):
-        def delayed_delete():
-            if str(burn_after_read).strip() == '1':
-                time.sleep(120)
-                if os.path.exists(file_path):
-                    try:
-                        os.remove(file_path)
-                    except OSError:
-                        pass
+    if not os.path.exists(file_path):
+        accept = request.headers.get("Accept", "")
+        if "text/html" in accept:
+            return render_template(
+                'image_deleted.html', lang=lang, translations=translations
+            ), 404
+        else:
+            return jsonify(error="File not found"), 404
 
-                # 尝试删除原图
-                original_name = filename.split('_watermark')[0]
-                # 这里需要小心匹配原图扩展名，简单起见我们尝试查找
-                # 更好的方式是在生成时记录原图路径，这里简化处理
-                for ext in app.config['ALLOWED_EXTENSIONS']:
-                    original_path = os.path.join(app.config['UPLOAD_FOLDER'], f"{original_name}.{ext}")
-                    if os.path.exists(original_path):
-                        try:
-                            os.remove(original_path)
-                        except OSError:
-                            pass
-                        break
+    # === 修改核心逻辑 ===
+    # 如果开启了阅后即焚，更新该文件的“存活时间”
+    if str(burn_after_read).strip() == '1':
+        with burn_queue_lock:
+            # 每次请求（无论是预览还是下载），都将生命周期重置为 120 秒后
+            # 这样只要用户还在操作，文件就不会被删
+            burn_queue[file_path] = time.time() + 120
 
-        threading.Thread(target=delayed_delete).start()
-        return response
-
+    # 使用 send_file 正常发送，享受 Nginx/Flask 的静态文件优化
+    return send_file(file_path)
     if not os.path.exists(file_path):
         accept = request.headers.get("Accept", "")
         if "text/html" in accept:
