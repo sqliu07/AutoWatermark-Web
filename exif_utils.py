@@ -144,7 +144,7 @@ def get_exif_table(image_path, exif_dict=None):
         if focal_length_35 == (0, 1):
             focal_length = exif_data.get(piexif.ExifIFD.FocalLength, (0, 1))
             focal_length_35 = convert_to_int(focal_length)
-        
+
         f_number = exif_data.get(piexif.ExifIFD.FNumber, (0, 1))
         exposure_time = exif_data.get(piexif.ExifIFD.ExposureTime, (0, 1))
         iso_speed = exif_data.get(piexif.ExifIFD.ISOSpeedRatings, 0)

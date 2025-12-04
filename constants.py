@@ -33,9 +33,9 @@ class ImageConstants:
     # 底栏高度占图片高度的比例
     FOOTER_RATIO_LANDSCAPE = 0.09  # 横图 9%
     FOOTER_RATIO_PORTRAIT = 0.08   # 竖图 8%
-    
+
     # 关键：字号占底栏高度的比例
     FONT_SIZE_RATIO = 0.22 
-    
+
     # Logo 高度占底栏高度的比例
     LOGO_HEIGHT_RATIO = 0.5
