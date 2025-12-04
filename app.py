@@ -28,7 +28,7 @@ def background_cleaner():
     while True:
         time.sleep(10) # 检查频率
         current_time = time.time()
-        
+
         # --- 1. 处理阅后即焚 (保留原有逻辑) ---
         to_burn = []
         with burn_queue_lock:
@@ -36,7 +36,7 @@ def background_cleaner():
                 if current_time > expire_at:
                     to_burn.append(fp)
                     del burn_queue[fp]
-        
+
         for fp in to_burn:
             cleanup_file_and_original(fp) # 封装删除逻辑
 
@@ -159,32 +159,32 @@ def background_process(task_id, filepath, lang, watermark_type, image_quality, b
     """后台执行图片处理，并更新任务状态"""
     try:
         tasks[task_id]['status'] = 'processing'
-        
+
         # 调用 process.py 中的核心逻辑
         process_image(filepath, lang=lang, watermark_type=watermark_type, image_quality=image_quality)
-        
+
         # 计算生成的文件名
         filename = os.path.basename(filepath)
         original_name, extension = os.path.splitext(filename)
         processed_filename = f"{original_name}_watermark{extension}"
-        
+
         # 成功：更新状态并保存结果 URL
         tasks[task_id]['status'] = 'succeeded'
         tasks[task_id]['result'] = {
             'processed_image': f'/upload/{processed_filename}?lang={lang}&burn={burn_after_read}'
         }
-        
+
     except WatermarkError as err:
         message_key = err.get_message_key()
         detail = err.get_detail()
         message = get_common_message(message_key, lang) or detail or get_common_message('unexpected_error', lang)
         if message_key == 'unsupported_manufacturer' and detail:
             message = f"{message} ({detail})"
-            
+
         tasks[task_id]['status'] = 'failed'
         tasks[task_id]['error'] = message
         logger.warning(f"Task {task_id} failed: {message}")
-        
+
     except Exception as exc:
         logger.exception(f"Unexpected error in background task {task_id}")
         tasks[task_id]['status'] = 'failed'
@@ -219,7 +219,7 @@ def upload_file():
     watermark_type = request.form.get('watermark_type', '1')
     burn_after_read = request.form.get('burn_after_read', '0')
     image_quality = request.form.get('image_quality', "high")
-    
+
     # 质量参数转换
     if "high" == image_quality:
         image_quality_int = 95
@@ -234,7 +234,7 @@ def upload_file():
     if file and allowed_file(file.filename):
         lang = request.args.get('lang', 'zh')
         timestamp = datetime.fromtimestamp(int(time.time())).strftime('%Y-%m-%d_%H-%M-%S')
-        
+
         filename = secure_filename(file.filename)
         extension = filename.rsplit('.', 1)[1]
         filename_with_timestamp = f"{filename.rsplit('.', 1)[0]}_{timestamp}.{extension}"
@@ -253,7 +253,7 @@ def upload_file():
             'status': 'queued',
             'submitted_at': time.time()
         }
-        
+
         executor.submit(
             background_process, 
             task_id, 
@@ -280,7 +280,7 @@ def get_task_status(task_id):
 def upload_file_served(filename):
     lang = request.args.get('lang', 'zh').split('?')[0]
     burn_after_read = request.args.get('burn', '0')
-    
+
     filename = secure_filename(filename) 
     file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
 
@@ -340,13 +340,13 @@ def download_zip():
                 # --- 安全修复：防止路径遍历攻击 ---
                 safe_fname = secure_filename(fname)
                 full_path = os.path.join(app.config['UPLOAD_FOLDER'], safe_fname)
-                
+
                 # 必须确保文件确实存在于上传目录中
                 if os.path.exists(full_path) and os.path.isfile(full_path):
                     zipf.write(full_path, arcname=safe_fname)
                 else:
                     logger.warning(f"Skipping zip for invalid file: {fname}")
-                    
+
     except Exception as e:
         logger.error(f"Zip creation failed: {str(e)}")
         return jsonify(error=str(e)), 500

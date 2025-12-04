@@ -42,7 +42,7 @@ def process_image(image_path, lang='zh', watermark_type=1, image_quality=95, not
     try:
         original_name, extension = os.path.splitext(image_path)
         output_path = f"{original_name}_watermark{extension}"
-        
+
         motion_session = prepare_motion_photo(image_path)
         working_image_path = image_path
         if motion_session and motion_session.has_motion:
@@ -144,7 +144,7 @@ def main():
     except ValueError:
         logger.error("Error: watermark_type and image_quality must be integers.")
         sys.exit(1)
- 
+
     notify = False # Or get from args if needed
     try:
         process_image(image_path, lang, watermark_type, image_quality, notify)
