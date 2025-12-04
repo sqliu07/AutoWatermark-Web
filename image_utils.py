@@ -1,5 +1,5 @@
 from constants import ImageConstants
-from PIL import Image, ImageDraw, ImageFont, ImageOps
+from PIL import Image, ImageDraw, ImageFont, ImageOps, ImageFilter
 from logging_utils import get_logger
 
 logger = get_logger("autowatermark.image_utils")
@@ -125,6 +125,89 @@ def create_right_block(logo_path, text_block_img, footer_height, with_line=True,
 
     return combined
 
+def create_rounded_rectangle_mask(size, radius):
+    factor = 4
+    large_size = (size[0] * factor, size[1] * factor)
+    large_radius = radius * factor
+
+    mask = Image.new('L', large_size, 0)
+    draw = ImageDraw.Draw(mask)
+    draw.rounded_rectangle([(0, 0), large_size], radius=large_radius, fill=255)
+
+    return mask.resize(size, Image.Resampling.LANCZOS)
+
+def create_frosted_glass_effect(origin_image):
+    ori_w, ori_h = origin_image.size
+    min_dim = min(ori_w, ori_h)
+
+    bg_scale = ImageConstants.WATERMARK_GLASS_BG_SCALE
+    shadow_scale_factor = ImageConstants.WATERMARK_GLASS_SHADOW_SCALE
+
+    corner_radius = int(min_dim * ImageConstants.WATERMARK_GLASS_CORNER_RADIUS_FACTOR)
+
+    shadow_blur_radius = int(min_dim * ImageConstants.WATERMARK_GLASS_BLUR_RADIUS)
+
+    shadow_offset_y = int(min_dim * 0.05)
+    if is_landscape(origin_image):
+        shadow_offset_y = int(min_dim * 0.03)
+    # 阴影颜色 (纯黑，透明度 40%) - 加深
+    shadow_color = (0, 0, 0, ImageConstants.WATERMARK_GLASS_COLOR)
+
+    canvas_w = int(ori_w * bg_scale)
+    if is_landscape(origin_image):
+        canvas_w = int(canvas_w * 0.95)
+    canvas_h = int(ori_h * bg_scale)
+    canvas_size = (canvas_w, canvas_h)
+    small_bg = origin_image.convert("RGB").resize(
+        (canvas_w // 10, canvas_h // 10),
+        Image.Resampling.BILINEAR
+    )
+    # 模糊
+    blurred_bg = small_bg.filter(ImageFilter.GaussianBlur(8))
+    # 放大铺满
+    final_bg = blurred_bg.resize(canvas_size, Image.Resampling.LANCZOS)
+
+    dim_layer = Image.new("RGBA", canvas_size, (0, 0, 0, 20))
+    final_bg = Image.alpha_composite(final_bg.convert("RGBA"), dim_layer).convert("RGB")
+
+
+    mask = create_rounded_rectangle_mask((ori_w, ori_h), corner_radius)
+    foreground = origin_image.copy()
+    foreground.putalpha(mask)
+
+
+    shadow_layer = Image.new("RGBA", canvas_size, (0, 0, 0, 0))
+    shadow_draw = ImageDraw.Draw(shadow_layer)
+
+
+    pos_x = (canvas_w - ori_w) // 2
+    pos_y = (canvas_h - ori_h) // 2
+
+    shadow_w = int(ori_w * shadow_scale_factor)
+    shadow_h = int(ori_h * shadow_scale_factor)
+
+    shadow_x = pos_x + (ori_w - shadow_w) // 2
+
+    shadow_y = pos_y + (ori_h - shadow_h) // 2 - shadow_offset_y
+
+    shadow_rect = [
+        (shadow_x, shadow_y),
+        (shadow_x + shadow_w, shadow_y + shadow_h)
+    ]
+
+    shadow_draw.rounded_rectangle(shadow_rect, radius=corner_radius, fill=shadow_color)
+
+    shadow_layer = shadow_layer.filter(ImageFilter.GaussianBlur(shadow_blur_radius))
+
+    final_image = final_bg.convert("RGBA")
+
+    final_image = Image.alpha_composite(final_image, shadow_layer)
+
+    final_image.paste(foreground, (pos_x, pos_y - shadow_offset_y), foreground)
+
+    final_image = final_image.convert("RGB")
+
+    return final_image
 def generate_watermark_image(origin_image, logo_path, camera_info, shooting_info,
                              font_path_thin, font_path_bold, watermark_type=1,
                              return_metadata=False, **kwargs):
@@ -165,8 +248,12 @@ def generate_watermark_image(origin_image, logo_path, camera_info, shooting_info
     new_width = ori_width + 2 * border_left
     new_height = ori_height + border_top + footer_height
 
-    final_image = Image.new("RGB", (new_width, new_height), "white")
-    final_image.paste(origin_image, (border_left, border_top))
+    if watermark_type != 4:
+        final_image = Image.new("RGB", (new_width, new_height), "white")
+        final_image.paste(origin_image, (border_left, border_top))
+    else:
+        final_image = create_frosted_glass_effect(origin_image)
+
 
     # 左侧：相机型号 (用于 Style 1 & 2)
     left_block = create_text_block(
@@ -184,11 +271,11 @@ def generate_watermark_image(origin_image, logo_path, camera_info, shooting_info
 
     footer_center_y = border_top + ori_height + (footer_height / 2)
 
-    if watermark_type == 3:
+    if watermark_type == 3 or watermark_type == 4:
         # === 居中风格 (Style 3) ===
         # 布局：Logo 居中，下方只有一行拍摄参数
 
-        logo_target_height = int(footer_height * 0.55) 
+        logo_target_height = int(footer_height * 0.55)
         logo = Image.open(logo_path).convert("RGBA")
         logo = image_resize(logo, logo_target_height)
 
@@ -214,6 +301,11 @@ def generate_watermark_image(origin_image, logo_path, camera_info, shooting_info
         # 4. 放置到画面底部中央
         pos_x = (new_width - center_group.width) // 2
         pos_y = int(footer_center_y - center_group.height / 2)
+        if watermark_type == 4:
+            pos_x = (final_image.width - center_group.width) // 2
+            pos_y = final_image.height - center_group.height - center_group.height // 4
+            if is_landscape(origin_image):
+                pos_y = final_image.height - center_group.height - center_group.height // 6
         final_image.paste(center_group, (pos_x, pos_y), center_group)
 
     else:
