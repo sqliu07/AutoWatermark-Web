@@ -1,0 +1,30 @@
+# .dockerignore
+
+# 忽略 Git 版本控制文件 (非常重要，通常很大)
+.git
+.github
+.gitignore
+.gitmodules
+
+# 忽略 Python 缓存和环境
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+
+# 忽略本地上传的测试图片 (防止打包进几个G的测试图)
+upload/*
+!upload/.gitkeep
+
+# 忽略 IDE 配置文件
+.idea/
+.vscode/
+
+# 忽略不需要的文档和测试
+tests/
+docs/
+README.md
