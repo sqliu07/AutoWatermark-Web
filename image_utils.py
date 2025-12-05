@@ -7,7 +7,7 @@ logger = get_logger("autowatermark.image_utils")
 def is_landscape(image):
     return image.width >= image.height
 
-def is_image_bright(image, threshold=130):
+def is_image_bright(image, threshold=ImageConstants.WATERMARK_GLASS_BG_THRESHOLD):
     """
     判断图片是否为浅色背景
     :param threshold: 亮度阈值 (0-255)，默认 130。大于此值认为背景是亮的，需要用深色字。
