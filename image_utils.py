@@ -1,5 +1,5 @@
 from constants import ImageConstants
-from PIL import Image, ImageDraw, ImageFont, ImageOps, ImageFilter
+from PIL import Image, ImageDraw, ImageFont, ImageOps, ImageFilter, ImageStat
 from logging_utils import get_logger
 
 logger = get_logger("autowatermark.image_utils")
@@ -7,6 +7,20 @@ logger = get_logger("autowatermark.image_utils")
 def is_landscape(image):
     return image.width >= image.height
 
+def is_image_bright(image, threshold=130):
+    """
+    判断图片是否为浅色背景
+    :param threshold: 亮度阈值 (0-255)，默认 130。大于此值认为背景是亮的，需要用深色字。
+    :return: True (亮背景) / False (暗背景)
+    """
+    # 转换为灰度图
+    gray_img = image.convert("L")
+    # 使用 ImageStat 计算平均亮度
+    stat = ImageStat.Stat(gray_img)
+    avg_brightness = stat.mean[0]
+    logger.info("Current image avg brightness: %s", str(avg_brightness))
+
+    return avg_brightness > threshold
 def reset_image_orientation(image):
     try:
         exif = image._getexif()
@@ -31,7 +45,7 @@ def image_resize(image, target_height):
     new_width = int(target_height * aspect_ratio)
     return image.resize((new_width, int(target_height)), Image.LANCZOS)
 
-def text_to_image(text, font_path, font_size, color='black'):
+def text_to_image(text, font_path, font_size, color):
     """
     直接使用确定的字号渲染文字
     """
@@ -61,8 +75,8 @@ def create_text_block(line1_text, line2_text, font_bold, font_thin, font_size):
     """
     将两行文字组合成一个块（用于样式 1 和 2）
     """
-    img1 = text_to_image(line1_text, font_bold, font_size)
-    img2 = text_to_image(line2_text, font_thin, font_size)
+    img1 = text_to_image(line1_text, font_bold, font_size, 'black')
+    img2 = text_to_image(line2_text, font_thin, font_size, 'black')
 
     # 上下两行间距：字号的 50%
     gap = int(font_size * 0.5)
@@ -254,7 +268,6 @@ def generate_watermark_image(origin_image, logo_path, camera_info, shooting_info
     else:
         final_image = create_frosted_glass_effect(origin_image)
 
-
     # 左侧：相机型号 (用于 Style 1 & 2)
     left_block = create_text_block(
         camera_info[0], camera_info[1], 
@@ -280,7 +293,13 @@ def generate_watermark_image(origin_image, logo_path, camera_info, shooting_info
         logo = image_resize(logo, logo_target_height)
 
         # 只生成参数文字 (Bold)
-        center_text = text_to_image(shooting_info[0], font_path_bold, font_size)
+        center_text = text_to_image(shooting_info[0], font_path_bold, font_size, 'black')
+
+        if watermark_type == 4:
+            text_color = 'white'
+            if is_image_bright(origin_image):
+                text_color = 'black'
+            center_text = text_to_image(shooting_info[0], font_path_bold, font_size, text_color)
 
         # 垂直堆叠 Logo 和 文字行
         v_gap = int(footer_height * 0.15)
