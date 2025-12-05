@@ -25,7 +25,6 @@ def reset_image_orientation(image):
 def image_resize(image, target_height):
     """
     图片/Logo缩放工具：将图片等比缩放到指定高度
-    注意：不要用于文字图片！
     """
     if image.height == 0: return image
     aspect_ratio = image.width / image.height
@@ -212,6 +211,7 @@ def generate_watermark_image(origin_image, logo_path, camera_info, shooting_info
                              font_path_thin, font_path_bold, watermark_type=1,
                              return_metadata=False, **kwargs):
 
+    logger.info("Generating watermark, current watermark type: %s", watermark_type)
     ori_width, ori_height = origin_image.size
 
     # 区分横竖构图的 footer 高度和字号策略

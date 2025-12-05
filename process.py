@@ -83,8 +83,12 @@ def process_image(image_path, lang='zh', watermark_type=1, image_quality=95, not
              raise ExifProcessingError()
 
         camera_info, shooting_info = result
+
+
         camera_info_lines = camera_info.split('\n')
         shooting_info_lines = shooting_info.split('\n')
+        logger.info("Received image, camera_info: %s %s, shooting_info: %s", camera_info_lines[0],  camera_info_lines[1], shooting_info_lines[0])
+
 
         needs_metadata = motion_session is not None
         logger.info("Generating watermark, current manufacturer: %s", manufacturer)
@@ -98,6 +102,7 @@ def process_image(image_path, lang='zh', watermark_type=1, image_quality=95, not
             watermark_type,
             return_metadata=needs_metadata,
         )
+        logger.info("Finished generating watermark for %s", image_path)
 
         if needs_metadata:
             new_image, watermark_metadata = generated
