@@ -28,13 +28,13 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          tags: myapp:${{ github.ref_name }}
-          outputs: type=docker,dest=${{ runner.temp }}/myapp.tar
+          tags: autowatermark:${{ github.ref_name }}
+          outputs: type=docker,dest=${{ runner.temp }}/autowatermark.tar
 
       - name: Compress
-        run: gzip -f ${{ runner.temp }}/myapp.tar
+        run: gzip -f ${{ runner.temp }}/autowatermark.tar
 
       - name: Create Release and upload asset
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ runner.temp }}/myapp.tar.gz
+          files: ${{ runner.temp }}/autowatermark.tar.gz
