@@ -34,7 +34,12 @@ jobs:
       - name: Compress
         run: gzip -f ${{ runner.temp }}/autowatermark.tar
 
+      - name: Rename asset with version
+        run: |
+          mv "${{ runner.temp }}/autowatermark.tar.gz" \
+             "${{ runner.temp }}/autowatermark-${{ github.ref_name }}.tar.gz"
+
       - name: Create Release and upload asset
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ runner.temp }}/autowatermark.tar.gz
+          files: ${{ runner.temp }}/autowatermark-${{ github.ref_name }}.tar.gz
