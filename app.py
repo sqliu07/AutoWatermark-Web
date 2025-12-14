@@ -222,11 +222,11 @@ def upload_file():
 
     # 质量参数转换
     if "high" == image_quality:
-        image_quality_int = 95
+        image_quality_int = CommonConstants.IMAGE_QUALITY_MAP.get("high")
     elif "medium" == image_quality:
-        image_quality_int = 85
+        image_quality_int = CommonConstants.IMAGE_QUALITY_MAP.get("medium")
     else:
-        image_quality_int = 75
+        image_quality_int = CommonConstants.IMAGE_QUALITY_MAP.get("low")
 
     if watermark_type is None:
         return jsonify(error="Watermark style not selected!"), 400
