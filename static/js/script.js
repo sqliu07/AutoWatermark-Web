@@ -1,437 +1,444 @@
-/**
- * static/js/script.js
- * 完整版：包含异步任务轮询、交互式预览、多语言支持
- */
-
-let currentLang = 'zh';
-let translations = {};
-
-// === 1. 初始化与多语言支持 ===
-
-// 获取翻译文件
-fetch('/static/i18n/translations.json')
-  .then(res => res.json())
-  .then(data => {
-    translations = data;
-    switchLanguage(currentLang);
-  });
-
-function switchLanguage(lang) {
-  currentLang = lang;
-  const t = translations[lang];
-  if (!t) return;
-
-  // 更新页面文本
-  document.querySelector('h1').textContent = t.title;
-  const uploadWarn = document.getElementById('uploadWarning');
-  if (uploadWarn) uploadWarn.textContent = t.uploadWarn;
-  
-  document.querySelector('.custom-file-label').textContent = t.chooseFile;
-  
-  // 更新各个标题
-  const h2s = document.querySelectorAll('h2');
-  if (h2s.length > 0) h2s[0].textContent = t.uploadedImage;
-  if (h2s.length > 1) h2s[1].textContent = t.watermarkTypes;
-  if (h2s.length > 2) h2s[2].textContent = t.processedImage;
-
-  document.getElementById('processBtn').textContent = t.processImage;
-  document.getElementById('burnAfterReadDivPrompt').textContent = t.burnAfterReadingText;
-  document.getElementById('imgQuality').textContent = t.imageQuality;
-  document.getElementById('highQ').textContent = t.highQuality;
-  document.getElementById('mediumQ').textContent = t.mediumQuality;
-  document.getElementById('lowQ').textContent = t.lowQuality;
-
-  const burnLabel = document.querySelector('#burnAfterReadDiv label');
-  if (burnLabel) burnLabel.textContent = t.burnAfterReading;
-
-  // 清空动态提示
-  document.getElementById('previewNote').textContent = '';
-  document.getElementById('progressText').textContent = '';
-}
-
-document.getElementById('langZh').addEventListener('click', () => switchLanguage('zh'));
-document.getElementById('langEn').addEventListener('click', () => switchLanguage('en'));
-
-
-// === 2. 全局变量与 DOM 元素 ===
-
-const fileInput = document.getElementById('fileInput');
-const previewContainer = document.getElementById('previewContainer');
-const resultContainer = document.getElementById('resultContainer');
-const zipButton = document.getElementById('zipDownloadBtn');
-const progressText = document.getElementById('progressText');
-const previewNote = document.getElementById('previewNote');
-const loader = document.getElementById('loader');
-
-let processedFilenames = [];
-// 存储当前用于预览的源文件名（服务器上的文件名）
-let currentSourceFilename = null;
-
-// 存储当前的高级设置配置
-let currentConfig = {
-    font_ratio: 0.19,
-    logo_ratio: 0.55,
-    border_ratio: 0.25,
-    item_spacing_ratio: 0.2
-};
-
-
-// === 3. 高级设置与实时预览逻辑 ===
-
-// 防抖函数：避免滑块拖动时频繁请求
-function debounce(func, wait) {
-    let timeout;
-    return function(...args) {
-        clearTimeout(timeout);
-        timeout = setTimeout(() => func.apply(this, args), wait);
-    };
-}
-
-// 执行预览更新
-const updatePreview = debounce(() => {
-    // 只有当有图片处理成功，且页面上显示了结果图时，才进行预览更新
-    if (!currentSourceFilename) return;
+document.addEventListener('DOMContentLoaded', () => {
+    // === DOM 元素 ===
+    const dropZone = document.getElementById('drop-zone');
+    const uploadPrompt = document.getElementById('upload-prompt');
+    const previewGallery = document.getElementById('preview-gallery');
     
-    // 找到结果区域的第一张图片（通常我们只预览第一张）
-    const resultImg = document.querySelector('#resultContainer img');
-    if (!resultImg) return;
+    const fileInput = document.getElementById('file-input');
+    const uploadBtn = document.getElementById('upload-btn');
+    const resultContainer = document.getElementById('result-container');
     
-    // 获取当前选中的水印类型
-    const watermarkTypeInput = document.querySelector('input[name="watermark_type"]:checked');
-    const watermarkType = watermarkTypeInput ? watermarkTypeInput.value : '1';
+    // 进度条
+    const progressArea = document.getElementById('progress-area');
+    const progressBar = document.getElementById('progress-bar');
+    const progressPercent = document.getElementById('progress-percent');
+    const statusTextLabel = document.getElementById('ui-status-uploading');
     
-    // 构建查询参数
-    const params = new URLSearchParams({
-        filename: currentSourceFilename,
-        watermark_type: watermarkType,
-        ...currentConfig // 展开当前配置
-    });
+    // 状态栏
+    const fileInfo = document.getElementById('file-info');
+    const selectedCount = document.getElementById('selected-count');
+    const reselectBtn = document.getElementById('reselect-btn');
+    const btnChangeText = document.getElementById('ui-btn-change');
     
-    // 更新图片 src，添加时间戳防止浏览器缓存
-    // 注意：这里调用的是 /preview 接口，返回的是二进制流
-    resultImg.src = `/preview?${params.toString()}&t=${Date.now()}`;
-    
-}, 300); // 300ms 延迟
+    const downloadAllArea = document.getElementById('download-all-area');
+    const zipBtn = document.getElementById('zip-btn');
+    const langZhBtn = document.getElementById('lang-zh');
+    const langEnBtn = document.getElementById('lang-en');
 
-// 绑定滑块事件
-const sliders = ['font_ratio', 'logo_ratio', 'border_ratio', 'item_spacing_ratio'];
-sliders.forEach(id => {
-    const slider = document.getElementById(id);
-    const labelSpan = document.getElementById('val_' + id);
-    
-    if (slider && labelSpan) {
-        // 初始化显示的数值
-        labelSpan.textContent = Math.round(slider.value * 100) + '%';
-        
-        slider.addEventListener('input', (e) => {
-            const val = e.target.value;
-            // 更新百分比显示
-            labelSpan.textContent = Math.round(val * 100) + '%';
-            // 更新配置对象
-            currentConfig[id] = val;
-            // 触发预览
-            updatePreview();
-        });
-    }
-});
+    // === 状态 ===
+    let currentFiles = [];
+    let processedFilenames = [];
+    let currentLang = 'zh';
 
-
-// === 4. 文件选择与预处理 ===
-
-fileInput.addEventListener('change', function () {
-  const files = fileInput.files;
-  
-  // 重置界面状态
-  previewContainer.innerHTML = '';
-  resultContainer.innerHTML = '';
-  progressText.textContent = '';
-  previewNote.textContent = '';
-  processedFilenames = [];
-  currentSourceFilename = null; // 重置预览源
-  zipButton.style.display = 'none';
-
-  if (files.length === 0) {
-    document.getElementById('processBtn').style.display = 'none';
-    // 隐藏高级设置（可选）
-    const advSettings = document.getElementById('advancedSettings');
-    if(advSettings) advSettings.style.display = 'none';
-    return;
-  }
-
-  // 显示高级设置面板
-  const advSettings = document.getElementById('advancedSettings');
-  if(advSettings) advSettings.style.display = 'block';
-
-  // 预览前 3 张上传的图片
-  Array.from(files).slice(0, 3).forEach(file => {
-    const reader = new FileReader();
-    reader.onload = function (e) {
-      const img = document.createElement('img');
-      img.src = e.target.result;
-      img.style.maxWidth = '200px';
-      img.style.maxHeight = '200px';
-      img.style.border = '1px solid #ccc';
-      img.style.padding = '4px';
-      previewContainer.appendChild(img);
-    };
-    reader.readAsDataURL(file);
-  });
-
-  if (files.length > 3) {
-    const rest = files.length - 3;
-    if (translations[currentLang] && translations[currentLang].previewNote) {
-        previewNote.textContent = translations[currentLang].previewNote.replace('{rest}', rest);
-    }
-  }
-
-  document.getElementById('processBtn').style.display = 'inline';
-});
-
-
-// === 5. 核心处理逻辑 (Process Button) ===
-
-document.getElementById('processBtn').addEventListener('click', function () {
-  const files = fileInput.files;
-  const isSingleImage = files.length === 1;
-
-  const watermarkRadio = document.querySelector('input[name="watermark_type"]:checked');
-  const quality = document.getElementById('imageQualitySelect').value;
-  const burn = document.getElementById('burnAfterRead').checked ? 1 : 0;
-
-  if (!watermarkRadio) {
-    alert(translations[currentLang].alerts.selectWatermark);
-    return;
-  }
-
-  const watermarkType = watermarkRadio.value;
-  
-  // 清空结果区域，准备显示新结果
-  resultContainer.innerHTML = '';
-  processedFilenames = [];
-  currentSourceFilename = null;
-  zipButton.style.display = 'none';
-  progressText.textContent = '';
-  loader.style.display = 'block';
-
-  let processedCount = 0;
-  const totalFiles = files.length;
-
-  // 检查是否所有任务完成
-  const checkAllCompleted = () => {
-    processedCount++;
-    
-    const t = translations[currentLang];
-    if (t && t.processingProgress) {
-        const progressMessage = t.processingProgress
-          .replace('{done}', processedFilenames.length) // 显示成功的数量
-          .replace('{total}', totalFiles);
-        progressText.textContent = progressMessage;
-    }
-
-    if (processedCount === totalFiles) {
-      loader.style.display = 'none';
-      if (!isSingleImage && processedFilenames.length > 0) {
-        zipButton.style.display = 'inline';
-      }
-    }
-  };
-
-  // 渲染成功图片
-  const renderSuccessImage = (processedImageUrl, sourceFilename, originalFile, index) => {
-      // 记录第一个成功的文件名，用于实时预览
-      if (!currentSourceFilename) {
-          currentSourceFilename = sourceFilename;
-      }
-
-      const processedName = processedImageUrl.split('/').pop().split('?')[0];
-      processedFilenames.push(processedName);
-
-      // 仅展示前3张结果，或者是单图模式
-      if (isSingleImage || index < 3) {
-        const wrapper = document.createElement('div');
-        wrapper.style.textAlign = 'center';
-        wrapper.style.margin = '10px';
-        wrapper.style.display = 'inline-block';
-        wrapper.style.verticalAlign = 'top';
-
-        const img = document.createElement('img');
-        img.src = processedImageUrl + `&t=${Date.now()}`;
-        img.style.maxWidth = '200px';
-        img.style.maxHeight = '200px';
-        img.style.boxShadow = '0 2px 5px rgba(0,0,0,0.1)';
-        wrapper.appendChild(img);
-
-        // 单图模式提供直接下载链接
-        if (isSingleImage) {
-          const link = document.createElement('a');
-          link.href = "#";
-          link.textContent = translations[currentLang].downloadImage;
-          link.style.display = 'block';
-          link.style.marginTop = '6px';
-          
-          // 点击下载逻辑
-// 点击下载逻辑
-          link.addEventListener('click', (e) => {
-            e.preventDefault();
-            
-            // 获取下载链接（如果开启了预览，这通常是带参数的 URL）
-            const downloadUrl = img.src; 
-
-            fetch(downloadUrl)
-              .then(res => {
-                // === 关键修改 ===
-                if (!res.ok) {
-                    // 如果后端返回错误（如 404），直接让浏览器跳转到该 URL
-                    // 此时浏览器会发送 Accept: text/html 请求
-                    // 后端 app.py 检测到 text/html 请求且文件不存在，就会渲染 image_deleted.html
-                    window.location.href = downloadUrl;
-                    return null; // 中断后续 Promise 链
-                }
-                return res.blob();
-              })
-              .then(blob => {
-                if (!blob) return; // 如果上面跳转了，这里直接返回
-
-                // 正常下载流程：创建临时链接触发下载
-                const a = document.createElement("a");
-                a.href = URL.createObjectURL(blob);
-                // 尝试提取原文件名并保留 _watermark 后缀
-                a.download = originalFile.name.replace(/\.[^/.]+$/, '') + '_watermark.jpg';
-                document.body.appendChild(a); // 兼容性修复：部分浏览器需要将节点加入 DOM 才能点击
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(a.href);
-              })
-              .catch(err => {
-                console.error("Download error:", err);
-                // 如果是网络错误等导致 fetch 完全失败，也可以选择尝试跳转
-                // window.location.href = downloadUrl;
-              });
-          });
-          wrapper.appendChild(link);
+    const i18n = {
+        zh: {
+            appName: "边框水印",
+            title: "为照片赋予专业感",
+            subtitle: "智能识别 EXIF 信息，一键生成水印相框。",
+            dragText: "点击或拖拽上传照片",
+            selected: "已选择 {n} 张",
+            btnChange: "更换图片",
+            styleTitle: "水印风格",
+            descStyle1: "拍立得",
+            descStyle2: "经典双行",
+            descStyle3: "居中极简",
+            descStyle4: "毛玻璃特效",
+            descStyle5: "侧边参数卡片",
+            qualityTitle: "输出画质",
+            qualityHigh: "高",
+            qualityMedium: "中",
+            qualityLow: "低",
+            privacyTitle: "隐私设置",
+            burnTitle: "阅后即焚",
+            burnDesc: "闲置 2 分钟后自动销毁文件",
+            btnProcess: "开始处理",
+            btnProcessing: "处理中...",
+            statusUploading: "正在上传...",
+            statusProcessing: "处理中...",
+            statusDone: "处理完成",
+            statusSuccess:"成功",
+            btnZip: "打包下载所有图片",
+            errorTitle: "处理失败",
+            btnDownload: "下载原图",
+            btnPreview: "全屏预览",
+            morePreviews: "+ {n} 张",
+            moreResults: "剩余 {n} 张图片已隐藏，请打包下载"
+        },
+        en: {
+            appName: "AutoWatermark Web",
+            title: "Professional Watermarks",
+            subtitle: "Auto-generate watermarked frames from EXIF data.",
+            dragText: "Click or Drag to Upload",
+            selected: "{n} Selected",
+            btnChange: "Change",
+            styleTitle: "Watermark Style",
+            descStyle1: "Polaroid Style",
+            descStyle2: "Classic Layout",
+            descStyle3: "Minimal Center",
+            descStyle4: "Frosted Glass",
+            descStyle5: "Side Stats Card",
+            qualityTitle: "Image Quality",
+            qualityHigh: "High",
+            qualityMedium: "Medium",
+            qualityLow: "Low",
+            privacyTitle: "Privacy",
+            burnTitle: "Burn After Read",
+            burnDesc: "Files deleted after 2 mins of inactivity",
+            btnProcess: "Process Images",
+            btnProcessing: "Processing...",
+            statusUploading: "Uploading...",
+            statusProcessing: "Processing...",
+            statusDone: "Completed",
+            statusSuccess: "Success",
+            btnZip: "Download All as ZIP",
+            errorTitle: "Error",
+            btnDownload: "Download",
+            btnPreview: "Preview",
+            morePreviews: "+ {n} more",
+            moreResults: "{n} more images hidden, please download ZIP"
         }
-        resultContainer.appendChild(wrapper);
-      }
-  };
+    };
 
-  const renderError = (fileName, errorMessage) => {
-    const error = document.createElement('div');
-    error.textContent = fileName + ': ' + errorMessage;
-    error.style.color = 'red';
-    error.style.fontSize = '14px';
-    resultContainer.appendChild(error);
-  };
+    function switchLanguage(lang) {
+        currentLang = lang;
+        const t = i18n[lang];
 
-  // 轮询任务状态
-  const pollTaskStatus = (taskId, file, index) => {
-    const intervalId = setInterval(() => {
-      fetch(`/status/${taskId}`)
+        if(lang === 'zh') {
+            langZhBtn.classList.add('text-brand-600', 'font-semibold');
+            langZhBtn.classList.remove('text-slate-500');
+            langEnBtn.classList.add('text-slate-500');
+            langEnBtn.classList.remove('text-brand-600', 'font-semibold');
+        } else {
+            langEnBtn.classList.add('text-brand-600', 'font-semibold');
+            langEnBtn.classList.remove('text-slate-500');
+            langZhBtn.classList.add('text-slate-500');
+            langZhBtn.classList.remove('text-brand-600', 'font-semibold');
+        }
+
+        document.getElementById('ui-app-name').textContent = t.appName;
+        document.getElementById('ui-title').textContent = t.title;
+        document.getElementById('ui-subtitle').textContent = t.subtitle;
+        document.getElementById('ui-drag-text').textContent = t.dragText;
+        document.getElementById('ui-style-title').textContent = t.styleTitle;
+        document.getElementById('reselect-btn').textContent = t.btnChange;
+        
+        if(document.getElementById('desc-style-1')) document.getElementById('desc-style-1').textContent = t.descStyle1;
+        if(document.getElementById('desc-style-2')) document.getElementById('desc-style-2').textContent = t.descStyle2;
+        if(document.getElementById('desc-style-3')) document.getElementById('desc-style-3').textContent = t.descStyle3;
+        if(document.getElementById('desc-style-4')) document.getElementById('desc-style-4').textContent = t.descStyle4;
+
+        document.getElementById('ui-quality-title').textContent = t.qualityTitle;
+        document.getElementById('ui-quality-high').textContent = t.qualityHigh;
+        document.getElementById('ui-quality-medium').textContent = t.qualityMedium;
+        document.getElementById('ui-quality-low').textContent = t.qualityLow;
+        document.getElementById('ui-privacy-title').textContent = t.privacyTitle;
+        document.getElementById('ui-burn-title').textContent = t.burnTitle;
+        document.getElementById('ui-burn-desc').textContent = t.burnDesc;
+        document.getElementById('ui-btn-process').textContent = t.btnProcess;
+        document.getElementById('ui-btn-zip').textContent = t.btnZip;
+        
+        if(btnChangeText) btnChangeText.textContent = t.btnChange;
+
+        if (currentFiles.length > 0) {
+            selectedCount.textContent = t.selected.replace('{n}', currentFiles.length);
+        }
+    }
+
+    langZhBtn.addEventListener('click', () => switchLanguage('zh'));
+    langEnBtn.addEventListener('click', () => switchLanguage('en'));
+
+    // === 文件交互 ===
+    dropZone.addEventListener('click', (e) => {
+        if (e.target !== reselectBtn && !reselectBtn.contains(e.target)) {
+            fileInput.click();
+        }
+    });
+
+    fileInput.addEventListener('change', (e) => handleFiles(e.target.files));
+
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+        dropZone.addEventListener(eventName, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+        }, false);
+    });
+
+    ['dragenter', 'dragover'].forEach(eventName => {
+        dropZone.addEventListener(eventName, () => dropZone.classList.add('border-brand-500', 'bg-blue-50/50'));
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+        dropZone.addEventListener(eventName, () => dropZone.classList.remove('border-brand-500', 'bg-blue-50/50'));
+    });
+
+    dropZone.addEventListener('drop', (e) => handleFiles(e.dataTransfer.files));
+
+    function handleFiles(files) {
+        if (files.length > 0) {
+            currentFiles = Array.from(files);
+            generatePreviews(currentFiles); 
+            updateUIState(true);
+        }
+    }
+
+    // === 预览逻辑修正 ===
+    function generatePreviews(files) {
+        previewGallery.innerHTML = ''; 
+        previewGallery.className = "hidden w-full p-6 z-10"; 
+        
+        const displayLimit = 3;
+        const totalCount = files.length;
+        const showCount = Math.min(totalCount, displayLimit);
+
+        if (totalCount === 1) {
+            previewGallery.classList.add('flex', 'items-center', 'justify-center', 'min-h-[320px]');
+        } else {
+            previewGallery.classList.add('grid', 'grid-cols-1', 'sm:grid-cols-2', 'gap-6', 'content-start');
+        }
+
+        // 只循环前3个文件读取
+        for (let i = 0; i < showCount; i++) {
+            const file = files[i];
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const widthClass = totalCount === 1 ? 'w-full max-w-2xl' : 'w-full';
+                const imgContainer = document.createElement('div');
+                imgContainer.className = `${widthClass} relative aspect-[4/3] rounded-xl overflow-hidden bg-white shadow-md border border-slate-200 fade-in flex items-center justify-center`;
+                
+                const img = document.createElement('img');
+                img.src = e.target.result;
+                img.className = "max-w-full max-h-full object-contain";
+                
+                imgContainer.appendChild(img);
+                previewGallery.appendChild(imgContainer);
+            };
+            reader.readAsDataURL(file);
+        }
+
+        // 如果超过3个，显示 "+N" 卡片
+        if (totalCount > displayLimit) {
+            const moreCount = totalCount - displayLimit;
+            const t = i18n[currentLang];
+            
+            const moreCard = document.createElement('div');
+            moreCard.className = "w-full relative aspect-[4/3] rounded-xl overflow-hidden bg-slate-100 shadow-sm border border-slate-200 fade-in flex items-center justify-center";
+            
+            const text = document.createElement('span');
+            text.className = "text-xl font-bold text-slate-400";
+            text.textContent = t.morePreviews.replace('{n}', moreCount);
+            
+            moreCard.appendChild(text);
+            previewGallery.appendChild(moreCard);
+        }
+    }
+
+    reselectBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        fileInput.value = '';
+        currentFiles = [];
+        previewGallery.innerHTML = ''; 
+        updateUIState(false);
+        fileInput.click();
+    });
+
+    function updateUIState(hasFiles) {
+        const t = i18n[currentLang];
+        if (hasFiles) {
+            uploadPrompt.classList.add('hidden');
+            previewGallery.classList.remove('hidden');
+            fileInfo.classList.remove('hidden');
+            requestAnimationFrame(() => fileInfo.classList.remove('translate-y-2', 'opacity-0'));
+            selectedCount.textContent = t.selected.replace('{n}', currentFiles.length);
+            uploadBtn.disabled = false;
+        } else {
+            uploadPrompt.classList.remove('hidden');
+            previewGallery.classList.add('hidden');
+            fileInfo.classList.add('translate-y-2', 'opacity-0');
+            setTimeout(() => fileInfo.classList.add('hidden'), 300);
+            uploadBtn.disabled = true;
+        }
+    }
+
+    // === 上传与处理 ===
+    uploadBtn.addEventListener('click', async () => {
+        if (currentFiles.length === 0) return;
+
+        resultContainer.innerHTML = '';
+        downloadAllArea.classList.add('hidden');
+        progressArea.classList.remove('hidden');
+        
+        // 进度条归零
+        progressBar.classList.remove('transition-all', 'duration-300');
+        progressBar.style.width = '0%';
+        progressPercent.textContent = '0%';
+        progressBar.offsetHeight; 
+        progressBar.classList.add('transition-all', 'duration-300');
+        
+        if(statusTextLabel) statusTextLabel.textContent = i18n[currentLang].statusProcessing;
+
+        uploadBtn.disabled = true;
+        uploadBtn.querySelector('span').textContent = i18n[currentLang].btnProcessing;
+        
+        processedFilenames = [];
+        let completedCount = 0;
+        displayedResultCount = 0;
+        const total = currentFiles.length;
+
+        const watermarkType = document.querySelector('input[name="watermark_type"]:checked').value;
+        const quality = document.querySelector('input[name="image_quality"]:checked').value;
+        const burn = document.getElementById('burn_after_read').checked ? '1' : '0';
+
+        const promises = currentFiles.map((file) => {
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('watermark_type', watermarkType);
+            formData.append('image_quality', quality);
+            formData.append('burn_after_read', burn);
+
+            return fetch(`/upload?lang=${currentLang}`, {
+                method: 'POST',
+                body: formData
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.task_id) {
+                    pollTask(data.task_id, file.name);
+                } else {
+                    renderError(file.name, data.error || 'Upload Failed');
+                    markCompleted();
+                }
+            })
+            .catch(err => {
+                renderError(file.name, 'Network Error');
+                markCompleted();
+            });
+        });
+
+        function markCompleted() {
+            completedCount++;
+            const percent = Math.round((completedCount / total) * 100);
+            progressBar.style.width = `${percent}%`;
+            progressPercent.textContent = `${percent}%`;
+
+            if (completedCount === total) {
+                if(statusTextLabel) statusTextLabel.textContent = i18n[currentLang].statusDone;
+                uploadBtn.disabled = false;
+                uploadBtn.querySelector('span').textContent = i18n[currentLang].btnProcess;
+                if(processedFilenames.length > 0) {
+                    downloadAllArea.classList.remove('hidden');
+                }
+
+                // 如果超过3张，显示提示信息
+                if (processedFilenames.length > 3) {
+                      renderHiddenNotice(processedFilenames.length - 3);
+                }
+            }
+        }
+
+        function pollTask(taskId, fileName) {
+            const interval = setInterval(() => {
+                fetch(`/status/${taskId}`)
+                    .then(res => res.json())
+                    .then(task => {
+                        if (task.status === 'succeeded') {
+                            clearInterval(interval);
+                            const imgUrl = task.result.processed_image;
+                            const cleanUrl = imgUrl.split('?')[0]; 
+                            const serverFileName = cleanUrl.substring(cleanUrl.lastIndexOf('/') + 1);
+                            processedFilenames.push(serverFileName);
+                            if (displayedResultCount < 3) {
+                                renderSuccess(fileName, imgUrl);
+                                displayedResultCount++;
+                            }
+                            markCompleted();
+                        } else if (task.status === 'failed') {
+                            clearInterval(interval);
+                            renderError(fileName, task.error);
+                            markCompleted();
+                        }
+                    })
+                    .catch(() => {
+                        clearInterval(interval);
+                        renderError(fileName, 'Polling Error');
+                        markCompleted();
+                    });
+            }, 1000);
+        }
+    });
+
+    function renderSuccess(originalName, url) {
+        const t = i18n[currentLang];
+        const div = document.createElement('div');
+        div.className = "bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden fade-in";
+        div.innerHTML = `
+            <div class="relative group bg-slate-100 aspect-[4/3] flex items-center justify-center overflow-hidden">
+                <img src="${url}" class="max-w-full max-h-full object-contain shadow-sm" alt="${originalName}">
+                <div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4 backdrop-blur-[2px]">
+                    <a href="${url}" target="_blank" class="px-4 py-2 bg-white text-slate-900 rounded-full text-sm font-bold hover:scale-105 transition-transform">
+                        ${t.btnPreview}
+                    </a>
+                    <a href="${url}" download="${originalName}_watermark" class="px-4 py-2 bg-brand-600 text-white rounded-full text-sm font-bold hover:scale-105 transition-transform">
+                        ${t.btnDownload}
+                    </a>
+                </div>
+            </div>
+            <div class="p-4 flex items-center justify-between">
+                <div class="truncate text-sm font-medium text-slate-700 max-w-[70%]">${originalName}</div>
+                <div class="flex gap-2">
+                     <span class="text-xs px-2 py-1 bg-green-100 text-green-700 rounded-md">${t.statusSuccess}</span>
+                </div>
+            </div>
+        `;
+        resultContainer.appendChild(div);
+    }
+    function renderHiddenNotice(count) {
+        const t = i18n[currentLang];
+        const div = document.createElement('div');
+        div.className = "text-center py-6 fade-in";
+        div.innerHTML = `
+            <p class="text-slate-400 text-sm bg-slate-50 inline-block px-4 py-2 rounded-full">
+                ${t.moreResults.replace('{n}', count)}
+            </p>
+        `;
+        resultContainer.appendChild(div);
+    }
+    function renderError(originalName, errorMsg) {
+        const div = document.createElement('div');
+        div.className = "bg-white rounded-xl shadow-sm border border-red-100 p-4 flex items-center gap-4 fade-in";
+        div.innerHTML = `
+            <div class="w-10 h-10 bg-red-50 rounded-full flex items-center justify-center flex-shrink-0">
+                <svg class="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </div>
+            <div class="min-w-0 flex-1">
+                <p class="text-sm font-bold text-slate-900">${originalName}</p>
+                <p class="text-xs text-red-500 truncate">${errorMsg}</p>
+            </div>
+        `;
+        resultContainer.appendChild(div);
+    }
+
+    zipBtn.addEventListener('click', () => {
+        if (processedFilenames.length === 0) return;
+        fetch('/download_zip', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                filenames: processedFilenames,
+                lang: currentLang
+            })
+        })
         .then(res => res.json())
         .then(data => {
-          if (data.status === 'succeeded') {
-            clearInterval(intervalId);
-            renderSuccessImage(
-                data.result.processed_image, 
-                data.result.source_filename, // 后端返回的源文件名
-                file, 
-                index
-            );
-            checkAllCompleted();
-          } else if (data.status === 'failed') {
-            clearInterval(intervalId);
-            renderError(file.name, data.error || 'Unknown error');
-            checkAllCompleted();
-          } 
-          // status 'queued' or 'processing' -> continue polling
-        })
-        .catch(err => {
-          clearInterval(intervalId);
-          renderError(file.name, "Network error");
-          checkAllCompleted();
+            if (data.zip_url) {
+                const a = document.createElement('a');
+                a.href = data.zip_url;
+                a.download = `Watermarked_Images.zip`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+            }
         });
-    }, 1000); // 1秒轮询一次
-  };
-
-  // 遍历上传所有文件
-  Array.from(files).forEach((file, index) => {
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('watermark_type', watermarkType);
-    formData.append('image_quality', quality || 'high');
-    formData.append('burn_after_read', burn);
-    
-    // 将当前的高级配置也传给后端
-    Object.keys(currentConfig).forEach(key => {
-        formData.append(key, currentConfig[key]);
     });
 
-    // 初始化进度文字
-    if (index === 0) {
-        const t = translations[currentLang];
-        if (t && t.processingProgress) {
-            progressText.textContent = t.processingProgress
-              .replace('{done}', 0)
-              .replace('{total}', totalFiles);
-        }
-    }
-
-    // 发起上传请求
-    fetch('/upload?lang=' + currentLang, {
-      method: 'POST',
-      body: formData
-    })
-      .then(res => res.json())
-      .then(data => {
-        if (data.error) {
-          renderError(file.name, data.error);
-          checkAllCompleted();
-        } else if (data.task_id) {
-          // 上传成功，开始轮询
-          pollTaskStatus(data.task_id, file, index);
-        } else {
-          renderError(file.name, "Unknown server response");
-          checkAllCompleted();
-        }
-      })
-      .catch(err => {
-        renderError(file.name, err.message || 'Upload failed');
-        checkAllCompleted();
-      });
-  });
-});
-
-
-// === 6. ZIP 打包下载 ===
-
-zipButton.addEventListener('click', () => {
-  if (processedFilenames.length === 0) return;
-
-  // 提示：ZIP 打包的是初始处理的图片，不会包含仅在预览模式下调整的变更
-  // 如果需要下载调整后的，用户应该点击"处理"按钮重新生成
-  
-  fetch('/download_zip', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      filenames: processedFilenames,
-      lang: currentLang
-    })
-  })
-    .then(res => res.json())
-    .then(data => {
-      if (data.zip_url) {
-        const a = document.createElement('a');
-        a.href = data.zip_url;
-        a.download = 'images_with_watermarks.zip';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-      } else {
-        alert(data.error || 'Packaging failed');
-      }
-    })
-    .catch(err => {
-        console.error(err);
-        alert('Network error during zip download');
-    });
+    switchLanguage('zh');
 });

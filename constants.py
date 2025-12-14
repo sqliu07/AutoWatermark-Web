@@ -2,7 +2,7 @@ class CommonConstants:
     UPLOAD_FOLDER = './upload'
 
     IMAGE_QUALITY_MAP = {
-        "high": 95,
+        "high": 100,
         "medium": 85,
         "low": 75
     }
