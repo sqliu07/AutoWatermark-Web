@@ -24,26 +24,23 @@
 
 <body class="bg-slate-50 text-slate-800 font-sans min-h-screen flex flex-col">
 
-  <!-- 顶部导航（与 index 对齐） -->
   <nav class="bg-white border-b border-slate-200 sticky top-0 z-50 backdrop-blur-md bg-white/80">
     <div class="max-w-5xl mx-auto px-6 h-16 flex items-center justify-between">
-      <span class="font-bold text-lg tracking-tight text-slate-900">
+      <span id="ui-app-name" class="font-bold text-lg tracking-tight text-slate-900">
         AutoWatermark Web
       </span>
 
       <div class="flex items-center gap-4 text-sm font-medium">
-        <button id="lang-zh" class="text-brand-600 font-semibold transition">中文</button>
+        <button id="lang-zh" class="transition">中文</button>
         <span class="text-slate-300">/</span>
-        <button id="lang-en" class="text-slate-500 hover:text-brand-500 transition">English</button>
+        <button id="lang-en" class="transition">English</button>
       </div>
     </div>
   </nav>
 
-  <!-- 主体内容 -->
   <main class="flex-grow flex items-center justify-center px-6 py-16 fade-in">
     <div class="max-w-md w-full bg-white border border-slate-200 rounded-2xl shadow-sm p-8 text-center">
 
-      <!-- 状态图标 -->
       <div class="w-14 h-14 mx-auto mb-4 rounded-full bg-slate-100 flex items-center justify-center">
         <svg class="w-7 h-7 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -51,66 +48,60 @@
         </svg>
       </div>
 
-      <!-- 标题 -->
-      <h1
-        id="deletedTitle"
-        class="text-2xl font-bold text-slate-900 mb-2"
-      >
-        图片已删除
-      </h1>
+      <h1 id="deletedTitle" class="text-2xl font-bold text-slate-900 mb-2"></h1>
 
-      <!-- 描述 -->
-      <p
-        id="deletedMessage"
-        class="text-slate-500 text-sm leading-relaxed"
-      >
-        该图片已被成功删除，无法再次访问。
-      </p>
+      <p id="deletedMessage" class="text-slate-500 text-sm leading-relaxed"></p>
 
-      <!-- 操作 -->
       <div class="mt-6">
         <a
           href="/"
+          id="deletedBack"
           class="inline-flex items-center justify-center px-5 py-2.5 rounded-full
                  bg-slate-900 text-white text-sm font-semibold
                  hover:bg-slate-800 transition"
-          id="deletedBack"
-        >
-          返回首页
-        </a>
+        ></a>
       </div>
-
     </div>
   </main>
 
-  <!-- Footer 注入 -->
+  <script src="{{ url_for('static', filename='js/i18n.js') }}"></script>
   <script src="{{ url_for('static', filename='js/footer.js') }}"></script>
 
-  <!-- i18n -->
   <script>
-    const urlParams = new URLSearchParams(window.location.search);
-    let currentLang = urlParams.get('lang') || 'zh';
+    document.addEventListener('DOMContentLoaded', () => {
+      initI18n();
 
-    function applyLang(lang, data) {
-      const t = data[lang];
-      document.title = t.title || 'AutoWatermark Web';
-      document.getElementById('deletedTitle').textContent =
-        t.imageDeleted || 'Image deleted';
-      document.getElementById('deletedMessage').textContent =
-        t.imageDeletedMessage || 'The image has been deleted.';
-      document.getElementById('deletedBack').textContent =
-        t.backToHome || 'Back to Home';
-    }
+      function applyI18n() {
+        const t = window.t;
+        if (!t) return;
 
-    fetch('/static/i18n/translations.json')
-      .then(res => res.json())
-      .then(data => {
-        if (!data[currentLang]) currentLang = 'zh';
-        applyLang(currentLang, data);
+        document.title = t.appName;
+        document.getElementById('ui-app-name').textContent = t.appName;
+        document.getElementById('deletedTitle').textContent = t.imageDeleted;
+        document.getElementById('deletedMessage').textContent = t.imageDeletedMessage;
+        document.getElementById('deletedBack').textContent = t.backToHome;
+      }
 
-        document.getElementById('lang-zh').onclick = () => applyLang('zh', data);
-        document.getElementById('lang-en').onclick = () => applyLang('en', data);
-      });
+      function waitForI18nReady() {
+        if (window.t) {
+          applyI18n();
+        } else {
+          setTimeout(waitForI18nReady, 30);
+        }
+      }
+
+      waitForI18nReady();
+
+      document.getElementById('lang-zh').onclick = () => {
+        switchLang('zh');
+        applyI18n();
+      };
+
+      document.getElementById('lang-en').onclick = () => {
+        switchLang('en');
+        applyI18n();
+      };
+    });
   </script>
 
 </body>
