@@ -1,4 +1,8 @@
 document.addEventListener('DOMContentLoaded', () => {
+    initI18n();
+    function t() {
+        return window.t;
+    }
     // === DOM 元素 ===
     const dropZone = document.getElementById('drop-zone');
     const uploadPrompt = document.getElementById('upload-prompt');
@@ -28,80 +32,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // === 状态 ===
     let currentFiles = [];
     let processedFilenames = [];
-    let currentLang = 'zh';
-
-    const i18n = {
-        zh: {
-            appName: "边框水印",
-            title: "为照片赋予专业感",
-            subtitle: "智能识别 EXIF 信息，一键生成水印相框。",
-            dragText: "点击或拖拽上传照片",
-            selected: "已选择 {n} 张",
-            btnChange: "更换图片",
-            styleTitle: "水印风格",
-            descStyle1: "拍立得",
-            descStyle2: "经典双行",
-            descStyle3: "居中极简",
-            descStyle4: "毛玻璃特效",
-            descStyle5: "侧边参数卡片",
-            qualityTitle: "输出画质",
-            qualityHigh: "高",
-            qualityMedium: "中",
-            qualityLow: "低",
-            privacyTitle: "隐私设置",
-            burnTitle: "阅后即焚",
-            burnDesc: "闲置 2 分钟后自动销毁文件",
-            btnProcess: "开始处理",
-            btnProcessing: "处理中...",
-            statusUploading: "正在上传...",
-            statusProcessing: "处理中...",
-            statusDone: "处理完成",
-            statusSuccess:"成功",
-            btnZip: "打包下载所有图片",
-            errorTitle: "处理失败",
-            btnDownload: "下载原图",
-            btnPreview: "全屏预览",
-            morePreviews: "+ {n} 张",
-            moreResults: "剩余 {n} 张图片已隐藏，请打包下载"
-        },
-        en: {
-            appName: "AutoWatermark Web",
-            title: "Professional Watermarks",
-            subtitle: "Auto-generate watermarked frames from EXIF data.",
-            dragText: "Click or Drag to Upload",
-            selected: "{n} Selected",
-            btnChange: "Change",
-            styleTitle: "Watermark Style",
-            descStyle1: "Polaroid Style",
-            descStyle2: "Classic Layout",
-            descStyle3: "Minimal Center",
-            descStyle4: "Frosted Glass",
-            descStyle5: "Side Stats Card",
-            qualityTitle: "Image Quality",
-            qualityHigh: "High",
-            qualityMedium: "Medium",
-            qualityLow: "Low",
-            privacyTitle: "Privacy",
-            burnTitle: "Burn After Read",
-            burnDesc: "Files deleted after 2 mins of inactivity",
-            btnProcess: "Process Images",
-            btnProcessing: "Processing...",
-            statusUploading: "Uploading...",
-            statusProcessing: "Processing...",
-            statusDone: "Completed",
-            statusSuccess: "Success",
-            btnZip: "Download All as ZIP",
-            errorTitle: "Error",
-            btnDownload: "Download",
-            btnPreview: "Preview",
-            morePreviews: "+ {n} more",
-            moreResults: "{n} more images hidden, please download ZIP"
-        }
-    };
 
     function switchLanguage(lang) {
-        currentLang = lang;
-        const t = i18n[lang];
+        switchLang(lang);
+        const t = window.t;
 
         if(lang === 'zh') {
             langZhBtn.classList.add('text-brand-600', 'font-semibold');
@@ -144,8 +78,18 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    langZhBtn.addEventListener('click', () => switchLanguage('zh'));
-    langEnBtn.addEventListener('click', () => switchLanguage('en'));
+    langZhBtn.addEventListener('click', () => {
+        if (window.currentLang !== 'zh') {
+            switchLanguage('zh');
+        }
+    });
+    
+    langEnBtn.addEventListener('click', () => {
+        if (window.currentLang !== 'en') {
+            switchLanguage('en');
+        }
+    });
+
 
     // === 文件交互 ===
     dropZone.addEventListener('click', (e) => {
@@ -218,7 +162,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // 如果超过3个，显示 "+N" 卡片
         if (totalCount > displayLimit) {
             const moreCount = totalCount - displayLimit;
-            const t = i18n[currentLang];
+            const t = window.t;
             
             const moreCard = document.createElement('div');
             moreCard.className = "w-full relative aspect-[4/3] rounded-xl overflow-hidden bg-slate-100 shadow-sm border border-slate-200 fade-in flex items-center justify-center";
@@ -242,7 +186,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     function updateUIState(hasFiles) {
-        const t = i18n[currentLang];
+        const t = window.t;
         if (hasFiles) {
             uploadPrompt.classList.add('hidden');
             previewGallery.classList.remove('hidden');
@@ -274,10 +218,10 @@ document.addEventListener('DOMContentLoaded', () => {
         progressBar.offsetHeight; 
         progressBar.classList.add('transition-all', 'duration-300');
         
-        if(statusTextLabel) statusTextLabel.textContent = i18n[currentLang].statusProcessing;
+        if(statusTextLabel) statusTextLabel.textContent = window.t.statusProcessing;
 
         uploadBtn.disabled = true;
-        uploadBtn.querySelector('span').textContent = i18n[currentLang].btnProcessing;
+        uploadBtn.querySelector('span').textContent = window.t.btnProcessing;
         
         processedFilenames = [];
         let completedCount = 0;
@@ -321,9 +265,9 @@ document.addEventListener('DOMContentLoaded', () => {
             progressPercent.textContent = `${percent}%`;
 
             if (completedCount === total) {
-                if(statusTextLabel) statusTextLabel.textContent = i18n[currentLang].statusDone;
+                if(statusTextLabel) statusTextLabel.textContent = window.t.statusDone;
                 uploadBtn.disabled = false;
-                uploadBtn.querySelector('span').textContent = i18n[currentLang].btnProcess;
+                uploadBtn.querySelector('span').textContent = window.t.btnProcess;
                 if(processedFilenames.length > 0) {
                     downloadAllArea.classList.remove('hidden');
                 }
@@ -367,7 +311,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     function renderSuccess(originalName, url) {
-        const t = i18n[currentLang];
+        const t = window.t;
         const div = document.createElement('div');
         div.className = "bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden fade-in";
         div.innerHTML = `
@@ -392,7 +336,7 @@ document.addEventListener('DOMContentLoaded', () => {
         resultContainer.appendChild(div);
     }
     function renderHiddenNotice(count) {
-        const t = i18n[currentLang];
+        const t = window.t;
         const div = document.createElement('div');
         div.className = "text-center py-6 fade-in";
         div.innerHTML = `
