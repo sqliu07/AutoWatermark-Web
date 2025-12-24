@@ -65,6 +65,10 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('ui-quality-high').textContent = t.qualityHigh;
         document.getElementById('ui-quality-medium').textContent = t.qualityMedium;
         document.getElementById('ui-quality-low').textContent = t.qualityLow;
+        document.getElementById('ui-xiaomi-logo-title').textContent = t.xiaomiLogoTitle;
+        document.getElementById('ui-xiaomi-logo-xiaomi').textContent = t.xiaomiLogoXiaomi;
+        document.getElementById('ui-xiaomi-logo-leica').textContent = t.xiaomiLogoLeica;
+        document.getElementById('ui-xiaomi-logo-hint').textContent = t.xiaomiLogoHint;
         document.getElementById('ui-privacy-title').textContent = t.privacyTitle;
         document.getElementById('ui-burn-title').textContent = t.burnTitle;
         document.getElementById('ui-burn-desc').textContent = t.burnDesc;
@@ -230,6 +234,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const watermarkType = document.querySelector('input[name="watermark_type"]:checked').value;
         const quality = document.querySelector('input[name="image_quality"]:checked').value;
+        const logoPreference = document.querySelector('input[name="logo_preference"]:checked')?.value || 'xiaomi';
         const burn = document.getElementById('burn_after_read').checked ? '1' : '0';
 
         const promises = currentFiles.map((file) => {
@@ -237,6 +242,7 @@ document.addEventListener('DOMContentLoaded', () => {
             formData.append('file', file);
             formData.append('watermark_type', watermarkType);
             formData.append('image_quality', quality);
+            formData.append('logo_preference', logoPreference);
             formData.append('burn_after_read', burn);
 
             return fetch(`/upload?lang=${currentLang}`, {

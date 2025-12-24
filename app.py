@@ -155,13 +155,19 @@ def cleanup_old_tasks():
     for tid in to_remove:
         tasks.pop(tid, None)
 
-def background_process(task_id, filepath, lang, watermark_type, image_quality, burn_after_read):
+def background_process(task_id, filepath, lang, watermark_type, image_quality, burn_after_read, logo_preference):
     """后台执行图片处理，并更新任务状态"""
     try:
         tasks[task_id]['status'] = 'processing'
 
         # 调用 process.py 中的核心逻辑
-        process_image(filepath, lang=lang, watermark_type=watermark_type, image_quality=image_quality)
+        process_image(
+            filepath,
+            lang=lang,
+            watermark_type=watermark_type,
+            image_quality=image_quality,
+            logo_preference=logo_preference,
+        )
 
         # 计算生成的文件名
         filename = os.path.basename(filepath)
@@ -219,6 +225,7 @@ def upload_file():
     watermark_type = request.form.get('watermark_type', '1')
     burn_after_read = request.form.get('burn_after_read', '0')
     image_quality = request.form.get('image_quality', "high")
+    logo_preference = request.form.get('logo_preference', 'xiaomi')
 
     # 质量参数转换
     if "high" == image_quality:
@@ -261,7 +268,8 @@ def upload_file():
             lang, 
             watermark_type_int, 
             image_quality_int, 
-            burn_after_read
+            burn_after_read,
+            logo_preference,
         )
 
         # 立即返回任务 ID

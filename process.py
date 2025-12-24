@@ -24,7 +24,15 @@ logger = get_logger("autowatermark.process")
 def get_message(key, lang='zh'):
     return CommonConstants.ERROR_MESSAGES.get(key, {}).get(lang)
 
-def process_image(image_path, lang='zh', watermark_type=1, image_quality=95, notify=False, preview=False):
+def process_image(
+    image_path,
+    lang='zh',
+    watermark_type=1,
+    image_quality=95,
+    notify=False,
+    preview=False,
+    logo_preference="xiaomi",
+):
     """
     Adds a watermark to the given image.
 
@@ -73,7 +81,14 @@ def process_image(image_path, lang='zh', watermark_type=1, image_quality=95, not
 
         camera_model = get_camera_model(exif_dict)
 
-        logo_path = find_logo(manufacturer)
+        logo_path = None
+        if manufacturer and "xiaomi" in manufacturer.lower():
+            if logo_preference == "leica":
+                logo_path = find_logo("leica")
+            else:
+                logo_path = find_logo(manufacturer)
+        else:
+            logo_path = find_logo(manufacturer)
         if logo_path is None:
             detail = manufacturer if not camera_model else f"{manufacturer} {camera_model}"
             raise UnsupportedManufacturerError(manufacturer, detail=detail)
