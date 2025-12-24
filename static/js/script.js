@@ -232,31 +232,48 @@ document.addEventListener('DOMContentLoaded', () => {
         const quality = document.querySelector('input[name="image_quality"]:checked').value;
         const burn = document.getElementById('burn_after_read').checked ? '1' : '0';
 
-        const promises = currentFiles.map((file) => {
+        function buildFormData(file, logoPreference) {
             const formData = new FormData();
             formData.append('file', file);
             formData.append('watermark_type', watermarkType);
             formData.append('image_quality', quality);
+            if (logoPreference) {
+                formData.append('logo_preference', logoPreference);
+            }
             formData.append('burn_after_read', burn);
+            return formData;
+        }
 
-            return fetch(`/upload?lang=${currentLang}`, {
-                method: 'POST',
-                body: formData
-            })
-            .then(res => res.json())
-            .then(data => {
+        const promises = currentFiles.map((file) => {
+            const formData = buildFormData(file, null);
+            return uploadWithPreference(file, formData);
+        });
+
+        async function uploadWithPreference(file, formData) {
+            try {
+                const response = await fetch(`/upload?lang=${currentLang}`, {
+                    method: 'POST',
+                    body: formData,
+                });
+                const data = await response.json();
+
+                if (data.needs_logo_choice) {
+                    const preference = await requestXiaomiLogoPreference();
+                    const retryFormData = buildFormData(file, preference);
+                    return uploadWithPreference(file, retryFormData);
+                }
+
                 if (data.task_id) {
                     pollTask(data.task_id, file.name);
                 } else {
                     renderError(file.name, data.error || 'Upload Failed');
                     markCompleted();
                 }
-            })
-            .catch(err => {
+            } catch (err) {
                 renderError(file.name, 'Network Error');
                 markCompleted();
-            });
-        });
+            }
+        }
 
         function markCompleted() {
             completedCount++;
@@ -385,4 +402,36 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     switchLanguage('zh');
+
+    function requestXiaomiLogoPreference() {
+        return new Promise((resolve) => {
+            const t = window.t;
+            const overlay = document.createElement('div');
+            overlay.className = 'fixed inset-0 z-50 bg-black/40 flex items-center justify-center px-6';
+
+            const dialog = document.createElement('div');
+            dialog.className = 'bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-sm p-6';
+            dialog.innerHTML = `
+                <h3 class="text-lg font-bold text-slate-900 mb-2">${t.xiaomiLogoTitle}</h3>
+                <p class="text-sm text-slate-600 mb-6">${t.xiaomiLogoMessage}</p>
+                <div class="flex gap-3">
+                    <button type="button" data-choice="xiaomi" class="flex-1 px-4 py-2 rounded-full bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800 transition">${t.xiaomiLogoOptionXiaomi}</button>
+                    <button type="button" data-choice="leica" class="flex-1 px-4 py-2 rounded-full border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition">${t.xiaomiLogoOptionLeica}</button>
+                </div>
+            `;
+
+            overlay.appendChild(dialog);
+            document.body.appendChild(overlay);
+
+            overlay.querySelectorAll('button[data-choice]').forEach((button) => {
+                button.addEventListener('click', () => {
+                    const choice = button.getAttribute('data-choice');
+                    overlay.remove();
+                    resolve(choice);
+                });
+            });
+        });
+    }
+
+    window.showXiaomiLogoDialog = requestXiaomiLogoPreference;
 });

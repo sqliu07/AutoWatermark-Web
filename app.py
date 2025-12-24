@@ -17,6 +17,9 @@ from flask_limiter.util import get_remote_address
 from flask_limiter.errors import RateLimitExceeded
 
 from process import process_image
+from exif_utils import get_manufacturer
+from PIL import Image
+import piexif
 from errors import WatermarkError
 from logging_utils import get_logger
 
@@ -155,13 +158,30 @@ def cleanup_old_tasks():
     for tid in to_remove:
         tasks.pop(tid, None)
 
-def background_process(task_id, filepath, lang, watermark_type, image_quality, burn_after_read):
+def detect_manufacturer(filepath):
+    try:
+        with Image.open(filepath) as image:
+            exif_bytes = image.info.get('exif')
+            if not exif_bytes:
+                return None
+            exif_dict = piexif.load(exif_bytes)
+            return get_manufacturer(filepath, exif_dict)
+    except Exception:
+        return None
+
+def background_process(task_id, filepath, lang, watermark_type, image_quality, burn_after_read, logo_preference):
     """后台执行图片处理，并更新任务状态"""
     try:
         tasks[task_id]['status'] = 'processing'
 
         # 调用 process.py 中的核心逻辑
-        process_image(filepath, lang=lang, watermark_type=watermark_type, image_quality=image_quality)
+        process_image(
+            filepath,
+            lang=lang,
+            watermark_type=watermark_type,
+            image_quality=image_quality,
+            logo_preference=logo_preference,
+        )
 
         # 计算生成的文件名
         filename = os.path.basename(filepath)
@@ -219,6 +239,7 @@ def upload_file():
     watermark_type = request.form.get('watermark_type', '1')
     burn_after_read = request.form.get('burn_after_read', '0')
     image_quality = request.form.get('image_quality', "high")
+    logo_preference = request.form.get('logo_preference')
 
     # 质量参数转换
     if "high" == image_quality:
@@ -242,6 +263,13 @@ def upload_file():
 
         file.save(filepath)
 
+        manufacturer = detect_manufacturer(filepath)
+        if manufacturer and "xiaomi" in manufacturer.lower():
+            normalized_preference = (logo_preference or "").lower()
+            if normalized_preference not in {"xiaomi", "leica"}:
+                return jsonify({'needs_logo_choice': True}), 200
+            logo_preference = normalized_preference
+
         try:
             watermark_type_int = int(watermark_type)
         except ValueError:
@@ -261,7 +289,8 @@ def upload_file():
             lang, 
             watermark_type_int, 
             image_quality_int, 
-            burn_after_read
+            burn_after_read,
+            logo_preference,
         )
 
         # 立即返回任务 ID
