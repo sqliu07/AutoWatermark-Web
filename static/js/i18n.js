@@ -22,6 +22,11 @@
       qualityMedium: "中",
       qualityLow: "低",
 
+      xiaomiLogoTitle: "选择 Logo",
+      xiaomiLogoMessage: "检测到 Xiaomi 机型，请选择要使用的 Logo。",
+      xiaomiLogoOptionXiaomi: "Xiaomi",
+      xiaomiLogoOptionLeica: "Leica",
+
       privacyTitle: "隐私设置",
       burnTitle: "阅后即焚",
       burnDesc: "闲置 2 分钟后自动销毁文件",
@@ -64,6 +69,11 @@
       qualityHigh: "High",
       qualityMedium: "Medium",
       qualityLow: "Low",
+
+      xiaomiLogoTitle: "Choose Logo",
+      xiaomiLogoMessage: "Xiaomi detected. Choose which logo to use.",
+      xiaomiLogoOptionXiaomi: "Xiaomi",
+      xiaomiLogoOptionLeica: "Leica",
 
       privacyTitle: "Privacy",
       burnTitle: "Burn After Read",
