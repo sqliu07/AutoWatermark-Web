@@ -1,6 +1,10 @@
 from constants import ImageConstants
+
+from functools import lru_cache
 from PIL import Image, ImageDraw, ImageFont, ImageOps, ImageFilter, ImageStat
 from logging_utils import get_logger
+
+Image.MAX_IMAGE_PIXELS = None  # Disable DecompressionBombError
 
 logger = get_logger("autowatermark.image_utils")
 
@@ -12,6 +16,7 @@ def is_image_bright(image, threshold=ImageConstants.WATERMARK_GLASS_BG_THRESHOLD
     判断图片是否为浅色背景
     :param threshold: 亮度阈值 (0-255)，默认 130。大于此值认为背景是亮的，需要用深色字。
     :return: True (亮背景) / False (暗背景)
+    为了避免误判，同时判断图片下半部分的亮度
     """
     # 转换为灰度图
     gray_img = image.convert("L")
@@ -20,7 +25,14 @@ def is_image_bright(image, threshold=ImageConstants.WATERMARK_GLASS_BG_THRESHOLD
     avg_brightness = stat.mean[0]
     logger.info("Current image avg brightness: %s", str(avg_brightness))
 
-    return avg_brightness > threshold
+    w, h = image.size
+    bottom_half = image.crop((0, h // 2, w, h))
+    gray_img = bottom_half.convert("L")
+    stat = ImageStat.Stat(gray_img)
+    avg_brightness_half = stat.mean[0]
+    logger.info("Bottom-half avg brightness: %s", str(avg_brightness_half))
+
+    return avg_brightness > threshold and avg_brightness_half > threshold
 def reset_image_orientation(image):
     try:
         exif = image._getexif()
@@ -138,16 +150,39 @@ def create_right_block(logo_path, text_block_img, footer_height, with_line=True,
 
     return combined
 
-def create_rounded_rectangle_mask(size, radius):
-    factor = 4
-    large_size = (size[0] * factor, size[1] * factor)
-    large_radius = radius * factor
+@lru_cache(maxsize=64)
+def _rounded_mask_cached(w: int, h: int, radius: int, aa: int) -> Image.Image:
+    aa = max(1, int(aa))
+    radius = max(0, int(radius))
 
-    mask = Image.new('L', large_size, 0)
+    W, H = w * aa, h * aa
+    R = radius * aa
+
+    mask = Image.new("L", (W, H), 0)
     draw = ImageDraw.Draw(mask)
-    draw.rounded_rectangle([(0, 0), large_size], radius=large_radius, fill=255)
+    draw.rounded_rectangle((0, 0, W - 1, H - 1), radius=R, fill=255)
 
-    return mask.resize(size, Image.Resampling.LANCZOS)
+    if aa == 1:
+        return mask.copy()
+
+    return mask.resize((w, h), Image.Resampling.BILINEAR)
+
+def create_rounded_rectangle_mask(size, radius, aa=2):
+    w, h = size
+    return _rounded_mask_cached(int(w), int(h), int(radius), int(aa))
+
+def _darken_rgb_inplace(img_rgb: Image.Image, dim_alpha_0_255: int) -> Image.Image:
+    """
+    用 point 做线性变暗：out = in * (1 - dim_alpha/255)
+    不创建额外的全尺寸黑图，内存更省。
+    """
+    dim_alpha_0_255 = max(0, min(255, int(dim_alpha_0_255)))
+    if dim_alpha_0_255 == 0:
+        return img_rgb
+    k = 1.0 - (dim_alpha_0_255 / 255.0)
+
+    lut = [int(i * k) for i in range(256)]
+    return img_rgb.point(lut * 3)
 
 def create_frosted_glass_effect(origin_image):
     ori_w, ori_h = origin_image.size
@@ -156,71 +191,76 @@ def create_frosted_glass_effect(origin_image):
     bg_scale = ImageConstants.WATERMARK_GLASS_BG_SCALE
     shadow_scale_factor = ImageConstants.WATERMARK_GLASS_SHADOW_SCALE
 
-    corner_radius = int(min_dim * ImageConstants.WATERMARK_GLASS_CORNER_RADIUS_FACTOR)
+    landscape = is_landscape(origin_image)
 
+    corner_radius = int(min_dim * ImageConstants.WATERMARK_GLASS_CORNER_RADIUS_FACTOR)
     shadow_blur_radius = int(min_dim * ImageConstants.WATERMARK_GLASS_BLUR_RADIUS)
 
-    shadow_offset_y = int(min_dim * 0.05)
-    if is_landscape(origin_image):
-        shadow_offset_y = int(min_dim * 0.03)
-    # 阴影颜色 (纯黑，透明度 40%) - 加深
+    shadow_offset_y = int(min_dim * (0.03 if landscape else 0.05))
     shadow_color = (0, 0, 0, ImageConstants.WATERMARK_GLASS_COLOR)
 
-    canvas_w = int(ori_w * bg_scale)
-    if is_landscape(origin_image):
-        canvas_w = int(canvas_w * 0.95)
+    canvas_w = int(ori_w * bg_scale * (0.95 if landscape else 1.0))
     canvas_h = int(ori_h * bg_scale)
     canvas_size = (canvas_w, canvas_h)
-    small_bg = origin_image.convert("RGB").resize(
-        (canvas_w // 10, canvas_h // 10),
-        Image.Resampling.BILINEAR
-    )
-    # 模糊
-    blurred_bg = small_bg.filter(ImageFilter.GaussianBlur(8))
-    # 放大铺满
-    final_bg = blurred_bg.resize(canvas_size, Image.Resampling.LANCZOS)
 
-    dim_layer = Image.new("RGBA", canvas_size, (0, 0, 0, 20))
-    final_bg = Image.alpha_composite(final_bg.convert("RGBA"), dim_layer).convert("RGB")
+    ds_w = max(1, canvas_w // 10)
+    ds_h = max(1, canvas_h // 10)
 
+    small_bg = origin_image.convert("RGB").resize((ds_w, ds_h), Image.Resampling.BOX)
 
-    mask = create_rounded_rectangle_mask((ori_w, ori_h), corner_radius)
-    foreground = origin_image.copy()
+    blurred_bg = small_bg.filter(ImageFilter.BoxBlur(8))
+    del small_bg
+
+    final_bg = blurred_bg.resize(canvas_size, Image.Resampling.BILINEAR)
+    del blurred_bg
+
+    final_bg = _darken_rgb_inplace(final_bg, dim_alpha_0_255=20)
+
+    mask = create_rounded_rectangle_mask((ori_w, ori_h), corner_radius, aa=2)
+    foreground = origin_image.convert("RGBA")
     foreground.putalpha(mask)
-
-
-    shadow_layer = Image.new("RGBA", canvas_size, (0, 0, 0, 0))
-    shadow_draw = ImageDraw.Draw(shadow_layer)
-
+    del mask
 
     pos_x = (canvas_w - ori_w) // 2
     pos_y = (canvas_h - ori_h) // 2
 
     shadow_w = int(ori_w * shadow_scale_factor)
     shadow_h = int(ori_h * shadow_scale_factor)
-
     shadow_x = pos_x + (ori_w - shadow_w) // 2
-
     shadow_y = pos_y + (ori_h - shadow_h) // 2 - shadow_offset_y
 
-    shadow_rect = [
-        (shadow_x, shadow_y),
-        (shadow_x + shadow_w, shadow_y + shadow_h)
-    ]
+    pad = int(shadow_blur_radius * 1.2)
 
-    shadow_draw.rounded_rectangle(shadow_rect, radius=corner_radius, fill=shadow_color)
+    x0 = max(0, shadow_x - pad)
+    y0 = max(0, shadow_y - pad)
+    x1 = min(canvas_w, shadow_x + shadow_w + pad)
+    y1 = min(canvas_h, shadow_y + shadow_h + pad)
 
-    shadow_layer = shadow_layer.filter(ImageFilter.GaussianBlur(shadow_blur_radius))
+    patch_w = max(1, x1 - x0)
+    patch_h = max(1, y1 - y0)
+
+    shadow_patch = Image.new("RGBA", (patch_w, patch_h), (0, 0, 0, 0))
+    d = ImageDraw.Draw(shadow_patch)
+
+    rx0 = shadow_x - x0
+    ry0 = shadow_y - y0
+    rx1 = rx0 + shadow_w
+    ry1 = ry0 + shadow_h
+    d.rounded_rectangle((rx0, ry0, rx1, ry1), radius=corner_radius, fill=shadow_color)
+
+    if shadow_blur_radius > 0:
+        shadow_patch = shadow_patch.filter(ImageFilter.BoxBlur(shadow_blur_radius))
 
     final_image = final_bg.convert("RGBA")
+    del final_bg
 
-    final_image = Image.alpha_composite(final_image, shadow_layer)
+    final_image.paste(shadow_patch, (x0, y0), shadow_patch)
+    del shadow_patch
 
     final_image.paste(foreground, (pos_x, pos_y - shadow_offset_y), foreground)
+    del foreground
 
-    final_image = final_image.convert("RGB")
-
-    return final_image
+    return final_image.convert("RGB")
 def generate_watermark_image(origin_image, logo_path, camera_info, shooting_info,
                              font_path_thin, font_path_bold, watermark_type=1,
                              return_metadata=False, **kwargs):
