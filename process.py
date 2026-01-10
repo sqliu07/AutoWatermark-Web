@@ -128,7 +128,7 @@ def process_image(
         if preview:
             return new_image
         else:
-            if motion_session and watermark_metadata:
+            if motion_session and watermark_metadata and watermark_type != 4:
                 temp_output = Path(motion_session.still_path.parent) / "watermarked_motion_frame.jpg"
                 new_image.save(temp_output, exif=exif_bytes, quality=image_quality)
                 motion_session.finalize(temp_output, Path(output_path), watermark_metadata)
