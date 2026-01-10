@@ -51,6 +51,10 @@ class MotionPhotoSession:
     xmp_bytes: bytes
     _workspace: tempfile.TemporaryDirectory
 
+    # --- Ultra HDR cover support (optional) ---
+    ultrahdr_gainmap_jpeg: Optional[bytes] = None
+    ultrahdr_gainmap_xmp: Optional[bytes] = None
+    ultrahdr_primary_size: Optional[tuple[int, int]] = None
     @property
     def has_motion(self) -> bool:
         return bool(self.video_bytes)
@@ -98,12 +102,70 @@ class MotionPhotoSession:
         _copy_all_metadata_with_exiftool(self.still_path, Path(watermarked_path))
 
         # --- 3) Inject/Update XMP so album can locate the appended video tail ---
+        watermarked_still_bytes = Path(watermarked_path).read_bytes()
+
+        # --- Ultra HDR cover path: output = primary(with XMP) + gainmap + video ---
+        if self.ultrahdr_gainmap_jpeg:
+            gainmap_jpeg = self.ultrahdr_gainmap_jpeg
+
+            # If watermarking changed canvas size (your type 1/2/3 often adds borders),
+            # expand gainmap with neutral pixels so border area has gain=1 (no HDR boost).
+            try:
+                from ultrahdr_utils import expand_gainmap_for_borders
+                from io import BytesIO
+                from PIL import Image
+
+                if self.ultrahdr_gainmap_xmp is not None:
+                    new_im = Image.open(BytesIO(watermarked_still_bytes))
+                    new_im.load()
+                    new_size = new_im.size
+
+                    orig_size = self.ultrahdr_primary_size
+                    if orig_size is None:
+                        src_im = Image.open(self.still_path)
+                        src_im.load()
+                        orig_size = src_im.size
+
+                    if orig_size and tuple(orig_size) != tuple(new_size):
+                        gainmap_jpeg = expand_gainmap_for_borders(
+                            orig_gainmap_jpeg=self.ultrahdr_gainmap_jpeg,
+                            orig_gainmap_xmp=self.ultrahdr_gainmap_xmp,
+                            orig_primary_size=orig_size,
+                            new_primary_size=new_size,
+                            content_box=content_box,
+                        )
+            except Exception:
+                # If anything fails, keep original gainmap as-is (HDR may still work but border can look odd)
+                pass
+            
+            # Two-pass: primary length depends on injected XMP size
+            xmp0 = _prepare_xmp_ultrahdr_motion(
+                self.xmp_bytes,
+                primary_length=0,
+                gainmap_length=len(gainmap_jpeg),
+                video_length=len(watermarked_video_bytes),
+            )
+            tmp_primary = _inject_xmp(watermarked_still_bytes, xmp0)
+
+            xmp1 = _prepare_xmp_ultrahdr_motion(
+                self.xmp_bytes,
+                primary_length=len(tmp_primary),
+                gainmap_length=len(gainmap_jpeg),
+                video_length=len(watermarked_video_bytes),
+            )
+            final_primary = _inject_xmp(watermarked_still_bytes, xmp1)
+
+            output_path = Path(output_path)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_bytes(final_primary + gainmap_jpeg + watermarked_video_bytes)
+            return
+
+        # --- Original SDR motion photo path ---
         jpeg_with_xmp = _inject_xmp(
-            Path(watermarked_path).read_bytes(),
+            watermarked_still_bytes,
             _prepare_xmp(self.xmp_bytes, len(watermarked_video_bytes)),
         )
 
-        # --- 4) Reassemble: JPEG(still+XMP) + MP4 tail ---
         output_path = Path(output_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_bytes(jpeg_with_xmp + watermarked_video_bytes)
@@ -120,14 +182,45 @@ def prepare_motion_photo(image_path: str | Path) -> Optional[MotionPhotoSession]
         return None
 
     workspace = tempfile.TemporaryDirectory()
+    still_bytes = components.photo_bytes
+    ultrahdr_gainmap_jpeg = None
+    ultrahdr_gainmap_xmp = None
+    ultrahdr_primary_size = None
+
+    # --- Try detect Ultra HDR (JPEG_R) in the still part ---
+    # 如果 photo_bytes 是 JPEG_R（primary+gainmap），则：
+    # 1) still_path 写 primary_jpeg
+    # 2) session 缓存 gainmap_jpeg/xmp，finalize 时再封装回去
+    try:
+        from ultrahdr_utils import split_ultrahdr
+        from io import BytesIO
+        from PIL import Image
+
+        parts = split_ultrahdr(components.photo_bytes)
+        if parts.gainmap_jpeg:
+            still_bytes = parts.primary_jpeg
+            ultrahdr_gainmap_jpeg = parts.gainmap_jpeg
+            ultrahdr_gainmap_xmp = parts.gainmap_xmp
+            try:
+                im = Image.open(BytesIO(parts.primary_jpeg))
+                im.load()
+                ultrahdr_primary_size = im.size
+            except Exception:
+                ultrahdr_primary_size = None
+    except Exception:
+        pass
+
     still_path = Path(workspace.name) / f"{path.stem}_motion_still.jpg"
-    still_path.write_bytes(components.photo_bytes)
+    still_path.write_bytes(still_bytes)
 
     return MotionPhotoSession(
         still_path=still_path,
         video_bytes=components.video_bytes,
         xmp_bytes=components.xmp_bytes,
         _workspace=workspace,
+        ultrahdr_gainmap_jpeg=ultrahdr_gainmap_jpeg,
+        ultrahdr_gainmap_xmp=ultrahdr_gainmap_xmp,
+        ultrahdr_primary_size=ultrahdr_primary_size,
     )
 
 
@@ -287,6 +380,111 @@ def _ensure_container_namespaces(xmp_text: str) -> str:
         )
 
     return xmp_text
+
+def _detect_motion_video_mime(xmp_text: str) -> str:
+    m = re.search(r'Item:Semantic="MotionPhoto"[^>]*Item:Mime="([^"]+)"', xmp_text)
+    if m:
+        return m.group(1)
+    m = re.search(r'Item:Mime="(video/[^"]+)"', xmp_text)
+    if m:
+        return m.group(1)
+    return "video/mp4"
+
+
+def _ensure_hdrgm_namespace_and_version(xmp_text: str) -> str:
+    # Ensure hdrgm namespace
+    if "xmlns:hdrgm=" not in xmp_text:
+        xmp_text = re.sub(
+            r"(<rdf:Description\b)",
+            r'\1 xmlns:hdrgm="http://ns.adobe.com/hdr-gain-map/1.0/"',
+            xmp_text,
+            count=1,
+        )
+    # Ensure hdrgm:Version="1.0"
+    if 'hdrgm:Version="' not in xmp_text:
+        xmp_text, _ = re.subn(
+            r"(<rdf:Description\b[^>]*)(>)",
+            r'\1 hdrgm:Version="1.0"\2',
+            xmp_text,
+            count=1,
+        )
+    return xmp_text
+
+
+def _set_container_directory_ultrahdr_motion(
+    xmp_text: str,
+    primary_length: int,
+    gainmap_length: int,
+    video_length: int,
+    video_mime: str,
+) -> str:
+    # Rebuild directory to guarantee item order: Primary -> GainMap -> MotionPhoto (video last)
+    directory = (
+        "      <Container:Directory>\n"
+        "        <rdf:Seq>\n"
+        '          <rdf:li rdf:parseType="Resource">\n'
+        f'            <Container:Item Item:Semantic="Primary" Item:Mime="image/jpeg" Item:Length="{primary_length}" Item:Padding="0"/>\n'
+        "          </rdf:li>\n"
+        '          <rdf:li rdf:parseType="Resource">\n'
+        f'            <Container:Item Item:Semantic="GainMap" Item:Mime="image/jpeg" Item:Length="{gainmap_length}" Item:Padding="0"/>\n'
+        "          </rdf:li>\n"
+        '          <rdf:li rdf:parseType="Resource">\n'
+        f'            <Container:Item Item:Semantic="MotionPhoto" Item:Mime="{video_mime}" Item:Length="{video_length}" Item:Padding="0"/>\n'
+        "          </rdf:li>\n"
+        "        </rdf:Seq>\n"
+        "      </Container:Directory>\n"
+    )
+
+    if "Container:Directory" in xmp_text:
+        xmp_text, n = re.subn(
+            r"<Container:Directory>.*?</Container:Directory>",
+            directory.rstrip("\n"),
+            xmp_text,
+            flags=re.DOTALL,
+            count=1,
+        )
+        if n > 0:
+            return xmp_text
+
+    # If no Container:Directory block, insert into first rdf:Description body
+    xmp_text, _ = re.subn(
+        r"(<rdf:Description\b[^>]*>)",
+        r"\1\n" + directory,
+        xmp_text,
+        count=1,
+    )
+    return xmp_text
+
+
+def _prepare_xmp_ultrahdr_motion(
+    xmp_bytes: bytes,
+    *,
+    primary_length: int,
+    gainmap_length: int,
+    video_length: int,
+) -> bytes:
+    # Start from your existing motion photo updates (legacy attrs + motion item length updates)
+    xmp_text = _prepare_xmp(xmp_bytes, video_length).decode("utf-8", errors="ignore")
+
+    # Ensure namespaces for Container/Item (you already have this helper)
+    xmp_text = _ensure_container_namespaces(xmp_text)
+
+    # Ensure hdrgm on primary XMP so viewers treat it as Ultra HDR
+    xmp_text = _ensure_hdrgm_namespace_and_version(xmp_text)
+
+    # Detect original video mime if present, else default
+    video_mime = _detect_motion_video_mime(xmp_text)
+
+    # Rebuild Container:Directory with correct order and lengths
+    xmp_text = _set_container_directory_ultrahdr_motion(
+        xmp_text,
+        primary_length=primary_length,
+        gainmap_length=gainmap_length,
+        video_length=video_length,
+        video_mime=video_mime,
+    )
+
+    return xmp_text.encode("utf-8")
 def _prepare_xmp(xmp_bytes: bytes, video_length: int) -> bytes:
     """
     Update motion photo metadata to match the *new* appended video length.

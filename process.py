@@ -1,9 +1,11 @@
 import os
 from pathlib import Path
 
+import sys
 import piexif
 from PIL import Image
-import sys
+from io import BytesIO
+
 
 from exif_utils import find_logo, get_manufacturer, get_exif_data, get_camera_model
 from image_utils import *
@@ -14,6 +16,13 @@ from errors import (
     UnsupportedManufacturerError,
     ExifProcessingError,
     UnexpectedProcessingError,
+)
+
+from ultrahdr_utils import (
+    split_ultrahdr,
+    inject_xmp,
+    update_primary_xmp_lengths,
+    expand_gainmap_for_borders,
 )
 from motion_photo_utils import prepare_motion_photo
 from logging_utils import get_logger
@@ -59,7 +68,26 @@ def process_image(
             motion_session = None
 
         logger.info("Received image: %s, output: %s, is_motion: %s, start processing...", image_path, output_path, None!=motion_session)
-        image = Image.open(working_image_path)
+
+        # --- Ultra HDR detect & split (JPEG_R) ---
+        ultrahdr_parts = None
+        try:
+            data_bytes = Path(working_image_path).read_bytes()
+            ultrahdr_parts = split_ultrahdr(data_bytes)
+        except Exception:
+            ultrahdr_parts = None
+
+        # 注意：MotionPhoto + UltraHDR 都是“文件尾部追加数据”，你当前 motion_photo_utils 里还有 exiftool 复制元数据，
+        # 会把我们注入的 hdrgm/container XMP 搞丢。先保守处理：遇到 motion photo 就不走 UltraHDR 分支。
+        if motion_session is not None and ultrahdr_parts is not None:
+            logger.warning("Detected Motion Photo. Ultra HDR preservation for Motion Photo is not enabled in this pipeline; fallback to SDR output.")
+            ultrahdr_parts = None
+
+        if ultrahdr_parts is not None:
+            image = Image.open(BytesIO(ultrahdr_parts.primary_jpeg))
+        else:
+            image = Image.open(working_image_path)
+
         image = reset_image_orientation(image)
 
         exif_bytes = image.info.get('exif')
@@ -102,10 +130,10 @@ def process_image(
 
         camera_info_lines = camera_info.split('\n')
         shooting_info_lines = shooting_info.split('\n')
-        logger.info("Received image, camera_info: %s %s, shooting_info: %s", camera_info_lines[0],  camera_info_lines[1], shooting_info_lines[0])
+        logger.info("Received image, camera_info: %s %s, shooting_info: %s", camera_info_lines[0], camera_info_lines[1], shooting_info_lines[0])
 
 
-        needs_metadata = motion_session is not None
+        needs_metadata = (motion_session is not None) or (ultrahdr_parts is not None)
         logger.info("Generating watermark, current manufacturer: %s", manufacturer)
         generated = generate_watermark_image(
             image,
@@ -133,7 +161,58 @@ def process_image(
                 new_image.save(temp_output, exif=exif_bytes, quality=image_quality)
                 motion_session.finalize(temp_output, Path(output_path), watermark_metadata)
             else:
-                new_image.save(output_path, exif=exif_bytes, quality=image_quality)
+                if ultrahdr_parts is not None:
+                    # watermark_type==4 does not support Ultra HDR preservation
+                    if watermark_type == 4:
+                        logger.warning("watermark_type=4 is not recommended for Ultra HDR preservation; fallback to SDR output.")
+                        new_image.save(output_path, exif=exif_bytes, quality=image_quality)
+                        return True
+
+                    # 1) encode new primary JPEG bytes (no XMP yet)
+                    buf = BytesIO()
+                    save_kwargs = dict(format="JPEG", quality=image_quality, exif=exif_bytes)
+                    icc_profile = image.info.get("icc_profile")
+                    if icc_profile:
+                        save_kwargs["icc_profile"] = icc_profile
+                    new_image.save(buf, **save_kwargs)
+                    new_primary_jpeg = buf.getvalue()
+
+                    # 2) expand/pad gainmap if size changed
+                    gainmap_jpeg = ultrahdr_parts.gainmap_jpeg
+                    if (ultrahdr_parts.gainmap_xmp is not None
+                            and watermark_metadata is not None
+                            and tuple(image.size) != tuple(new_image.size)):
+                        gainmap_jpeg = expand_gainmap_for_borders(
+                            orig_gainmap_jpeg=ultrahdr_parts.gainmap_jpeg,
+                            orig_gainmap_xmp=ultrahdr_parts.gainmap_xmp,
+                            orig_primary_size=image.size,
+                            new_primary_size=new_image.size,
+                            content_box=watermark_metadata["content_box"],
+                        )
+
+                    # 3) update primary XMP lengths and inject
+                    if ultrahdr_parts.primary_xmp is None:
+                        raise UnexpectedProcessingError(detail="Primary XMP missing; cannot rebuild Ultra HDR container.")
+
+                    tmp_primary = inject_xmp(new_primary_jpeg, ultrahdr_parts.primary_xmp)
+                    updated_xmp = update_primary_xmp_lengths(
+                        ultrahdr_parts.primary_xmp,
+                        primary_len=len(tmp_primary),
+                        gainmap_len=len(gainmap_jpeg),
+                    )
+                    final_primary = inject_xmp(new_primary_jpeg, updated_xmp)
+
+                    Path(output_path).write_bytes(final_primary + gainmap_jpeg)
+                    return True
+
+                # --- original path (SDR) ---
+                if motion_session and watermark_metadata and watermark_type != 4:
+                    temp_output = Path(motion_session.still_path.parent) / "watermarked_motion_frame.jpg"
+                    new_image.save(temp_output, exif=exif_bytes, quality=image_quality)
+                    motion_session.finalize(temp_output, Path(output_path), watermark_metadata)
+                else:
+                    new_image.save(output_path, exif=exif_bytes, quality=image_quality)
+                return True
             # comment this, no need notify.
             # if notify:
             #     url = "ntfy_url"
