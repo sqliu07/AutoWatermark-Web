@@ -28,6 +28,57 @@ class CommonConstants:
             'zh': "处理水印时发生未知错误。"
         },
     }
+    
+    BRAND_ALIASES = {
+    "sonycamera": "sony",
+    "sonycorporation": "sony",
+    "nikoncorporation": "nikon",
+    "canoninc": "canon",
+    "canoncamera": "canon",
+    "fujifilmcorporation": "fujifilm",
+    "fujifilmholdings": "fujifilm",
+    "olympuscorporation": "olympus",
+    "panasoniccorporation": "panasonic",
+    "panasoniccorporationimaging": "panasonic",
+    "leicacameraag": "leica",
+    "pentaxricohimaging": "pentax",
+    "xiaomi":  "xiaomi",
+    "apple": "apple",
+    "oppo": "oppo"
+}
+
+class AppConstants:
+    UPLOAD_FOLDER = './upload'
+    ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}
+    MAX_CONTENT_LENGTH = 200 * 1024 * 1024  # 最大文件 200MB
+
+    DEFAULT_RATE_LIMITS = ["2000 per day", "500 per hour"]
+    UPLOAD_RATE_LIMIT = "10 per minute"
+    ZIP_RATE_LIMIT = "10 per minute"
+
+    EXECUTOR_MAX_WORKERS = 4
+    TASK_RETENTION_SECONDS = 3600
+
+    CLEANER_INTERVAL_SECONDS = 10
+    BURN_TTL_SECONDS = 120
+    ZIP_RETENTION_SECONDS = 3600
+    UPLOAD_RETENTION_SECONDS = 86400
+
+    ERROR_MESSAGES = {
+        "invalid_file_type": {
+            'en': "Invalid file type! Please upload a PNG, JPG or JPEG file.",
+            'zh': "无效的文件类型！请上传PNG、JPG或JPEG文件。"
+        },
+        "no_file_uploaded": {
+            'en': "No file uploaded!",
+            'zh': "未上传文件！"
+        },
+        "no_file_selected": {
+            'en': "No file selected!",
+            'zh': "未选择文件！"
+        },
+    }
+
 
 class ImageConstants:
     # 底栏高度占图片高度的比例

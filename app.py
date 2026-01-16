@@ -1,4 +1,4 @@
-from constants import CommonConstants
+from constants import CommonConstants, AppConstants 
 import os
 import time
 import json
@@ -37,7 +37,7 @@ logger = get_logger("autowatermark.app")
 def background_cleaner():
     """全能后台清洁工：清理阅后即焚、过期临时文件、过期的普通上传"""
     while True:
-        time.sleep(10) # 检查频率
+        time.sleep(AppConstants.CLEANER_INTERVAL_SECONDS) # 检查频率
         current_time = time.time()
 
         cleaned_burn = 0
@@ -64,7 +64,7 @@ def background_cleaner():
         for zip_file in glob.glob(zip_pattern):
             try:
                 # 获取文件最后修改时间
-                if current_time - os.path.getmtime(zip_file) > 3600:
+                if current_time - os.path.getmtime(zip_file) > AppConstants.ZIP_RETENTION_SECONDS:
                     os.remove(zip_file)
                     logger.info(f"[Auto-Clean] Deleted old zip: {zip_file}")
                     cleaned_zip += 1
@@ -111,14 +111,14 @@ for handler in logger.handlers:
 app.logger.setLevel(logger.level)
 app.logger.propagate = False
 
-app.config['UPLOAD_FOLDER'] = CommonConstants.UPLOAD_FOLDER
-app.config['ALLOWED_EXTENSIONS'] = {'png', 'jpg', 'jpeg'}
-app.config['MAX_CONTENT_LENGTH'] = 200 * 1024 * 1024  # 最大文件 200MB
+app.config['UPLOAD_FOLDER'] = AppConstants.UPLOAD_FOLDER
+app.config['ALLOWED_EXTENSIONS'] = AppConstants.ALLOWED_EXTENSIONS
+app.config['MAX_CONTENT_LENGTH'] = AppConstants.MAX_CONTENT_LENGTH
 
 limiter = Limiter(
     get_remote_address,
     app=app,
-    default_limits=["2000 per day", "500 per hour"], # 全局默认限制（宽松）
+    default_limits=AppConstants.DEFAULT_RATE_LIMITS, # 全局默认限制（宽松）
     storage_uri="memory://" 
 )
 
@@ -130,23 +130,10 @@ def handle_rate_limit_error(e):
     return jsonify(error=msg), 429
 
 # --- 异步处理配置 ---
-executor = ThreadPoolExecutor(max_workers=4)  # 限制最大并发数为4
+executor = ThreadPoolExecutor(max_workers=AppConstants.EXECUTOR_MAX_WORKERS)   # 限制最大并发数为4
 tasks = {}  # 存储任务状态: {task_id: {'status': '...', 'result': ...}}
 
-ERROR_MESSAGES = {
-    "invalid_file_type": {
-        'en': "Invalid file type! Please upload a PNG, JPG or JPEG file.",
-        'zh': "无效的文件类型！请上传PNG、JPG或JPEG文件。"
-    },
-    "no_file_uploaded": {
-        'en': "No file uploaded!",
-        'zh': "未上传文件！"
-    },
-    "no_file_selected": {
-        'en': "No file selected!",
-        'zh': "未选择文件！"
-    },
-}
+ERROR_MESSAGES = AppConstants.ERROR_MESSAGES
 
 # 语言翻译字典
 try:
@@ -163,7 +150,7 @@ def get_common_message(key, lang='zh'):
     return CommonConstants.ERROR_MESSAGES.get(key, {}).get(lang)
 
 # 确保上传文件夹存在
-os.makedirs(CommonConstants.UPLOAD_FOLDER, exist_ok=True)
+os.makedirs(AppConstants.UPLOAD_FOLDER, exist_ok=True)
 
 def allowed_file(filename):
     """检查文件扩展名是否允许"""
@@ -174,7 +161,7 @@ def cleanup_old_tasks():
     current_time = time.time()
     to_remove = []
     for tid, info in tasks.items():
-        if current_time - info.get('submitted_at', 0) > 3600:
+        if current_time - info.get('submitted_at', 0) > AppConstants.TASK_RETENTION_SECONDS:
             to_remove.append(tid)
     for tid in to_remove:
         tasks.pop(tid, None)
@@ -264,7 +251,7 @@ def index():
     return render_template('index.html')
 
 @app.route('/upload', methods=['POST'])
-@limiter.limit("10 per minute")
+@limiter.limit(AppConstants.UPLOAD_RATE_LIMIT)
 def upload_file():
     # 顺便清理旧任务
     cleanup_old_tasks()
@@ -385,7 +372,7 @@ def upload_file_served(filename):
         with burn_queue_lock:
             # 每次请求（无论是预览还是下载），都将生命周期重置为 120 秒后
             # 这样只要用户还在操作，文件就不会被删
-            burn_queue[file_path] = time.time() + 120
+            burn_queue[file_path] = time.time() + AppConstants.BURN_TTL_SECONDS
 
     # 使用 send_file 正常发送，享受 Nginx/Flask 的静态文件优化
     return send_file(file_path)
@@ -406,7 +393,7 @@ def not_found_page():
     return render_template('image_deleted.html', lang=lang, translations=translations), 404
 
 @app.route('/download_zip', methods=['POST'])
-@limiter.limit("10 per minute")
+@limiter.limit(AppConstants.ZIP_RATE_LIMIT)
 def download_zip():
     data = request.json
     filenames = data.get('filenames', [])

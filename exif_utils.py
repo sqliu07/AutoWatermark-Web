@@ -1,3 +1,4 @@
+from constants import CommonConstants
 from PIL import Image
 import piexif
 import subprocess
@@ -27,25 +28,6 @@ def _build_logo_index():
 
 
 _LOGO_INDEX = _build_logo_index()
-
-_BRAND_ALIASES = {
-    "sonycamera": "sony",
-    "sonycorporation": "sony",
-    "nikoncorporation": "nikon",
-    "canoninc": "canon",
-    "canoncamera": "canon",
-    "fujifilmcorporation": "fujifilm",
-    "fujifilmholdings": "fujifilm",
-    "olympuscorporation": "olympus",
-    "panasoniccorporation": "panasonic",
-    "panasoniccorporationimaging": "panasonic",
-    "leicacameraag": "leica",
-    "pentaxricohimaging": "pentax",
-    "xiaomi":  "xiaomi",
-    "apple": "apple",
-    "oppo": "oppo"
-}
-
 
 def convert_to_int(value):
     if isinstance(value, tuple):
@@ -113,7 +95,7 @@ def find_logo(manufacturer):
     if normalized:
         candidates.append(normalized)
 
-    alias = _BRAND_ALIASES.get(normalized)
+    alias = CommonConstants.BRAND_ALIASES.get(normalized)
     if alias:
         alias_normalized = _normalize_brand(alias)
         if alias_normalized:
