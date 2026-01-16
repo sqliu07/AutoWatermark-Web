@@ -206,20 +206,21 @@ def create_frosted_glass_effect(origin_image):
     ds_w = max(1, canvas_w // 10)
     ds_h = max(1, canvas_h // 10)
 
-    small_bg = origin_image.convert("RGB").resize((ds_w, ds_h), Image.Resampling.BOX)
+    if origin_image.mode != "RGB":
+        small_bg_source = origin_image.convert("RGB")
+    else:
+        small_bg_source = origin_image
+    small_bg = small_bg_source.resize((ds_w, ds_h), Image.Resampling.BOX)
 
-    blurred_bg = small_bg.filter(ImageFilter.BoxBlur(8))
+    final_bg = small_bg.resize(canvas_size, Image.Resampling.BILINEAR)
     del small_bg
-
-    final_bg = blurred_bg.resize(canvas_size, Image.Resampling.BILINEAR)
-    del blurred_bg
 
     final_bg = _darken_rgb_inplace(final_bg, dim_alpha_0_255=20)
 
-    mask = create_rounded_rectangle_mask((ori_w, ori_h), corner_radius, aa=2)
-    foreground = origin_image.convert("RGBA")
-    foreground.putalpha(mask)
-    del mask
+    if origin_image.mode != "RGB":
+        foreground_rgb = origin_image.convert("RGB")
+    else:
+        foreground_rgb = origin_image
 
     pos_x = (canvas_w - ori_w) // 2
     pos_y = (canvas_h - ori_h) // 2
@@ -251,16 +252,46 @@ def create_frosted_glass_effect(origin_image):
     if shadow_blur_radius > 0:
         shadow_patch = shadow_patch.filter(ImageFilter.BoxBlur(shadow_blur_radius))
 
-    final_image = final_bg.convert("RGBA")
+    final_image = final_bg
     del final_bg
 
     final_image.paste(shadow_patch, (x0, y0), shadow_patch)
     del shadow_patch
 
-    final_image.paste(foreground, (pos_x, pos_y - shadow_offset_y), foreground)
-    del foreground
+    fg_x = pos_x
+    fg_y = pos_y - shadow_offset_y
+    corner_radius = max(0, min(corner_radius, ori_w // 2, ori_h // 2))
+    if corner_radius > 0:
+        bg_tl = final_image.crop((fg_x, fg_y, fg_x + corner_radius, fg_y + corner_radius))
+        bg_tr = final_image.crop((fg_x + ori_w - corner_radius, fg_y, fg_x + ori_w, fg_y + corner_radius))
+        bg_bl = final_image.crop((fg_x, fg_y + ori_h - corner_radius, fg_x + corner_radius, fg_y + ori_h))
+        bg_br = final_image.crop((fg_x + ori_w - corner_radius, fg_y + ori_h - corner_radius, fg_x + ori_w, fg_y + ori_h))
 
-    return final_image.convert("RGB")
+        corner_mask = Image.new("L", (corner_radius, corner_radius), 255)
+        corner_draw = ImageDraw.Draw(corner_mask)
+        corner_draw.pieslice((0, 0, corner_radius * 2, corner_radius * 2), 180, 270, fill=0)
+        corner_mask_tr = corner_mask.transpose(Image.FLIP_LEFT_RIGHT)
+        corner_mask_bl = corner_mask.transpose(Image.FLIP_TOP_BOTTOM)
+        corner_mask_br = corner_mask.transpose(Image.ROTATE_180)
+
+    final_image.paste(foreground_rgb, (fg_x, fg_y))
+    del foreground_rgb
+
+    if corner_radius > 0:
+        final_image.paste(bg_tl, (fg_x, fg_y), corner_mask)
+        final_image.paste(bg_tr, (fg_x + ori_w - corner_radius, fg_y), corner_mask_tr)
+        final_image.paste(bg_bl, (fg_x, fg_y + ori_h - corner_radius), corner_mask_bl)
+        final_image.paste(bg_br, (fg_x + ori_w - corner_radius, fg_y + ori_h - corner_radius), corner_mask_br)
+        del bg_tl
+        del bg_tr
+        del bg_bl
+        del bg_br
+        del corner_mask
+        del corner_mask_tr
+        del corner_mask_bl
+        del corner_mask_br
+
+    return final_image
 def generate_watermark_image(origin_image, logo_path, camera_info, shooting_info,
                              font_path_thin, font_path_bold, watermark_type=1,
                              return_metadata=False, **kwargs):

@@ -77,12 +77,6 @@ def process_image(
         except Exception:
             ultrahdr_parts = None
 
-        # 注意：MotionPhoto + UltraHDR 都是“文件尾部追加数据”，你当前 motion_photo_utils 里还有 exiftool 复制元数据，
-        # 会把我们注入的 hdrgm/container XMP 搞丢。先保守处理：遇到 motion photo 就不走 UltraHDR 分支。
-        if motion_session is not None and ultrahdr_parts is not None:
-            logger.warning("Detected Motion Photo. Ultra HDR preservation for Motion Photo is not enabled in this pipeline; fallback to SDR output.")
-            ultrahdr_parts = None
-
         if ultrahdr_parts is not None:
             image = Image.open(BytesIO(ultrahdr_parts.primary_jpeg))
         else:
