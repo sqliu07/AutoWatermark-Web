@@ -203,8 +203,8 @@ def create_frosted_glass_effect(origin_image):
     canvas_h = int(ori_h * bg_scale)
     canvas_size = (canvas_w, canvas_h)
 
-    ds_w = max(1, canvas_w // 10)
-    ds_h = max(1, canvas_h // 10)
+    ds_w = max(1, canvas_w // 100)
+    ds_h = max(1, canvas_h // 100)
 
     if origin_image.mode != "RGB":
         small_bg_source = origin_image.convert("RGB")

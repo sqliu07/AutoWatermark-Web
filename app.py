@@ -25,12 +25,24 @@ from logging_utils import get_logger
 
 burn_queue = {}
 burn_queue_lock = threading.Lock()
+metrics_lock = threading.Lock()
+metrics = {
+    'total_tasks': 0,
+    'succeeded_tasks': 0,
+    'failed_tasks': 0,
+}
+
+logger = get_logger("autowatermark.app")
 
 def background_cleaner():
     """全能后台清洁工：清理阅后即焚、过期临时文件、过期的普通上传"""
     while True:
         time.sleep(10) # 检查频率
         current_time = time.time()
+
+        cleaned_burn = 0
+        cleaned_zip = 0
+        cleaned_stale = 0
 
         # --- 1. 处理阅后即焚 (保留原有逻辑) ---
         to_burn = []
@@ -42,6 +54,7 @@ def background_cleaner():
 
         for fp in to_burn:
             cleanup_file_and_original(fp) # 封装删除逻辑
+            cleaned_burn += 1
 
         # --- 2. 清理遗留的 ZIP 压缩包 (新增) ---
         # 假设 ZIP 文件保留 1 小时
@@ -54,6 +67,7 @@ def background_cleaner():
                 if current_time - os.path.getmtime(zip_file) > 3600:
                     os.remove(zip_file)
                     logger.info(f"[Auto-Clean] Deleted old zip: {zip_file}")
+                    cleaned_zip += 1
             except OSError:
                 pass
 
@@ -67,8 +81,17 @@ def background_cleaner():
                 if os.path.isfile(file_path) and (current_time - os.path.getmtime(file_path) > 86400):
                     os.remove(file_path)
                     logger.info(f"[Auto-Clean] Deleted stale file: {filename}")
+                    cleaned_stale += 1
             except OSError:
                 pass
+
+        if cleaned_burn or cleaned_zip or cleaned_stale:
+            logger.info(
+                "[Auto-Clean] Summary - burn: %s, zip: %s, stale: %s",
+                cleaned_burn,
+                cleaned_zip,
+                cleaned_stale,
+            )
 
 def cleanup_file_and_original(file_path):
     """封装的删除单个文件及其原图的逻辑"""
@@ -80,8 +103,6 @@ def cleanup_file_and_original(file_path):
 
 # 启动后台线程 (Daemon 线程会随主程序退出而退出)
 threading.Thread(target=background_cleaner, daemon=True).start()
-
-logger = get_logger("autowatermark.app")
 
 app = Flask(__name__, static_url_path='/static', static_folder='./static')
 app.logger.handlers.clear()
@@ -171,6 +192,7 @@ def detect_manufacturer(filepath):
 
 def background_process(task_id, filepath, lang, watermark_type, image_quality, burn_after_read, logo_preference):
     """后台执行图片处理，并更新任务状态"""
+    start_time = time.time()
     try:
         tasks[task_id]['status'] = 'processing'
 
@@ -194,6 +216,9 @@ def background_process(task_id, filepath, lang, watermark_type, image_quality, b
             'processed_image': f'/upload/{processed_filename}?lang={lang}&burn={burn_after_read}'
         }
 
+        with metrics_lock:
+            metrics['succeeded_tasks'] += 1
+
     except WatermarkError as err:
         message_key = err.get_message_key()
         detail = err.get_detail()
@@ -204,11 +229,30 @@ def background_process(task_id, filepath, lang, watermark_type, image_quality, b
         tasks[task_id]['status'] = 'failed'
         tasks[task_id]['error'] = message
         logger.warning(f"Task {task_id} failed: {message}")
+        with metrics_lock:
+            metrics['failed_tasks'] += 1
 
-    except Exception as exc:
+    except Exception:
         logger.exception(f"Unexpected error in background task {task_id}")
         tasks[task_id]['status'] = 'failed'
         tasks[task_id]['error'] = get_common_message('unexpected_error', lang)
+        with metrics_lock:
+            metrics['failed_tasks'] += 1
+
+    finally:
+        duration = time.time() - start_time
+        with metrics_lock:
+            total = metrics['total_tasks']
+            failed = metrics['failed_tasks']
+        failure_rate = (failed / total) if total else 0
+        queue_length = sum(1 for info in tasks.values() if info.get('status') in {'queued', 'processing'})
+        logger.info(
+            "Task %s finished in %.2f s | queue=%s | failure_rate=%.2f%%",
+            task_id,
+            duration,
+            queue_length,
+            failure_rate * 100,
+        )
 
 @app.errorhandler(404)
 def not_found_error(error):
@@ -281,6 +325,19 @@ def upload_file():
             'status': 'queued',
             'submitted_at': time.time()
         }
+
+        with metrics_lock:
+            metrics['total_tasks'] += 1
+            total = metrics['total_tasks']
+            failed = metrics['failed_tasks']
+        failure_rate = (failed / total) if total else 0
+        queue_length = sum(1 for info in tasks.values() if info.get('status') == 'queued')
+        logger.info(
+            "Queued task %s | queue=%s | failure_rate=%.2f%%",
+            task_id,
+            queue_length,
+            failure_rate * 100,
+        )
 
         executor.submit(
             background_process, 
