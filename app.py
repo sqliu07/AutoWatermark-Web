@@ -185,6 +185,18 @@ def background_process(task_id, filepath, lang, watermark_type, image_quality, b
     try:
         with tasks_lock:
             tasks[task_id]['status'] = 'processing'
+            tasks[task_id]['progress'] = max(tasks[task_id].get('progress', 0), 0.01)
+            tasks[task_id]['stage'] = 'processing'
+
+        def update_progress(progress, stage=None):
+            with tasks_lock:
+                task = tasks.get(task_id)
+                if not task:
+                    return
+                current = task.get('progress', 0)
+                task['progress'] = max(current, min(progress, 1))
+                if stage:
+                    task['stage'] = stage
 
         # 调用 process.py 中的核心逻辑
         process_image(
@@ -193,6 +205,7 @@ def background_process(task_id, filepath, lang, watermark_type, image_quality, b
             watermark_type=watermark_type,
             image_quality=image_quality,
             logo_preference=logo_preference,
+            progress_callback=update_progress,
         )
 
         # 计算生成的文件名
@@ -206,6 +219,8 @@ def background_process(task_id, filepath, lang, watermark_type, image_quality, b
             tasks[task_id]['result'] = {
                 'processed_image': f'/upload/{processed_filename}?lang={lang}&burn={burn_after_read}'
             }
+            tasks[task_id]['progress'] = 1.0
+            tasks[task_id]['stage'] = 'done'
 
         with metrics_lock:
             metrics['succeeded_tasks'] += 1
@@ -220,6 +235,8 @@ def background_process(task_id, filepath, lang, watermark_type, image_quality, b
         with tasks_lock:
             tasks[task_id]['status'] = 'failed'
             tasks[task_id]['error'] = message
+            tasks[task_id]['progress'] = 1.0
+            tasks[task_id]['stage'] = 'failed'
         logger.warning(f"Task {task_id} failed: {message}")
         with metrics_lock:
             metrics['failed_tasks'] += 1
@@ -229,6 +246,8 @@ def background_process(task_id, filepath, lang, watermark_type, image_quality, b
         with tasks_lock:
             tasks[task_id]['status'] = 'failed'
             tasks[task_id]['error'] = get_common_message('unexpected_error', lang)
+            tasks[task_id]['progress'] = 1.0
+            tasks[task_id]['stage'] = 'failed'
         with metrics_lock:
             metrics['failed_tasks'] += 1
 
@@ -321,7 +340,9 @@ def upload_file():
         with tasks_lock:
             tasks[task_id] = {
                 'status': 'queued',
-                'submitted_at': time.time()
+                'submitted_at': time.time(),
+                'progress': 0.0,
+                'stage': 'queued',
             }
 
         with metrics_lock:

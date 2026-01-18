@@ -232,6 +232,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const quality = document.querySelector('input[name="image_quality"]:checked').value;
         const burn = document.getElementById('burn_after_read').checked ? '1' : '0';
 
+        function updateSingleProgress(progress) {
+            const percent = Math.max(0, Math.min(100, Math.round(progress * 100)));
+            progressBar.style.width = `${percent}%`;
+            progressPercent.textContent = `${percent}%`;
+        }
+
         function buildFormData(file, logoPreference) {
             const formData = new FormData();
             formData.append('file', file);
@@ -297,10 +303,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         function pollTask(taskId, fileName) {
+            const pollIntervalMs = total === 1 ? 200 : 1000;
             const interval = setInterval(() => {
                 fetch(`/status/${taskId}`)
                     .then(res => res.json())
                     .then(task => {
+                        if (total === 1 && typeof task.progress === 'number') {
+                            updateSingleProgress(task.progress);
+                        }
                         if (task.status === 'succeeded') {
                             clearInterval(interval);
                             const imgUrl = task.result.processed_image;
@@ -323,7 +333,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         renderError(fileName, 'Polling Error');
                         markCompleted();
                     });
-            }, 1000);
+            }, pollIntervalMs);
         }
     });
 

@@ -42,6 +42,10 @@ def _enforce_image_pixel_limit(image):
         detail = f"{image.width}x{image.height}"
         raise ImageTooLargeError(detail=detail)
 
+def _report_progress(progress_callback, progress, stage=None):
+    if progress_callback:
+        progress_callback(progress, stage)
+
 def process_image(
     image_path,
     lang='zh',
@@ -50,6 +54,7 @@ def process_image(
     notify=False,
     preview=False,
     logo_preference="xiaomi",
+    progress_callback=None,
 ):
     """
     Adds a watermark to the given image.
@@ -61,6 +66,7 @@ def process_image(
         image_quality (int, optional): The quality of the output image. Defaults to 95.
         notify (bool, optional): Whether to send a notification. Defaults to False.
         preview (bool, optional): Whether to return the image object for preview. Defaults to False.
+        progress_callback (callable, optional): Callback for progress updates.
 
     Returns:
         bool or Image: True if successful, or the image object if preview is True.
@@ -75,6 +81,13 @@ def process_image(
             working_image_path = str(motion_session.still_path)
         else:
             motion_session = None
+
+        progress_step = 0
+        progress_total = 5
+        def advance_progress(stage):
+            nonlocal progress_step
+            progress_step += 1
+            _report_progress(progress_callback, min(progress_step / progress_total, 1.0), stage)
 
         logger.info("Received image: %s, output: %s, is_motion: %s, start processing...", image_path, output_path, None!=motion_session)
 
@@ -93,6 +106,7 @@ def process_image(
 
         image = reset_image_orientation(image)
         _enforce_image_pixel_limit(image)
+        advance_progress("loaded")
 
         exif_bytes = image.info.get('exif')
         exif_dict = None
@@ -130,6 +144,7 @@ def process_image(
              raise ExifProcessingError()
 
         camera_info, shooting_info = result
+        advance_progress("metadata")
 
 
         camera_info_lines = camera_info.split('\n')
@@ -150,6 +165,7 @@ def process_image(
             return_metadata=needs_metadata,
         )
         logger.info("Finished generating watermark for %s", image_path)
+        advance_progress("rendered")
 
         if needs_metadata:
             new_image, watermark_metadata = generated
@@ -160,6 +176,7 @@ def process_image(
         if preview:
             return new_image
         else:
+            advance_progress("saving")
             if motion_session and watermark_metadata and watermark_type != 4:
                 temp_output = Path(motion_session.still_path.parent) / "watermarked_motion_frame.jpg"
                 new_image.save(temp_output, exif=exif_bytes, quality=image_quality)
@@ -170,6 +187,7 @@ def process_image(
                     if watermark_type == 4:
                         logger.warning("watermark_type=4 is not recommended for Ultra HDR preservation; fallback to SDR output.")
                         new_image.save(output_path, exif=exif_bytes, quality=image_quality)
+                        advance_progress("saved")
                         return True
 
                     # 1) encode new primary JPEG bytes (no XMP yet)
@@ -207,6 +225,7 @@ def process_image(
                     final_primary = inject_xmp(new_primary_jpeg, updated_xmp)
 
                     Path(output_path).write_bytes(final_primary + gainmap_jpeg)
+                    advance_progress("saved")
                     return True
 
                 # --- original path (SDR) ---
@@ -216,6 +235,7 @@ def process_image(
                     motion_session.finalize(temp_output, Path(output_path), watermark_metadata)
                 else:
                     new_image.save(output_path, exif=exif_bytes, quality=image_quality)
+                advance_progress("saved")
                 return True
             # comment this, no need notify.
             # if notify:
