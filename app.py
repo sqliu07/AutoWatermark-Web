@@ -391,16 +391,6 @@ def upload_file_served(filename):
 
     # 使用 send_file 正常发送，享受 Nginx/Flask 的静态文件优化
     return send_file(file_path)
-    if not os.path.exists(file_path):
-        accept = request.headers.get("Accept", "")
-        if "text/html" in accept:
-            return render_template(
-                'image_deleted.html', lang=lang, translations=translations
-            ), 404
-        else:
-            return jsonify(error="File not found"), 404
-
-    return send_file(file_path)
 
 @app.route('/not_found')
 def not_found_page():

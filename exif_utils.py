@@ -5,8 +5,11 @@ import subprocess
 import re
 from pathlib import Path
 
+from logging_utils import get_logger
+
 
 LOGO_DIR = Path("./logos")
+logger = get_logger("autowatermark.exif_utils")
 
 
 def _normalize_brand(value):
@@ -31,7 +34,13 @@ _LOGO_INDEX = _build_logo_index()
 
 def convert_to_int(value):
     if isinstance(value, tuple):
-        return int(value[0])
+        if len(value) >= 2:
+            numerator = value[0]
+            denominator = value[1]
+            if denominator:
+                return numerator / denominator
+            return 0
+        return int(value[0]) if value else 0
     if isinstance(value, int):
         return value
     if isinstance(value, str):
@@ -197,13 +206,20 @@ def get_exif_data(image_path, exif_dict=None):
         if str(lens_info) == "Unknown Lens":
             exif_ids = ["-LensModel", "-Lens", "-LensType"]
             lens_info = "Unknown Lens"
-            exif_tool_path = "./3rdparty/exiftool/exiftool"
-            for exif_id in exif_ids:
-                output = subprocess.check_output([exif_tool_path, exif_id, image_path])
-                output = output.decode().strip().split(":")
-                if len(output) > 1:
-                    lens_info = output[1].strip()
-                    break
+            exif_tool_path = Path("./3rdparty/exiftool/exiftool")
+            if exif_tool_path.exists():
+                for exif_id in exif_ids:
+                    try:
+                        output = subprocess.check_output(
+                            [str(exif_tool_path), exif_id, image_path],
+                            stderr=subprocess.STDOUT,
+                        )
+                    except Exception:
+                        continue
+                    output = output.decode(errors='ignore').strip().split(":")
+                    if len(output) > 1:
+                        lens_info = output[1].strip()
+                        break
 
         if 'f' in str(lens_info):
             lens_info = str(lens_info).replace('f', '\u0192')  # \u0192 resembles the aperture symbol seen on iOS.

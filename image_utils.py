@@ -203,8 +203,8 @@ def create_frosted_glass_effect(origin_image):
     canvas_h = int(ori_h * bg_scale)
     canvas_size = (canvas_w, canvas_h)
 
-    ds_w = max(1, canvas_w // 100)
-    ds_h = max(1, canvas_h // 100)
+    ds_w = max(1, canvas_w // 10)
+    ds_h = max(1, canvas_h // 10)
 
     if origin_image.mode != "RGB":
         small_bg_source = origin_image.convert("RGB")
@@ -212,7 +212,9 @@ def create_frosted_glass_effect(origin_image):
         small_bg_source = origin_image
     small_bg = small_bg_source.resize((ds_w, ds_h), Image.Resampling.BOX)
 
-    final_bg = small_bg.resize(canvas_size, Image.Resampling.BILINEAR)
+    blurred_bg = small_bg.filter(ImageFilter.GaussianBlur(8))
+    # 放大铺满
+    final_bg = blurred_bg.resize(canvas_size, Image.Resampling.LANCZOS)
     del small_bg
 
     final_bg = _darken_rgb_inplace(final_bg, dim_alpha_0_255=20)
@@ -411,8 +413,13 @@ def generate_watermark_image(origin_image, logo_path, camera_info, shooting_info
         right_y = int(footer_center_y - right_group.height / 2)
         final_image.paste(right_group, (right_x, right_y), right_group)
 
-    if new_width % 2 != 0 or new_height % 2 != 0:
-        final_image = ImageOps.expand(final_image, border=(0, 0, new_width % 2, new_height % 2), fill='white')
+    final_width, final_height = final_image.size
+    if final_width % 2 != 0 or final_height % 2 != 0:
+        final_image = ImageOps.expand(
+            final_image,
+            border=(0, 0, final_width % 2, final_height % 2),
+            fill='white',
+        )
 
     if return_metadata:
         content_box = (border_left, border_top, border_left + ori_width, border_top + ori_height)
