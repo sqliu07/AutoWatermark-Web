@@ -9,13 +9,14 @@ from io import BytesIO
 
 from exif_utils import find_logo, get_manufacturer, get_exif_data, get_camera_model
 from image_utils import *
-from constants import CommonConstants
+from constants import CommonConstants, ImageConstants
 from errors import (
     WatermarkError,
     MissingExifDataError,
     UnsupportedManufacturerError,
     ExifProcessingError,
     UnexpectedProcessingError,
+    ImageTooLargeError,
 )
 
 from ultrahdr_utils import (
@@ -32,6 +33,14 @@ logger = get_logger("autowatermark.process")
 
 def get_message(key, lang='zh'):
     return CommonConstants.ERROR_MESSAGES.get(key, {}).get(lang)
+
+def _enforce_image_pixel_limit(image):
+    max_pixels = ImageConstants.MAX_IMAGE_PIXELS
+    image_size = image.width * image.height
+    logger.info("Image size: %dx%d=%d, max allowed pixels: %s", image.width, image.height, image_size, str(max_pixels) if max_pixels else "unlimited")
+    if max_pixels and image_size >= max_pixels:
+        detail = f"{image.width}x{image.height}"
+        raise ImageTooLargeError(detail=detail)
 
 def process_image(
     image_path,
@@ -83,6 +92,7 @@ def process_image(
             image = Image.open(working_image_path)
 
         image = reset_image_orientation(image)
+        _enforce_image_pixel_limit(image)
 
         exif_bytes = image.info.get('exif')
         exif_dict = None

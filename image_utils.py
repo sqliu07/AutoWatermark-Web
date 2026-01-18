@@ -4,7 +4,7 @@ from functools import lru_cache
 from PIL import Image, ImageDraw, ImageFont, ImageOps, ImageFilter, ImageStat
 from logging_utils import get_logger
 
-Image.MAX_IMAGE_PIXELS = None  # Disable DecompressionBombError
+Image.MAX_IMAGE_PIXELS = ImageConstants.MAX_IMAGE_PIXELS
 
 logger = get_logger("autowatermark.image_utils")
 

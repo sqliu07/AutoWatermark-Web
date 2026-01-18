@@ -32,3 +32,8 @@ class ExifProcessingError(WatermarkError):
 class UnexpectedProcessingError(WatermarkError):
     def __init__(self, detail=None):
         super().__init__("unexpected_error", detail=detail)
+
+
+class ImageTooLargeError(WatermarkError):
+    def __init__(self, detail=None):
+        super().__init__("image_too_large", detail=detail)

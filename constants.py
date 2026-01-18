@@ -27,6 +27,10 @@ class CommonConstants:
             'en': "An unexpected error occurred while processing the watermark.",
             'zh': "处理水印时发生未知错误。"
         },
+        "image_too_large": {
+            'en': "Image size exceeds 100 million pixels, too large to process!",
+            'zh': "图片超过一亿像素，尺寸过大，无法处理！"
+        },
     }
     
     BRAND_ALIASES = {
@@ -81,6 +85,8 @@ class AppConstants:
 
 
 class ImageConstants:
+    MAX_IMAGE_PIXELS = 100_000_000
+
     # 底栏高度占图片高度的比例
     FOOTER_RATIO_LANDSCAPE = 0.09  # 横图 9%
     FOOTER_RATIO_PORTRAIT = 0.08   # 竖图 8%

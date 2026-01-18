@@ -26,6 +26,7 @@ from logging_utils import get_logger
 burn_queue = {}
 burn_queue_lock = threading.Lock()
 metrics_lock = threading.Lock()
+tasks_lock = threading.Lock()
 metrics = {
     'total_tasks': 0,
     'succeeded_tasks': 0,
@@ -160,11 +161,12 @@ def cleanup_old_tasks():
     """清理超过 1 小时的旧任务，防止内存泄漏"""
     current_time = time.time()
     to_remove = []
-    for tid, info in tasks.items():
-        if current_time - info.get('submitted_at', 0) > AppConstants.TASK_RETENTION_SECONDS:
-            to_remove.append(tid)
-    for tid in to_remove:
-        tasks.pop(tid, None)
+    with tasks_lock:
+        for tid, info in list(tasks.items()):
+            if current_time - info.get('submitted_at', 0) > AppConstants.TASK_RETENTION_SECONDS:
+                to_remove.append(tid)
+        for tid in to_remove:
+            tasks.pop(tid, None)
 
 def detect_manufacturer(filepath):
     try:
@@ -181,7 +183,8 @@ def background_process(task_id, filepath, lang, watermark_type, image_quality, b
     """后台执行图片处理，并更新任务状态"""
     start_time = time.time()
     try:
-        tasks[task_id]['status'] = 'processing'
+        with tasks_lock:
+            tasks[task_id]['status'] = 'processing'
 
         # 调用 process.py 中的核心逻辑
         process_image(
@@ -198,10 +201,11 @@ def background_process(task_id, filepath, lang, watermark_type, image_quality, b
         processed_filename = f"{original_name}_watermark{extension}"
 
         # 成功：更新状态并保存结果 URL
-        tasks[task_id]['status'] = 'succeeded'
-        tasks[task_id]['result'] = {
-            'processed_image': f'/upload/{processed_filename}?lang={lang}&burn={burn_after_read}'
-        }
+        with tasks_lock:
+            tasks[task_id]['status'] = 'succeeded'
+            tasks[task_id]['result'] = {
+                'processed_image': f'/upload/{processed_filename}?lang={lang}&burn={burn_after_read}'
+            }
 
         with metrics_lock:
             metrics['succeeded_tasks'] += 1
@@ -213,16 +217,18 @@ def background_process(task_id, filepath, lang, watermark_type, image_quality, b
         if message_key == 'unsupported_manufacturer' and detail:
             message = f"{message} ({detail})"
 
-        tasks[task_id]['status'] = 'failed'
-        tasks[task_id]['error'] = message
+        with tasks_lock:
+            tasks[task_id]['status'] = 'failed'
+            tasks[task_id]['error'] = message
         logger.warning(f"Task {task_id} failed: {message}")
         with metrics_lock:
             metrics['failed_tasks'] += 1
 
     except Exception:
         logger.exception(f"Unexpected error in background task {task_id}")
-        tasks[task_id]['status'] = 'failed'
-        tasks[task_id]['error'] = get_common_message('unexpected_error', lang)
+        with tasks_lock:
+            tasks[task_id]['status'] = 'failed'
+            tasks[task_id]['error'] = get_common_message('unexpected_error', lang)
         with metrics_lock:
             metrics['failed_tasks'] += 1
 
@@ -232,7 +238,11 @@ def background_process(task_id, filepath, lang, watermark_type, image_quality, b
             total = metrics['total_tasks']
             failed = metrics['failed_tasks']
         failure_rate = (failed / total) if total else 0
-        queue_length = sum(1 for info in tasks.values() if info.get('status') in {'queued', 'processing'})
+        with tasks_lock:
+            queue_length = sum(
+                1 for info in tasks.values()
+                if info.get('status') in {'queued', 'processing'}
+            )
         logger.info(
             "Task %s finished in %.2f s | queue=%s | failure_rate=%.2f%%",
             task_id,
@@ -308,17 +318,19 @@ def upload_file():
 
         # --- 异步处理逻辑 ---
         task_id = str(uuid.uuid4())
-        tasks[task_id] = {
-            'status': 'queued',
-            'submitted_at': time.time()
-        }
+        with tasks_lock:
+            tasks[task_id] = {
+                'status': 'queued',
+                'submitted_at': time.time()
+            }
 
         with metrics_lock:
             metrics['total_tasks'] += 1
             total = metrics['total_tasks']
             failed = metrics['failed_tasks']
         failure_rate = (failed / total) if total else 0
-        queue_length = sum(1 for info in tasks.values() if info.get('status') == 'queued')
+        with tasks_lock:
+            queue_length = sum(1 for info in tasks.values() if info.get('status') == 'queued')
         logger.info(
             "Queued task %s | queue=%s | failure_rate=%.2f%%",
             task_id,
@@ -344,7 +356,10 @@ def upload_file():
 
 @app.route('/status/<task_id>', methods=['GET'])
 def get_task_status(task_id):
-    task = tasks.get(task_id)
+    with tasks_lock:
+        task = tasks.get(task_id)
+        if task is not None:
+            task = dict(task)
     if not task:
         return jsonify({'status': 'unknown'}), 404
     return jsonify(task)
