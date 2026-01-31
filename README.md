@@ -93,6 +93,25 @@ AutoWatermark Web 旨在为摄影师和摄影爱好者提供一个自动化、�
         ```
 ---
 
+## 🧪 自动化测试
+
+运行测试：
+```bash
+pytest -q
+```
+
+或者使用脚本（构建发布会自动调用）：
+```bash
+./scripts/run_tests.sh
+```
+
+测试素材放在 `tests/fixtures/`：
+- `sample_with_exif.jpg`：普通带 EXIF 的照片（主流程）
+- `motion_photo.jpg`：带 Motion Photo 的 JPEG（需 ffmpeg）
+- `ultrahdr.jpg`：Ultra HDR (JPEG_R) 示例
+- `no_exif.jpg`：无 EXIF 的照片（用于报错分支）
+- `unsupported_brand.jpg`：EXIF 中品牌不在 `logos/` 的照片
+
 ## 📷 支持的相机品牌 (部分)
 
 程序内置了复杂的映射逻辑 (`exif_utils.py`) 来匹配各品牌 Logo：

@@ -39,7 +39,7 @@ RUN npm uninstall -g javascript-obfuscator && \
     apt-get clean
 
 # 安装 Python 依赖
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements-deploy.txt
 
 # 清理 ExifTool 的垃圾文件
 RUN sed -i 's/\r$//' /app/3rdparty/exiftool/exiftool && \
