@@ -4,3 +4,12 @@ venv/
 experiments/
 logs/
 test/
+tests/fixtures/*.jpg
+tests/fixtures/*.jpeg
+tests/fixtures/*.png
+tests/fixtures/*.heic
+tests/fixtures/*.heif
+tests/fixtures/*.webp
+tests/fixtures/*.tif
+tests/fixtures/*.tiff
+tests/fixtures/*.bmp
