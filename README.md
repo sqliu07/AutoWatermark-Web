@@ -35,7 +35,7 @@ AutoWatermark Web 旨在为摄影师和摄影爱好者提供一个自动化、�
 * **Web 服务**：提供上传、预览、下载的完整使用闭环。
 * **图像处理**：自动解析 EXIF 并生成品牌化水印相框。
 * **并发处理**：支持多图并发与进度反馈，提升处理效率。
-* **前端交互**：原生 Web 界面，操作简单直观。
+* **前端交互**：提供 Vue + Ant Design Vue 的前后端分离界面。
 
 ---
 
@@ -91,6 +91,21 @@ AutoWatermark Web 旨在为摄影师和摄影爱好者提供一个自动化、�
         # 启动 4 个 Worker 进程
         gunicorn -w 4 -b 0.0.0.0:5000 app:app
         ```
+
+### 前端开发（Vue + Ant Design Vue）
+
+项目新增 `frontend/` 目录用于前后端分离的界面开发（Vite + Vue3 + Ant Design Vue）。
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+如需生产构建：
+```bash
+npm run build
+```
 ---
 
 ## 🧪 自动化测试
