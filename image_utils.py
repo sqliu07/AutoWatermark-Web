@@ -1,4 +1,5 @@
-from constants import ImageConstants
+from constants import CommonConstants, ImageConstants
+from services.watermark_styles import get_style, load_cached_watermark_styles
 
 from functools import lru_cache
 from PIL import Image, ImageDraw, ImageFont, ImageOps, ImageFilter, ImageStat
@@ -294,124 +295,219 @@ def create_frosted_glass_effect(origin_image):
         del corner_mask_br
 
     return final_image
+
+
+def _padding_from_border_left(_footer_height, border_left, _style):
+    return border_left
+
+
+def _padding_from_footer_ratio(footer_height, _border_left, style):
+    return int(footer_height * style["padding_x_ratio"])
+
+
+_PADDING_X_RESOLVERS = {
+    "border_left": _padding_from_border_left,
+    "footer_ratio": _padding_from_footer_ratio,
+}
+
+
+def _render_background_white(origin_image, new_width, new_height, border_left, border_top):
+    final_image = Image.new("RGB", (new_width, new_height), "white")
+    final_image.paste(origin_image, (border_left, border_top))
+    return final_image
+
+
+def _render_background_frosted(origin_image, _new_width, _new_height, _border_left, _border_top):
+    return create_frosted_glass_effect(origin_image)
+
+
+_BACKGROUND_RENDERERS = {
+    "white": _render_background_white,
+    "frosted": _render_background_frosted,
+}
+
+
+def _text_color_black(_origin_image):
+    return "black"
+
+
+def _text_color_auto_contrast(origin_image):
+    return "black" if is_image_bright(origin_image) else "white"
+
+
+_TEXT_COLOR_RESOLVERS = {
+    "black": _text_color_black,
+    "auto_contrast": _text_color_auto_contrast,
+}
+
+
+def _center_position_footer_center(context):
+    center_group = context["center_group"]
+    pos_x = (context["new_width"] - center_group.width) // 2
+    pos_y = int(context["footer_center_y"] - center_group.height / 2)
+    return pos_x, pos_y
+
+
+def _center_position_bottom_offset(context):
+    center_group = context["center_group"]
+    style = context["style"]
+    landscape = context["landscape"]
+    final_image = context["final_image"]
+
+    pos_x = (final_image.width - center_group.width) // 2
+    if landscape:
+        divisor = int(style["bottom_offset_landscape_divisor"])
+    else:
+        divisor = int(style["bottom_offset_portrait_divisor"])
+    divisor = max(1, divisor)
+    pos_y = final_image.height - center_group.height - max(1, center_group.height // divisor)
+    return pos_x, pos_y
+
+
+_CENTER_POSITION_RESOLVERS = {
+    "footer_center": _center_position_footer_center,
+    "bottom_offset": _center_position_bottom_offset,
+}
+
+
+def _render_layout_center_stack(final_image, context):
+    style = context["style"]
+    footer_height = context["footer_height"]
+    logo_path = context["logo_path"]
+    shooting_info = context["shooting_info"]
+    font_path_bold = context["font_path_bold"]
+    font_size = context["font_size"]
+    origin_image = context["origin_image"]
+
+    logo_target_height = int(footer_height * style["center_logo_ratio"])
+    logo = Image.open(logo_path).convert("RGBA")
+    logo = image_resize(logo, logo_target_height)
+
+    text_color = _TEXT_COLOR_RESOLVERS[style["text_color_mode"]](origin_image)
+    center_text = text_to_image(shooting_info[0], font_path_bold, font_size, text_color)
+
+    v_gap = int(footer_height * style["center_gap_ratio"])
+    total_group_h = logo.height + v_gap + center_text.height
+    total_group_w = max(logo.width, center_text.width)
+    center_group = Image.new("RGBA", (total_group_w, total_group_h), (255, 255, 255, 0))
+
+    logo_x = (total_group_w - logo.width) // 2
+    center_group.paste(logo, (logo_x, 0), logo)
+
+    text_x = (total_group_w - center_text.width) // 2
+    center_group.paste(center_text, (text_x, logo.height + v_gap), center_text)
+
+    position_context = dict(context)
+    position_context["center_group"] = center_group
+    pos_x, pos_y = _CENTER_POSITION_RESOLVERS[style["position_mode"]](position_context)
+    final_image.paste(center_group, (pos_x, pos_y), center_group)
+
+
+def _render_layout_split_lr(final_image, context):
+    style = context["style"]
+    footer_height = context["footer_height"]
+    logo_path = context["logo_path"]
+    shooting_info_block = context["shooting_info_block"]
+    left_block = context["left_block"]
+    footer_center_y = context["footer_center_y"]
+    padding_x = context["padding_x"]
+    new_width = context["new_width"]
+
+    right_group = create_right_block(
+        logo_path,
+        shooting_info_block,
+        footer_height,
+        with_line=style["right_divider_line"],
+    )
+
+    left_x = padding_x
+    left_y = int(footer_center_y - left_block.height / 2)
+    final_image.paste(left_block, (left_x, left_y), left_block)
+
+    right_x = new_width - padding_x - right_group.width
+    right_y = int(footer_center_y - right_group.height / 2)
+    final_image.paste(right_group, (right_x, right_y), right_group)
+
+
+_LAYOUT_RENDERERS = {
+    "center_stack": _render_layout_center_stack,
+    "split_lr": _render_layout_split_lr,
+}
+
+
 def generate_watermark_image(origin_image, logo_path, camera_info, shooting_info,
                              font_path_thin, font_path_bold, watermark_type=1,
                              return_metadata=False, **kwargs):
+    style_config = kwargs.get("style_config")
+    style = kwargs.get("style")
+    if style_config is None:
+        style_config = load_cached_watermark_styles(CommonConstants.WATERMARK_STYLE_CONFIG_PATH)
+    if style is None:
+        style = get_style(style_config, watermark_type)
+    if not style or not style["enabled"]:
+        raise ValueError(f"Invalid watermark style: {watermark_type}")
 
-    logger.info("Generating watermark, current watermark type: %s", watermark_type)
+    global_style = style_config["global"]
+
+    logger.info("Generating watermark, current watermark type: %s", style["style_id"])
     ori_width, ori_height = origin_image.size
+    landscape = is_landscape(origin_image)
 
-    # 区分横竖构图的 footer 高度和字号策略
-    if is_landscape(origin_image):
-        footer_ratio = ImageConstants.FOOTER_RATIO_LANDSCAPE
-        font_ratio = ImageConstants.FONT_SIZE_RATIO 
+    if landscape:
+        footer_ratio = global_style["footer_ratio_landscape"]
+        font_ratio = global_style["font_size_ratio"]
     else:
-        footer_ratio = ImageConstants.FOOTER_RATIO_PORTRAIT
-        # 竖构图字号缩小 25% 以防溢出
-        font_ratio = ImageConstants.FONT_SIZE_RATIO * 0.75
+        footer_ratio = global_style["footer_ratio_portrait"]
+        font_ratio = global_style["font_size_ratio"] * global_style["portrait_font_scale"]
 
     footer_height = int(ori_height * footer_ratio)
-
     font_size = int(footer_height * font_ratio)
-    if font_size < 20: font_size = 20
+    min_font_size = int(global_style["min_font_size"])
+    if font_size < min_font_size:
+        font_size = min_font_size
 
-    # === 关键修改：调整边框比例，实现 Polaroid 风格 ===
-    # 0.25 的系数意味着顶部和侧边只有底栏高度的 1/4，形成明显的宽底边效果
-    if watermark_type == 1:
-        border_top = int(footer_height * 0.25)
-        border_left = int(footer_height * 0.25)
-        padding_x = border_left
-    elif watermark_type == 2:
-        border_top = 0
-        border_left = 0
-        padding_x = int(footer_height * 0.5)
-    else:
-        # Style 3 (Centered) 也使用 Polaroid 比例，或者您可以改回 0.8 做等宽
-        # 这里统一改为 0.25 以保持“原本的留白感”
-        border_top = int(footer_height * 0.25)
-        border_left = int(footer_height * 0.25)
-        padding_x = border_left
+    border_top = int(footer_height * style["border_top_ratio"])
+    border_left = int(footer_height * style["border_left_ratio"])
+    padding_x = _PADDING_X_RESOLVERS[style["padding_x_mode"]](footer_height, border_left, style)
 
     new_width = ori_width + 2 * border_left
     new_height = ori_height + border_top + footer_height
 
-    if watermark_type != 4:
-        final_image = Image.new("RGB", (new_width, new_height), "white")
-        final_image.paste(origin_image, (border_left, border_top))
-    else:
-        final_image = create_frosted_glass_effect(origin_image)
+    final_image = _BACKGROUND_RENDERERS[style["background"]](
+        origin_image, new_width, new_height, border_left, border_top
+    )
 
-    # 左侧：相机型号 (用于 Style 1 & 2)
     left_block = create_text_block(
-        camera_info[0], camera_info[1], 
-        font_path_bold, font_path_thin, 
+        camera_info[0], camera_info[1],
+        font_path_bold, font_path_thin,
         font_size
     )
 
-    # 右侧：拍摄参数 (用于 Style 1 & 2)
     shooting_info_block = create_text_block(
-        shooting_info[0], shooting_info[1], 
-        font_path_bold, font_path_thin, 
+        shooting_info[0], shooting_info[1],
+        font_path_bold, font_path_thin,
         font_size
     )
 
     footer_center_y = border_top + ori_height + (footer_height / 2)
 
-    if watermark_type == 3 or watermark_type == 4:
-        # === 居中风格 (Style 3) ===
-        # 布局：Logo 居中，下方只有一行拍摄参数
-
-        logo_target_height = int(footer_height * 0.55)
-        logo = Image.open(logo_path).convert("RGBA")
-        logo = image_resize(logo, logo_target_height)
-
-        # 只生成参数文字 (Bold)
-        center_text = text_to_image(shooting_info[0], font_path_bold, font_size, 'black')
-
-        if watermark_type == 4:
-            text_color = 'white'
-            if is_image_bright(origin_image):
-                text_color = 'black'
-            center_text = text_to_image(shooting_info[0], font_path_bold, font_size, text_color)
-
-        # 垂直堆叠 Logo 和 文字行
-        v_gap = int(footer_height * 0.15)
-
-        total_group_h = logo.height + v_gap + center_text.height
-        total_group_w = max(logo.width, center_text.width)
-
-        center_group = Image.new("RGBA", (total_group_w, total_group_h), (255, 255, 255, 0))
-
-        # Logo 居中
-        logo_x = (total_group_w - logo.width) // 2
-        center_group.paste(logo, (logo_x, 0), logo)
-
-        # 文字行居中
-        text_x = (total_group_w - center_text.width) // 2
-        center_group.paste(center_text, (text_x, logo.height + v_gap), center_text)
-
-        # 4. 放置到画面底部中央
-        pos_x = (new_width - center_group.width) // 2
-        pos_y = int(footer_center_y - center_group.height / 2)
-        if watermark_type == 4:
-            pos_x = (final_image.width - center_group.width) // 2
-            pos_y = final_image.height - center_group.height - center_group.height // 4
-            if is_landscape(origin_image):
-                pos_y = final_image.height - center_group.height - center_group.height // 6
-        final_image.paste(center_group, (pos_x, pos_y), center_group)
-
-    else:
-        # === 左右两端风格 (Style 1 & 2) ===
-        right_group = create_right_block(logo_path, shooting_info_block, footer_height, with_line=True)
-
-        # padding_x = border_left, 意味着文字和 Logo 会对齐照片的左右边缘
-        left_x = padding_x
-        left_y = int(footer_center_y - left_block.height / 2)
-        final_image.paste(left_block, (left_x, left_y), left_block)
-
-        right_x = new_width - padding_x - right_group.width
-        right_y = int(footer_center_y - right_group.height / 2)
-        final_image.paste(right_group, (right_x, right_y), right_group)
+    layout_context = {
+        "style": style,
+        "origin_image": origin_image,
+        "final_image": final_image,
+        "logo_path": logo_path,
+        "shooting_info": shooting_info,
+        "font_path_bold": font_path_bold,
+        "font_size": font_size,
+        "footer_height": footer_height,
+        "footer_center_y": footer_center_y,
+        "left_block": left_block,
+        "shooting_info_block": shooting_info_block,
+        "padding_x": padding_x,
+        "new_width": new_width,
+        "landscape": landscape,
+    }
+    _LAYOUT_RENDERERS[style["layout"]](final_image, layout_context)
 
     final_width, final_height = final_image.size
     if final_width % 2 != 0 or final_height % 2 != 0:

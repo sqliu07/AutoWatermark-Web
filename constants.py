@@ -1,5 +1,6 @@
 class CommonConstants:
     UPLOAD_FOLDER = './upload'
+    WATERMARK_STYLE_CONFIG_PATH = "./config/watermark_styles.toml"
 
     IMAGE_QUALITY_MAP = {
         "high": 100,

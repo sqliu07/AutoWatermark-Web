@@ -34,6 +34,7 @@
       btnProcess: "开始处理",
       btnProcessing: "处理中...",
       btnZip: "打包下载所有图片",
+      selectWatermark: "请选择一种水印样式！",
 
       statusUploading: "正在上传...",
       statusProcessing: "处理中...",
@@ -82,6 +83,7 @@
       btnProcess: "Process Images",
       btnProcessing: "Processing...",
       btnZip: "Download All as ZIP",
+      selectWatermark: "Please select a watermark style.",
 
       statusUploading: "Uploading...",
       statusProcessing: "Processing...",

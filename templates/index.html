@@ -78,70 +78,29 @@
             <div class="lg:col-span-8 space-y-4">
                 <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider pl-1" id="ui-style-title">水印风格</h3>
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    
+                    {% for style in watermark_styles %}
                     <label class="style-card relative cursor-pointer group">
-                        <input type="radio" name="watermark_type" value="1" class="peer hidden" checked>
+                        <input
+                            type="radio"
+                            name="watermark_type"
+                            value="{{ style.style_id }}"
+                            class="peer hidden"
+                            {% if style.style_id == default_style_id %}checked{% endif %}
+                        >
                         <div class="p-3 border border-slate-200 rounded-xl bg-white hover:border-slate-300 peer-checked:border-brand-500 peer-checked:ring-1 peer-checked:ring-brand-500 transition-all shadow-sm flex items-center gap-4 h-full">
                             <div class="w-16 h-16 rounded-lg bg-slate-100 overflow-hidden flex-shrink-0 border border-slate-100">
-                                <img src="{{ url_for('static', filename='images/t1.png') }}" class="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity">
+                                <img src="{{ url_for('static', filename=style.preview_image) }}" class="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity">
                             </div>
                             <div>
-                                <span class="block text-sm font-bold text-slate-800">I</span>
-                                <span class="block text-xs text-slate-500" id="desc-style-1">拍立得</span>
+                                <span class="block text-sm font-bold text-slate-800">{{ style.display_code or style.style_id }}</span>
+                                <span class="block text-xs text-slate-500" data-style-label data-style-zh="{{ style.label_zh }}" data-style-en="{{ style.label_en }}">{{ style.label_zh }}</span>
                             </div>
                         </div>
                         <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 bg-white rounded-lg shadow-xl border border-slate-100 p-2 hidden group-hover:block z-50 fade-in pointer-events-none">
-                            <img src="{{ url_for('static', filename='images/t1.png') }}" class="w-full rounded bg-slate-50">
+                            <img src="{{ url_for('static', filename=style.preview_image) }}" class="w-full rounded bg-slate-50">
                         </div>
                     </label>
-
-                    <label class="style-card relative cursor-pointer group">
-                        <input type="radio" name="watermark_type" value="2" class="peer hidden">
-                        <div class="p-3 border border-slate-200 rounded-xl bg-white hover:border-slate-300 peer-checked:border-brand-500 peer-checked:ring-1 peer-checked:ring-brand-500 transition-all shadow-sm flex items-center gap-4 h-full">
-                            <div class="w-16 h-16 rounded-lg bg-slate-100 overflow-hidden flex-shrink-0 border border-slate-100">
-                                <img src="{{ url_for('static', filename='images/t2.png') }}" class="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity">
-                            </div>
-                            <div>
-                                <span class="block text-sm font-bold text-slate-800">II</span>
-                                <span class="block text-xs text-slate-500" id="desc-style-2">经典双行</span>
-                            </div>
-                        </div>
-                        <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 bg-white rounded-lg shadow-xl border border-slate-100 p-2 hidden group-hover:block z-50 fade-in pointer-events-none">
-                            <img src="{{ url_for('static', filename='images/t2.png') }}" class="w-full rounded bg-slate-50">
-                        </div>
-                    </label>
-
-                    <label class="style-card relative cursor-pointer group">
-                        <input type="radio" name="watermark_type" value="3" class="peer hidden">
-                        <div class="p-3 border border-slate-200 rounded-xl bg-white hover:border-slate-300 peer-checked:border-brand-500 peer-checked:ring-1 peer-checked:ring-brand-500 transition-all shadow-sm flex items-center gap-4 h-full">
-                            <div class="w-16 h-16 rounded-lg bg-slate-100 overflow-hidden flex-shrink-0 border border-slate-100">
-                                <img src="{{ url_for('static', filename='images/t3.png') }}" class="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity">
-                            </div>
-                            <div>
-                                <span class="block text-sm font-bold text-slate-800">III</span>
-                                <span class="block text-xs text-slate-500" id="desc-style-3">居中极简</span>
-                            </div>
-                        </div>
-                        <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 bg-white rounded-lg shadow-xl border border-slate-100 p-2 hidden group-hover:block z-50 fade-in pointer-events-none">
-                            <img src="{{ url_for('static', filename='images/t3.png') }}" class="w-full rounded bg-slate-50">
-                        </div>
-                    </label>
-
-                    <label class="style-card relative cursor-pointer group">
-                        <input type="radio" name="watermark_type" value="4" class="peer hidden">
-                        <div class="p-3 border border-slate-200 rounded-xl bg-white hover:border-slate-300 peer-checked:border-brand-500 peer-checked:ring-1 peer-checked:ring-brand-500 transition-all shadow-sm flex items-center gap-4 h-full">
-                            <div class="w-16 h-16 rounded-lg bg-slate-100 overflow-hidden flex-shrink-0 border border-slate-100">
-                                <img src="{{ url_for('static', filename='images/t4.png') }}" class="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity">
-                            </div>
-                            <div>
-                                <span class="block text-sm font-bold text-slate-800">IV</span>
-                                <span class="block text-xs text-slate-500" id="desc-style-4">毛玻璃特效</span>
-                            </div>
-                        </div>
-                        <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 bg-white rounded-lg shadow-xl border border-slate-100 p-2 hidden group-hover:block z-50 fade-in pointer-events-none">
-                            <img src="{{ url_for('static', filename='images/t4.png') }}" class="w-full rounded bg-slate-50">
-                        </div>
-                    </label>
+                    {% endfor %}
 
                 </div>
             </div>

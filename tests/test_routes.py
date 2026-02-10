@@ -74,6 +74,17 @@ def test_upload_invalid_watermark_type(client):
     assert payload["error"] == "处理水印时发生未知错误。"
 
 
+def test_upload_unknown_watermark_type(client):
+    data = {
+        "file": (io.BytesIO(b"not-an-image"), "sample.jpg"),
+        "watermark_type": "9999",
+    }
+    response = client.post("/upload", data=data, content_type="multipart/form-data")
+    assert response.status_code == 400
+    payload = response.get_json()
+    assert payload["error"] == "处理水印时发生未知错误。"
+
+
 def test_upload_xiaomi_requires_logo_choice(client, monkeypatch):
     monkeypatch.setattr(upload_routes, "detect_manufacturer", lambda _: "xiaomi")
     data = {

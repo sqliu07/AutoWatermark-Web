@@ -15,6 +15,7 @@ from services.tasks import (
     normalize_image_quality,
     submit_task,
 )
+from services.watermark_styles import get_default_style_id, is_style_enabled
 
 bp = Blueprint("upload", __name__)
 
@@ -38,7 +39,9 @@ def upload_file():
     if not allowed_file(file.filename, current_app.config["ALLOWED_EXTENSIONS"]):
         return jsonify(error=get_message("invalid_file_type", lang)), 400
 
-    watermark_type = request.form.get("watermark_type", "1")
+    style_config = current_app.extensions.get("watermark_styles", {})
+    default_style = str(get_default_style_id(style_config)) if style_config else "1"
+    watermark_type = request.form.get("watermark_type", default_style)
     burn_after_read = request.form.get("burn_after_read", "0")
     image_quality = request.form.get("image_quality", "high")
     logo_preference = request.form.get("logo_preference")
@@ -69,6 +72,8 @@ def upload_file():
             watermark_type_int = int(watermark_type)
         except ValueError:
             return jsonify(error=get_common_message("unexpected_error", lang)), 400
+        if not is_style_enabled(style_config, watermark_type_int):
+            return jsonify(error=get_common_message("unexpected_error", lang)), 400
 
         task_id = submit_task(
             state,
@@ -78,6 +83,7 @@ def upload_file():
             image_quality_int,
             burn_after_read,
             logo_preference,
+            style_config,
             current_app.logger,
         )
 

@@ -17,6 +17,52 @@ AutoWatermark Web 旨在为摄影师和摄影爱好者提供一个自动化、�
 * **Style 3 (居中极简风格)**：Logo 与拍摄参数在底部居中堆叠，视觉重心更集中。
 * **Style 4 (毛玻璃特效)**：底部加入玻璃质感，文字颜色自动适配画面明暗。
 
+风格参数（留白、布局、能力开关等）位于 `config/watermark_styles.toml`，新增样式时可直接新增 `[styles.<id>]` 配置并放入对应预览图，无需再改动渲染分支代码。
+
+#### 自定义样式（TOML 配置）
+
+新增样式只需修改配置与预览图：
+
+1. 打开 `config/watermark_styles.toml`，复制一个现有段（如 `[styles.1]`）。
+2. 改成新的样式 ID（如 `[styles.5]`），并设置 `enabled = true`。
+3. 按需调整布局参数（留白、对齐、文字颜色、能力开关）。
+4. 将预览图放到 `static/images/`，并在 `preview_image` 中配置路径。
+5. 重启服务后，首页会自动出现该样式。
+
+最小示例：
+
+```toml
+[styles.5]
+enabled = true
+display_code = "V"
+label_zh = "电影黑边"
+label_en = "Cinema Matte"
+preview_image = "images/t5.png"
+layout = "split_lr"
+background = "white"
+border_top_ratio = 0.1
+border_left_ratio = 0.0
+padding_x_mode = "footer_ratio"
+padding_x_ratio = 0.45
+right_divider_line = true
+center_logo_ratio = 0.55
+center_gap_ratio = 0.15
+text_color_mode = "black"
+position_mode = "footer_center"
+bottom_offset_portrait_divisor = 4
+bottom_offset_landscape_divisor = 6
+supports_motion = true
+supports_ultrahdr = true
+```
+
+当前支持的关键枚举值：
+
+- `layout`: `split_lr`（左右布局）、`center_stack`（居中堆叠）
+- `background`: `white`、`frosted`
+- `padding_x_mode`: `border_left`、`footer_ratio`
+- `text_color_mode`: `black`、`auto_contrast`
+- `position_mode`: `footer_center`、`bottom_offset`
+
 ### 3. 隐私与安全
 * **阅后即焚 (Burn After Read)**：支持开启隐私模式，文件在预览或下载后短时间内自动删除。
 * **自动清理机制**：后台定期清理过期临时文件与 ZIP 包，避免存储堆积。

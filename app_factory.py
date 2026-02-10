@@ -2,7 +2,7 @@ import os
 
 from flask import Flask
 
-from constants import AppConstants
+from constants import AppConstants, CommonConstants
 from extensions import limiter
 from handlers import register_error_handlers
 from logging_utils import get_logger
@@ -12,6 +12,7 @@ from routes.upload import bp as upload_bp
 from services.cleanup import start_background_cleaner
 from services.i18n import load_translations
 from services.state import AppState
+from services.watermark_styles import load_cached_watermark_styles
 
 
 def create_app(config_overrides=None):
@@ -29,6 +30,7 @@ def create_app(config_overrides=None):
         ALLOWED_EXTENSIONS=AppConstants.ALLOWED_EXTENSIONS,
         MAX_CONTENT_LENGTH=AppConstants.MAX_CONTENT_LENGTH,
         START_BACKGROUND_CLEANER=True,
+        WATERMARK_STYLE_CONFIG_PATH=CommonConstants.WATERMARK_STYLE_CONFIG_PATH,
     )
 
     if config_overrides:
@@ -39,7 +41,9 @@ def create_app(config_overrides=None):
     limiter.init_app(app)
 
     translations = load_translations("static/i18n/translations.json", logger)
+    watermark_styles = load_cached_watermark_styles(app.config["WATERMARK_STYLE_CONFIG_PATH"])
     app.extensions["translations"] = translations
+    app.extensions["watermark_styles"] = watermark_styles
     app.extensions["state"] = AppState()
 
     register_error_handlers(app)

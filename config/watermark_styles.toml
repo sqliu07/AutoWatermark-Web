@@ -1,0 +1,95 @@
+[global]
+default_style_id = 1
+footer_ratio_landscape = 0.09
+footer_ratio_portrait = 0.08
+font_size_ratio = 0.22
+portrait_font_scale = 0.75
+min_font_size = 20
+
+[styles.1]
+enabled = true
+display_code = "I"
+label_zh = "拍立得"
+label_en = "Polaroid"
+preview_image = "images/t1.png"
+layout = "split_lr"
+background = "white"
+border_top_ratio = 0.25
+border_left_ratio = 0.25
+padding_x_mode = "border_left"
+padding_x_ratio = 0.0
+right_divider_line = true
+center_logo_ratio = 0.55
+center_gap_ratio = 0.15
+text_color_mode = "black"
+position_mode = "footer_center"
+bottom_offset_portrait_divisor = 4
+bottom_offset_landscape_divisor = 6
+supports_motion = true
+supports_ultrahdr = true
+
+[styles.2]
+enabled = true
+display_code = "II"
+label_zh = "经典双行"
+label_en = "Classic Layout"
+preview_image = "images/t2.png"
+layout = "split_lr"
+background = "white"
+border_top_ratio = 0.0
+border_left_ratio = 0.0
+padding_x_mode = "footer_ratio"
+padding_x_ratio = 0.5
+right_divider_line = true
+center_logo_ratio = 0.55
+center_gap_ratio = 0.15
+text_color_mode = "black"
+position_mode = "footer_center"
+bottom_offset_portrait_divisor = 4
+bottom_offset_landscape_divisor = 6
+supports_motion = true
+supports_ultrahdr = true
+
+[styles.3]
+enabled = true
+display_code = "III"
+label_zh = "居中极简"
+label_en = "Minimal Center"
+preview_image = "images/t3.png"
+layout = "center_stack"
+background = "white"
+border_top_ratio = 0.25
+border_left_ratio = 0.25
+padding_x_mode = "border_left"
+padding_x_ratio = 0.0
+right_divider_line = true
+center_logo_ratio = 0.55
+center_gap_ratio = 0.15
+text_color_mode = "black"
+position_mode = "footer_center"
+bottom_offset_portrait_divisor = 4
+bottom_offset_landscape_divisor = 6
+supports_motion = true
+supports_ultrahdr = true
+
+[styles.4]
+enabled = true
+display_code = "IV"
+label_zh = "毛玻璃特效"
+label_en = "Frosted Glass"
+preview_image = "images/t4.png"
+layout = "center_stack"
+background = "frosted"
+border_top_ratio = 0.25
+border_left_ratio = 0.25
+padding_x_mode = "border_left"
+padding_x_ratio = 0.0
+right_divider_line = true
+center_logo_ratio = 0.55
+center_gap_ratio = 0.15
+text_color_mode = "auto_contrast"
+position_mode = "bottom_offset"
+bottom_offset_portrait_divisor = 4
+bottom_offset_landscape_divisor = 6
+supports_motion = false
+supports_ultrahdr = false

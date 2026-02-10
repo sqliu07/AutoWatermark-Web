@@ -86,6 +86,7 @@ def submit_task(
     image_quality: int,
     burn_after_read: str,
     logo_preference: Optional[str],
+    style_config,
     logger,
 ) -> str:
     task_id = create_task(state)
@@ -100,6 +101,7 @@ def submit_task(
         image_quality,
         burn_after_read,
         logo_preference,
+        style_config,
         logger,
     )
     return task_id
@@ -114,6 +116,7 @@ def background_process(
     image_quality: int,
     burn_after_read: str,
     logo_preference: Optional[str],
+    style_config,
     logger,
 ) -> None:
     start_time = time.time()
@@ -140,6 +143,7 @@ def background_process(
             image_quality=image_quality,
             logo_preference=logo_preference,
             progress_callback=update_progress,
+            style_config=style_config,
         )
 
         filename = os.path.basename(filepath)

@@ -27,6 +27,7 @@ from ultrahdr_utils import (
 )
 from motion_photo_utils import prepare_motion_photo
 from logging_utils import get_logger
+from services.watermark_styles import get_style, load_cached_watermark_styles
 
 
 logger = get_logger("autowatermark.process")
@@ -55,6 +56,7 @@ def process_image(
     preview=False,
     logo_preference="xiaomi",
     progress_callback=None,
+    style_config=None,
 ):
     """
     Adds a watermark to the given image.
@@ -67,11 +69,18 @@ def process_image(
         notify (bool, optional): Whether to send a notification. Defaults to False.
         preview (bool, optional): Whether to return the image object for preview. Defaults to False.
         progress_callback (callable, optional): Callback for progress updates.
+        style_config (dict, optional): Loaded watermark style config.
 
     Returns:
         bool or Image: True if successful, or the image object if preview is True.
     """
     try:
+        if style_config is None:
+            style_config = load_cached_watermark_styles(CommonConstants.WATERMARK_STYLE_CONFIG_PATH)
+        style = get_style(style_config, watermark_type)
+        if not style or not style["enabled"]:
+            raise UnexpectedProcessingError(detail=f"Invalid watermark style: {watermark_type}")
+
         original_name, extension = os.path.splitext(image_path)
         output_path = f"{original_name}_watermark{extension}"
 
@@ -163,6 +172,8 @@ def process_image(
             CommonConstants.GLOBAL_FONT_PATH_BOLD,
             watermark_type,
             return_metadata=needs_metadata,
+            style_config=style_config,
+            style=style,
         )
         logger.info("Finished generating watermark for %s", image_path)
         advance_progress("rendered")
@@ -177,15 +188,17 @@ def process_image(
             return new_image
         else:
             advance_progress("saving")
-            if motion_session and watermark_metadata and watermark_type != 4:
+            if motion_session and watermark_metadata and style["supports_motion"]:
                 temp_output = Path(motion_session.still_path.parent) / "watermarked_motion_frame.jpg"
                 new_image.save(temp_output, exif=exif_bytes, quality=image_quality)
                 motion_session.finalize(temp_output, Path(output_path), watermark_metadata)
             else:
                 if ultrahdr_parts is not None:
-                    # watermark_type==4 does not support Ultra HDR preservation
-                    if watermark_type == 4:
-                        logger.warning("watermark_type=4 is not recommended for Ultra HDR preservation; fallback to SDR output.")
+                    if not style["supports_ultrahdr"]:
+                        logger.warning(
+                            "watermark style %s does not support Ultra HDR preservation; fallback to SDR output.",
+                            watermark_type,
+                        )
                         new_image.save(output_path, exif=exif_bytes, quality=image_quality)
                         advance_progress("saved")
                         return True
@@ -229,7 +242,7 @@ def process_image(
                     return True
 
                 # --- original path (SDR) ---
-                if motion_session and watermark_metadata and watermark_type != 4:
+                if motion_session and watermark_metadata and style["supports_motion"]:
                     temp_output = Path(motion_session.still_path.parent) / "watermarked_motion_frame.jpg"
                     new_image.save(temp_output, exif=exif_bytes, quality=image_quality)
                     motion_session.finalize(temp_output, Path(output_path), watermark_metadata)

@@ -55,11 +55,9 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('ui-drag-text').textContent = t.dragText;
         document.getElementById('ui-style-title').textContent = t.styleTitle;
         document.getElementById('reselect-btn').textContent = t.btnChange;
-        
-        if(document.getElementById('desc-style-1')) document.getElementById('desc-style-1').textContent = t.descStyle1;
-        if(document.getElementById('desc-style-2')) document.getElementById('desc-style-2').textContent = t.descStyle2;
-        if(document.getElementById('desc-style-3')) document.getElementById('desc-style-3').textContent = t.descStyle3;
-        if(document.getElementById('desc-style-4')) document.getElementById('desc-style-4').textContent = t.descStyle4;
+        document.querySelectorAll('[data-style-label]').forEach((el) => {
+            el.textContent = (lang === 'zh' ? el.dataset.styleZh : el.dataset.styleEn) || '';
+        });
 
         document.getElementById('ui-quality-title').textContent = t.qualityTitle;
         document.getElementById('ui-quality-high').textContent = t.qualityHigh;
@@ -228,7 +226,15 @@ document.addEventListener('DOMContentLoaded', () => {
         displayedResultCount = 0;
         const total = currentFiles.length;
 
-        const watermarkType = document.querySelector('input[name="watermark_type"]:checked').value;
+        const selectedStyle = document.querySelector('input[name="watermark_type"]:checked');
+        if (!selectedStyle) {
+            renderError(window.t.styleTitle, window.t.selectWatermark || 'Please select a watermark style.');
+            uploadBtn.disabled = false;
+            uploadBtn.querySelector('span').textContent = window.t.btnProcess;
+            progressArea.classList.add('hidden');
+            return;
+        }
+        const watermarkType = selectedStyle.value;
         const quality = document.querySelector('input[name="image_quality"]:checked').value;
         const burn = document.getElementById('burn_after_read').checked ? '1' : '0';
 
