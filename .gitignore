@@ -14,3 +14,4 @@ tests/fixtures/*.tif
 tests/fixtures/*.tiff
 tests/fixtures/*.bmp
 clear_his.sh
+AGENTS.md
