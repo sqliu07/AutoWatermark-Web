@@ -2,7 +2,7 @@ import os
 
 from flask import Flask
 
-from constants import AppConstants, CommonConstants
+from config.settings import AppConfig
 from extensions import limiter
 from handlers import register_error_handlers
 from logging_utils import get_logger
@@ -15,8 +15,19 @@ from services.state import AppState
 from services.watermark_styles import load_cached_watermark_styles
 
 
-def create_app(config_overrides=None):
-    app = Flask(__name__, static_url_path="/static", static_folder="./static")
+def create_app(config: AppConfig = None):
+    """Create and configure Flask application.
+
+    Args:
+        config: Application configuration. If None, loads from environment variables.
+
+    Returns:
+        Configured Flask application instance.
+    """
+    if config is None:
+        config = AppConfig.from_env()
+
+    app = Flask(__name__, static_url_path="/static", static_folder=str(config.static_folder))
 
     logger = get_logger("autowatermark.app")
     app.logger.handlers.clear()
@@ -25,26 +36,25 @@ def create_app(config_overrides=None):
     app.logger.setLevel(logger.level)
     app.logger.propagate = False
 
-    app.config.from_mapping(
-        UPLOAD_FOLDER=AppConstants.UPLOAD_FOLDER,
-        ALLOWED_EXTENSIONS=AppConstants.ALLOWED_EXTENSIONS,
-        MAX_CONTENT_LENGTH=AppConstants.MAX_CONTENT_LENGTH,
-        START_BACKGROUND_CLEANER=True,
-        WATERMARK_STYLE_CONFIG_PATH=CommonConstants.WATERMARK_STYLE_CONFIG_PATH,
-    )
+    # Store configuration in app.config for backward compatibility
+    app.config["app_config"] = config
+    app.config["UPLOAD_FOLDER"] = str(config.upload_folder)
+    app.config["ALLOWED_EXTENSIONS"] = config.allowed_extensions
+    app.config["MAX_CONTENT_LENGTH"] = config.max_content_length
+    app.config["START_BACKGROUND_CLEANER"] = config.start_background_cleaner
 
-    if config_overrides:
-        app.config.update(config_overrides)
-
-    os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
+    # Create upload directory if it doesn't exist
+    os.makedirs(config.upload_folder, exist_ok=True)
 
     limiter.init_app(app)
 
-    translations = load_translations("static/i18n/translations.json", logger)
-    watermark_styles = load_cached_watermark_styles(app.config["WATERMARK_STYLE_CONFIG_PATH"])
+    translations = load_translations(str(config.i18n_folder / "translations.json"), logger)
+    watermark_styles = load_cached_watermark_styles(str(config.watermark_style_config_path))
     app.extensions["translations"] = translations
     app.extensions["watermark_styles"] = watermark_styles
-    app.extensions["state"] = AppState()
+    state = AppState()
+    state.set_executor_config(config)
+    app.extensions["state"] = state
 
     register_error_handlers(app)
 
@@ -52,7 +62,7 @@ def create_app(config_overrides=None):
     app.register_blueprint(upload_bp)
     app.register_blueprint(download_bp)
 
-    if app.config.get("START_BACKGROUND_CLEANER", True):
+    if config.start_background_cleaner:
         start_background_cleaner(app, app.extensions["state"], logger)
 
     return app

@@ -1,18 +1,13 @@
-from constants import CommonConstants, ImageConstants
-from services.watermark_styles import get_style, load_cached_watermark_styles
-
 from functools import lru_cache
 from PIL import Image, ImageDraw, ImageFont, ImageOps, ImageFilter, ImageStat
 from logging_utils import get_logger
-
-Image.MAX_IMAGE_PIXELS = ImageConstants.MAX_IMAGE_PIXELS
 
 logger = get_logger("autowatermark.image_utils")
 
 def is_landscape(image):
     return image.width >= image.height
 
-def is_image_bright(image, threshold=ImageConstants.WATERMARK_GLASS_BG_THRESHOLD):
+def is_image_bright(image, threshold=130):
     """
     判断图片是否为浅色背景
     :param threshold: 亮度阈值 (0-255)，默认 130。大于此值认为背景是亮的，需要用深色字。
@@ -34,6 +29,7 @@ def is_image_bright(image, threshold=ImageConstants.WATERMARK_GLASS_BG_THRESHOLD
     logger.info("Bottom-half avg brightness: %s", str(avg_brightness_half))
 
     return avg_brightness > threshold and avg_brightness_half > threshold
+
 def reset_image_orientation(image):
     try:
         exif = image._getexif()
@@ -105,19 +101,23 @@ def create_text_block(line1_text, line2_text, font_bold, font_thin, font_size):
 
     return combined
 
-def create_right_block(logo_path, text_block_img, footer_height, with_line=True, line_color=(128, 128, 128)):
+def create_right_block(logo_path, text_block_img, footer_height, config=None, with_line=True, line_color=(128, 128, 128)):
     """
     组合右侧元素：[Logo] [竖线] [参数文字]
     """
-    logo_target_height = int(footer_height * ImageConstants.LOGO_HEIGHT_RATIO)
+    if config is None:
+        from config.settings import AppConfig
+        config = AppConfig()
+
+    logo_target_height = int(footer_height * config.logo_height_ratio)
     logo = Image.open(logo_path).convert("RGBA")
     logo = image_resize(logo, logo_target_height)
 
     # 元素水平间距：底栏高度的 20%
-    spacing = int(footer_height * 0.2) 
+    spacing = int(footer_height * 0.2)
 
-    line_width = max(1, int(footer_height * 0.02)) 
-    line_height = int(footer_height * 0.45) 
+    line_width = max(1, int(footer_height * 0.02))
+    line_height = int(footer_height * 0.45)
 
     if with_line:
         total_width = logo.width + spacing + line_width + spacing + text_block_img.width
@@ -185,20 +185,24 @@ def _darken_rgb_inplace(img_rgb: Image.Image, dim_alpha_0_255: int) -> Image.Ima
     lut = [int(i * k) for i in range(256)]
     return img_rgb.point(lut * 3)
 
-def create_frosted_glass_effect(origin_image):
+def create_frosted_glass_effect(origin_image, config=None):
+    if config is None:
+        from config.settings import AppConfig
+        config = AppConfig()
+
     ori_w, ori_h = origin_image.size
     min_dim = min(ori_w, ori_h)
 
-    bg_scale = ImageConstants.WATERMARK_GLASS_BG_SCALE
-    shadow_scale_factor = ImageConstants.WATERMARK_GLASS_SHADOW_SCALE
+    bg_scale = config.watermark_glass_bg_scale
+    shadow_scale_factor = config.watermark_glass_shadow_scale
 
     landscape = is_landscape(origin_image)
 
-    corner_radius = int(min_dim * ImageConstants.WATERMARK_GLASS_CORNER_RADIUS_FACTOR)
-    shadow_blur_radius = int(min_dim * ImageConstants.WATERMARK_GLASS_BLUR_RADIUS)
+    corner_radius = int(min_dim * config.watermark_glass_corner_radius_factor)
+    shadow_blur_radius = int(min_dim * config.watermark_glass_blur_radius)
 
     shadow_offset_y = int(min_dim * (0.03 if landscape else 0.05))
-    shadow_color = (0, 0, 0, ImageConstants.WATERMARK_GLASS_COLOR)
+    shadow_color = (0, 0, 0, config.watermark_glass_color)
 
     canvas_w = int(ori_w * bg_scale * (0.95 if landscape else 1.0))
     canvas_h = int(ori_h * bg_scale)
@@ -317,8 +321,8 @@ def _render_background_white(origin_image, new_width, new_height, border_left, b
     return final_image
 
 
-def _render_background_frosted(origin_image, _new_width, _new_height, _border_left, _border_top):
-    return create_frosted_glass_effect(origin_image)
+def _render_background_frosted(origin_image, _new_width, _new_height, _border_left, _border_top, config=None):
+    return create_frosted_glass_effect(origin_image, config)
 
 
 _BACKGROUND_RENDERERS = {
@@ -417,6 +421,7 @@ def _render_layout_split_lr(final_image, context):
         logo_path,
         shooting_info_block,
         footer_height,
+        config=config,
         with_line=style["right_divider_line"],
     )
 
@@ -437,11 +442,15 @@ _LAYOUT_RENDERERS = {
 
 def generate_watermark_image(origin_image, logo_path, camera_info, shooting_info,
                              font_path_thin, font_path_bold, watermark_type=1,
-                             return_metadata=False, **kwargs):
+                             return_metadata=False, config=None, **kwargs):
+    if config is None:
+        from config.settings import AppConfig
+        config = AppConfig()
+
     style_config = kwargs.get("style_config")
     style = kwargs.get("style")
     if style_config is None:
-        style_config = load_cached_watermark_styles(CommonConstants.WATERMARK_STYLE_CONFIG_PATH)
+        style_config = load_cached_watermark_styles(str(config.watermark_style_config_path))
     if style is None:
         style = get_style(style_config, watermark_type)
     if not style or not style["enabled"]:
@@ -454,15 +463,15 @@ def generate_watermark_image(origin_image, logo_path, camera_info, shooting_info
     landscape = is_landscape(origin_image)
 
     if landscape:
-        footer_ratio = global_style["footer_ratio_landscape"]
-        font_ratio = global_style["font_size_ratio"]
+        footer_ratio = config.footer_ratio_landscape
+        font_ratio = config.font_size_ratio
     else:
-        footer_ratio = global_style["footer_ratio_portrait"]
-        font_ratio = global_style["font_size_ratio"] * global_style["portrait_font_scale"]
+        footer_ratio = config.footer_ratio_portrait
+        font_ratio = config.font_size_ratio * config.portrait_font_scale
 
     footer_height = int(ori_height * footer_ratio)
     font_size = int(footer_height * font_ratio)
-    min_font_size = int(global_style["min_font_size"])
+    min_font_size = config.min_font_size
     if font_size < min_font_size:
         font_size = min_font_size
 
@@ -474,7 +483,7 @@ def generate_watermark_image(origin_image, logo_path, camera_info, shooting_info
     new_height = ori_height + border_top + footer_height
 
     final_image = _BACKGROUND_RENDERERS[style["background"]](
-        origin_image, new_width, new_height, border_left, border_top
+        origin_image, new_width, new_height, border_left, border_top, config
     )
 
     left_block = create_text_block(

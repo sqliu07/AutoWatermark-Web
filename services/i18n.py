@@ -1,7 +1,7 @@
 import json
 from typing import Dict, Optional
 
-from constants import AppConstants, CommonConstants
+from config.settings import AppConfig
 
 
 def load_translations(path: str, logger=None) -> Dict:
@@ -20,9 +20,13 @@ def normalize_lang(lang: Optional[str]) -> str:
     return lang.split("?")[0]
 
 
-def get_message(key: str, lang: str = "zh") -> Optional[str]:
-    return AppConstants.ERROR_MESSAGES.get(key, {}).get(lang)
+def get_message(key: str, lang: str = "zh", config: Optional[AppConfig] = None) -> Optional[str]:
+    if config is None:
+        config = AppConfig()
+    return config.get_error_message(key, lang, category="app")
 
 
-def get_common_message(key: str, lang: str = "zh") -> Optional[str]:
-    return CommonConstants.ERROR_MESSAGES.get(key, {}).get(lang)
+def get_common_message(key: str, lang: str = "zh", config: Optional[AppConfig] = None) -> Optional[str]:
+    if config is None:
+        config = AppConfig()
+    return config.get_error_message(key, lang, category="common")

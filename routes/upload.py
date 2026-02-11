@@ -5,7 +5,6 @@ from datetime import datetime
 from flask import Blueprint, current_app, jsonify, request, render_template, send_file
 from werkzeug.utils import secure_filename
 
-from constants import AppConstants
 from extensions import limiter
 from services.i18n import get_message, get_common_message, normalize_lang
 from services.tasks import (
@@ -21,10 +20,11 @@ bp = Blueprint("upload", __name__)
 
 
 @bp.route("/upload", methods=["POST"])
-@limiter.limit(AppConstants.UPLOAD_RATE_LIMIT)
+@limiter.limit(lambda: current_app.config["app_config"].upload_rate_limit)
 def upload_file():
+    config = current_app.config["app_config"]
     state = current_app.extensions["state"]
-    cleanup_old_tasks(state)
+    cleanup_old_tasks(state, config)
 
     lang = normalize_lang(request.args.get("lang", "zh"))
 
@@ -36,7 +36,7 @@ def upload_file():
     if file.filename == "":
         return jsonify(error=get_message("no_file_selected", lang)), 400
 
-    if not allowed_file(file.filename, current_app.config["ALLOWED_EXTENSIONS"]):
+    if not allowed_file(file.filename, config.allowed_extensions):
         return jsonify(error=get_message("invalid_file_type", lang)), 400
 
     style_config = current_app.extensions.get("watermark_styles", {})
@@ -46,18 +46,18 @@ def upload_file():
     image_quality = request.form.get("image_quality", "high")
     logo_preference = request.form.get("logo_preference")
 
-    image_quality_int = normalize_image_quality(image_quality)
+    image_quality_int = normalize_image_quality(image_quality, config)
 
     if watermark_type is None:
         return jsonify(error="Watermark style not selected!"), 400
 
-    if file and allowed_file(file.filename, current_app.config["ALLOWED_EXTENSIONS"]):
+    if file and allowed_file(file.filename, config.allowed_extensions):
         timestamp = datetime.fromtimestamp(int(time.time())).strftime("%Y-%m-%d_%H-%M-%S")
 
         filename = secure_filename(file.filename)
         extension = filename.rsplit(".", 1)[1]
         filename_with_timestamp = f"{filename.rsplit('.', 1)[0]}_{timestamp}.{extension}"
-        filepath = os.path.join(current_app.config["UPLOAD_FOLDER"], filename_with_timestamp)
+        filepath = config.upload_folder / filename_with_timestamp
 
         file.save(filepath)
 
@@ -85,6 +85,7 @@ def upload_file():
             logo_preference,
             style_config,
             current_app.logger,
+            config,
         )
 
         return jsonify({"task_id": task_id}), 202
@@ -106,11 +107,12 @@ def get_task_status(task_id):
 
 @bp.route("/upload/<filename>")
 def upload_file_served(filename):
+    config = current_app.config["app_config"]
     lang = normalize_lang(request.args.get("lang", "zh"))
     burn_after_read = request.args.get("burn", "0")
 
     filename = secure_filename(filename)
-    file_path = os.path.join(current_app.config["UPLOAD_FOLDER"], filename)
+    file_path = config.upload_folder / filename
 
     if not os.path.exists(file_path):
         accept = request.headers.get("Accept", "")
@@ -122,6 +124,6 @@ def upload_file_served(filename):
     if str(burn_after_read).strip() == "1":
         state = current_app.extensions["state"]
         with state.burn_queue_lock:
-            state.burn_queue[file_path] = time.time() + AppConstants.BURN_TTL_SECONDS
+            state.burn_queue[file_path] = time.time() + config.burn_ttl_seconds
 
     return send_file(file_path)

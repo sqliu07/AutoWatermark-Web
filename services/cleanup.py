@@ -4,8 +4,6 @@ import tempfile
 import threading
 import time
 
-from constants import AppConstants
-
 
 def cleanup_file_and_original(file_path: str, logger) -> None:
     """Delete a single file if it exists."""
@@ -19,10 +17,11 @@ def cleanup_file_and_original(file_path: str, logger) -> None:
 
 def start_background_cleaner(app, state, logger) -> threading.Thread:
     """Start background cleanup worker for burn queue, zip temp files, and stale uploads."""
+    config = app.config["app_config"]
 
     def background_cleaner() -> None:
         while True:
-            time.sleep(AppConstants.CLEANER_INTERVAL_SECONDS)
+            time.sleep(config.cleaner_interval_seconds)
             current_time = time.time()
 
             cleaned_burn = 0
@@ -46,7 +45,7 @@ def start_background_cleaner(app, state, logger) -> threading.Thread:
             zip_pattern = os.path.join(temp_dir, "Packed_Watermark_Images_*.zip")
             for zip_file in glob.glob(zip_pattern):
                 try:
-                    if current_time - os.path.getmtime(zip_file) > AppConstants.ZIP_RETENTION_SECONDS:
+                    if current_time - os.path.getmtime(zip_file) > config.zip_retention_seconds:
                         os.remove(zip_file)
                         logger.info("[Auto-Clean] Deleted old zip: %s", zip_file)
                         cleaned_zip += 1
@@ -54,13 +53,13 @@ def start_background_cleaner(app, state, logger) -> threading.Thread:
                     pass
 
             # 3) Stale uploads in upload folder
-            upload_dir = app.config["UPLOAD_FOLDER"]
+            upload_dir = config.upload_folder
             for filename in os.listdir(upload_dir):
-                file_path = os.path.join(upload_dir, filename)
+                file_path = upload_dir / filename
                 try:
                     if (
                         os.path.isfile(file_path)
-                        and (current_time - os.path.getmtime(file_path) > AppConstants.UPLOAD_RETENTION_SECONDS)
+                        and (current_time - os.path.getmtime(file_path) > config.upload_retention_seconds)
                     ):
                         os.remove(file_path)
                         logger.info("[Auto-Clean] Deleted stale file: %s", filename)
