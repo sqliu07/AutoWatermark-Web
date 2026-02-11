@@ -6,6 +6,7 @@ from typing import Optional, Set
 from PIL import Image
 import piexif
 
+from constants import CommonConstants, AppConstants
 from errors import WatermarkError
 from exif_utils import get_manufacturer
 from process import process_image
@@ -17,13 +18,13 @@ def allowed_file(filename: str, allowed_extensions: Set[str]) -> bool:
     return "." in filename and filename.rsplit(".", 1)[1].lower() in allowed_extensions
 
 
-def cleanup_old_tasks(state, config) -> None:
+def cleanup_old_tasks(state) -> None:
     """Remove tasks older than retention window."""
     current_time = time.time()
     to_remove = []
     with state.tasks_lock:
         for tid, info in list(state.tasks.items()):
-            if current_time - info.get("submitted_at", 0) > config.task_retention_seconds:
+            if current_time - info.get("submitted_at", 0) > AppConstants.TASK_RETENTION_SECONDS:
                 to_remove.append(tid)
         for tid in to_remove:
             state.tasks.pop(tid, None)
@@ -41,8 +42,12 @@ def detect_manufacturer(filepath: str):
         return None
 
 
-def normalize_image_quality(image_quality: str, config) -> int:
-    return config.get_image_quality(image_quality)
+def normalize_image_quality(image_quality: str) -> int:
+    if image_quality == "high":
+        return CommonConstants.IMAGE_QUALITY_MAP.get("high")
+    if image_quality == "medium":
+        return CommonConstants.IMAGE_QUALITY_MAP.get("medium")
+    return CommonConstants.IMAGE_QUALITY_MAP.get("low")
 
 
 def _update_queue_metrics(state, task_id: str, logger) -> None:
@@ -83,7 +88,6 @@ def submit_task(
     logo_preference: Optional[str],
     style_config,
     logger,
-    config,
 ) -> str:
     task_id = create_task(state)
     _update_queue_metrics(state, task_id, logger)
@@ -99,7 +103,6 @@ def submit_task(
         logo_preference,
         style_config,
         logger,
-        config,
     )
     return task_id
 
@@ -115,7 +118,6 @@ def background_process(
     logo_preference: Optional[str],
     style_config,
     logger,
-    config,
 ) -> None:
     start_time = time.time()
     try:
@@ -142,7 +144,6 @@ def background_process(
             logo_preference=logo_preference,
             progress_callback=update_progress,
             style_config=style_config,
-            config=config,
         )
 
         filename = os.path.basename(filepath)

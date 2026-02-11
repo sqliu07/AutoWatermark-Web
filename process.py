@@ -9,6 +9,7 @@ from io import BytesIO
 
 from exif_utils import find_logo, get_manufacturer, get_exif_data, get_camera_model
 from image_utils import *
+from constants import CommonConstants, ImageConstants
 from errors import (
     WatermarkError,
     MissingExifDataError,
@@ -31,13 +32,11 @@ from services.watermark_styles import get_style, load_cached_watermark_styles
 
 logger = get_logger("autowatermark.process")
 
-def get_message(key, lang='zh', config=None):
-    if config:
-        return config.get_error_message(key, lang, category="common")
-    return None
+def get_message(key, lang='zh'):
+    return CommonConstants.ERROR_MESSAGES.get(key, {}).get(lang)
 
-def _enforce_image_pixel_limit(image, config):
-    max_pixels = config.max_image_pixels
+def _enforce_image_pixel_limit(image):
+    max_pixels = ImageConstants.MAX_IMAGE_PIXELS
     image_size = image.width * image.height
     logger.info("Image size: %dx%d=%d, max allowed pixels: %s", image.width, image.height, image_size, str(max_pixels) if max_pixels else "unlimited")
     if max_pixels and image_size >= max_pixels:
@@ -58,7 +57,6 @@ def process_image(
     logo_preference="xiaomi",
     progress_callback=None,
     style_config=None,
-    config=None,
 ):
     """
     Adds a watermark to the given image.
@@ -72,18 +70,13 @@ def process_image(
         preview (bool, optional): Whether to return the image object for preview. Defaults to False.
         progress_callback (callable, optional): Callback for progress updates.
         style_config (dict, optional): Loaded watermark style config.
-        config (AppConfig, optional): Application configuration.
 
     Returns:
         bool or Image: True if successful, or the image object if preview is True.
     """
     try:
-        if config is None:
-            from config.settings import AppConfig
-            config = AppConfig()
-
         if style_config is None:
-            style_config = load_cached_watermark_styles(str(config.watermark_style_config_path))
+            style_config = load_cached_watermark_styles(CommonConstants.WATERMARK_STYLE_CONFIG_PATH)
         style = get_style(style_config, watermark_type)
         if not style or not style["enabled"]:
             raise UnexpectedProcessingError(detail=f"Invalid watermark style: {watermark_type}")
@@ -121,7 +114,7 @@ def process_image(
             image = Image.open(working_image_path)
 
         image = reset_image_orientation(image)
-        _enforce_image_pixel_limit(image, config)
+        _enforce_image_pixel_limit(image)
         advance_progress("loaded")
 
         exif_bytes = image.info.get('exif')
@@ -175,13 +168,12 @@ def process_image(
             logo_path,
             camera_info_lines,
             shooting_info_lines,
-            str(config.font_path_light),
-            str(config.font_path_bold),
+            CommonConstants.GLOBAL_FONT_PATH_LIGHT,
+            CommonConstants.GLOBAL_FONT_PATH_BOLD,
             watermark_type,
             return_metadata=needs_metadata,
             style_config=style_config,
             style=style,
-            config=config,
         )
         logger.info("Finished generating watermark for %s", image_path)
         advance_progress("rendered")

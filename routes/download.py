@@ -6,15 +6,15 @@ from datetime import datetime
 from flask import Blueprint, current_app, jsonify, request, send_file
 from werkzeug.utils import secure_filename
 
+from constants import AppConstants
 from extensions import limiter
 
 bp = Blueprint("download", __name__)
 
 
 @bp.route("/download_zip", methods=["POST"])
-@limiter.limit(lambda: current_app.config["app_config"].zip_rate_limit)
+@limiter.limit(AppConstants.ZIP_RATE_LIMIT)
 def download_zip():
-    config = current_app.config["app_config"]
     data = request.json or {}
     filenames = data.get("filenames", [])
 
@@ -30,7 +30,7 @@ def download_zip():
         with zipfile.ZipFile(zip_path, "w") as zipf:
             for fname in filenames:
                 safe_fname = secure_filename(fname)
-                full_path = config.upload_folder / safe_fname
+                full_path = os.path.join(current_app.config["UPLOAD_FOLDER"], safe_fname)
                 if os.path.exists(full_path) and os.path.isfile(full_path):
                     zipf.write(full_path, arcname=safe_fname)
                 else:

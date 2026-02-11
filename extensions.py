@@ -1,11 +1,10 @@
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
-from config.settings import AppConfig
+from constants import AppConstants
 
-config = AppConfig()
 limiter = Limiter(
     get_remote_address,
-    default_limits=config.default_rate_limits,
+    default_limits=AppConstants.DEFAULT_RATE_LIMITS,
     storage_uri="memory://",
 )

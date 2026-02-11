@@ -71,17 +71,19 @@ def pytest_sessionfinish(session, exitstatus):
     _logger.info("PASS:%s,FAIL:%s,TOTAL:%s", passed, failed, total)
 
 from app_factory import create_app
-from config.settings import AppConfig
 
 
 @pytest.fixture
 def app(tmp_path):
     upload_dir = tmp_path / "uploads"
-    config = AppConfig()
-    config.upload_folder = upload_dir
-    config.start_background_cleaner = False
-    app = create_app(config)
-    app.config["TESTING"] = True
+    app = create_app(
+        {
+            "TESTING": True,
+            "UPLOAD_FOLDER": str(upload_dir),
+            "RATELIMIT_ENABLED": False,
+            "START_BACKGROUND_CLEANER": False,
+        }
+    )
     return app
 
 

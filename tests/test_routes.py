@@ -124,8 +124,7 @@ def test_upload_burn_after_read_updates_queue(client):
     assert response.status_code == 200
 
     state = app.extensions["state"]
-    from pathlib import Path
-    assert Path(file_path) in state.burn_queue
+    assert file_path in state.burn_queue
 
 
 def test_download_zip_with_valid_file(client):
@@ -266,10 +265,7 @@ def test_process_ultrahdr_photo_with_real_asset(tmp_path):
 
 
 def test_process_image_too_large(monkeypatch, tmp_path):
-    from config.settings import AppConfig
-    config = AppConfig()
-    config.max_image_pixels = 1
-
+    monkeypatch.setattr(ImageConstants, "MAX_IMAGE_PIXELS", 1)
     temp_image = tmp_path / "tiny.jpg"
     Image.new("RGB", (2, 2), color=(255, 255, 255)).save(temp_image, format="JPEG")
 
@@ -279,5 +275,4 @@ def test_process_image_too_large(monkeypatch, tmp_path):
             watermark_type=1,
             image_quality=85,
             logo_preference="xiaomi",
-            config=config,
         )

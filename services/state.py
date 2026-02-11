@@ -3,14 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from threading import Lock
 from concurrent.futures import ThreadPoolExecutor
-from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from config.settings import AppConfig
+from constants import AppConstants
 
 
-def _executor_factory(config: AppConfig) -> ThreadPoolExecutor:
-    return ThreadPoolExecutor(max_workers=config.executor_max_workers)
+def _executor_factory() -> ThreadPoolExecutor:
+    return ThreadPoolExecutor(max_workers=AppConstants.EXECUTOR_MAX_WORKERS)
 
 
 def _metrics_factory() -> dict:
@@ -29,16 +27,4 @@ class AppState:
     tasks_lock: Lock = field(default_factory=Lock)
     metrics: dict = field(default_factory=_metrics_factory)
     tasks: dict = field(default_factory=dict)
-    executor: ThreadPoolExecutor = field(init=False)
-
-    def __post_init__(self):
-        """Initialize executor with default config."""
-        from config.settings import AppConfig
-        config = AppConfig()
-        self.executor = _executor_factory(config)
-
-    def set_executor_config(self, config: AppConfig) -> None:
-        """Update executor with new configuration."""
-        if self.executor:
-            self.executor.shutdown(wait=False)
-        self.executor = _executor_factory(config)
+    executor: ThreadPoolExecutor = field(default_factory=_executor_factory)

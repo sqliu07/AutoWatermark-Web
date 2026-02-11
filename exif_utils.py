@@ -104,9 +104,7 @@ def find_logo(manufacturer):
     if normalized:
         candidates.append(normalized)
 
-    from config.settings import AppConfig
-    config = AppConfig()
-    alias = config.normalize_brand(normalized)
+    alias = CommonConstants.BRAND_ALIASES.get(normalized)
     if alias:
         alias_normalized = _normalize_brand(alias)
         if alias_normalized:
