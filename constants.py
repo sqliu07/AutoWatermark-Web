@@ -1,5 +1,4 @@
 class CommonConstants:
-    UPLOAD_FOLDER = './upload'
     WATERMARK_STYLE_CONFIG_PATH = "./config/watermark_styles.toml"
 
     IMAGE_QUALITY_MAP = {
@@ -35,22 +34,22 @@ class CommonConstants:
     }
     
     BRAND_ALIASES = {
-    "sonycamera": "sony",
-    "sonycorporation": "sony",
-    "nikoncorporation": "nikon",
-    "canoninc": "canon",
-    "canoncamera": "canon",
-    "fujifilmcorporation": "fujifilm",
-    "fujifilmholdings": "fujifilm",
-    "olympuscorporation": "olympus",
-    "panasoniccorporation": "panasonic",
-    "panasoniccorporationimaging": "panasonic",
-    "leicacameraag": "leica",
-    "pentaxricohimaging": "pentax",
-    "xiaomi":  "xiaomi",
-    "apple": "apple",
-    "oppo": "oppo"
-}
+        "sonycamera": "sony",
+        "sonycorporation": "sony",
+        "nikoncorporation": "nikon",
+        "canoninc": "canon",
+        "canoncamera": "canon",
+        "fujifilmcorporation": "fujifilm",
+        "fujifilmholdings": "fujifilm",
+        "olympuscorporation": "olympus",
+        "panasoniccorporation": "panasonic",
+        "panasoniccorporationimaging": "panasonic",
+        "leicacameraag": "leica",
+        "pentaxricohimaging": "pentax",
+        "xiaomi": "xiaomi",
+        "apple": "apple",
+        "oppo": "oppo",
+    }
 
 class AppConstants:
     UPLOAD_FOLDER = './upload'

@@ -8,7 +8,7 @@ from io import BytesIO
 
 
 from exif_utils import find_logo, get_manufacturer, get_exif_data, get_camera_model
-from image_utils import *
+from image_utils import reset_image_orientation, generate_watermark_image
 from constants import CommonConstants, ImageConstants
 from errors import (
     WatermarkError,
@@ -241,22 +241,9 @@ def process_image(
                     advance_progress("saved")
                     return True
 
-                # --- original path (SDR) ---
-                if motion_session and watermark_metadata and style["supports_motion"]:
-                    temp_output = Path(motion_session.still_path.parent) / "watermarked_motion_frame.jpg"
-                    new_image.save(temp_output, exif=exif_bytes, quality=image_quality)
-                    motion_session.finalize(temp_output, Path(output_path), watermark_metadata)
-                else:
-                    new_image.save(output_path, exif=exif_bytes, quality=image_quality)
+                new_image.save(output_path, exif=exif_bytes, quality=image_quality)
                 advance_progress("saved")
                 return True
-            # comment this, no need notify.
-            # if notify:
-            #     url = "ntfy_url"
-            #     title = "This is your image with watermark."
-            #     priority = "high"
-            #     command = f'curl -H "Title: {title}" -H"Priority: {priority}" -T {output_path} {url}'
-            #     os.system(command)
             return True
     except WatermarkError:
         raise
