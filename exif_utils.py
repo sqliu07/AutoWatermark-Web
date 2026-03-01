@@ -185,23 +185,23 @@ def get_exif_data(image_path, exif_dict=None):
         focal_length_value, f_number_value, exposure_time_value, iso_speed = get_exif_table(image_path, exif_dict)
 
         datetime_raw = exif_data.get(piexif.ExifIFD.DateTimeOriginal, b"Unknown Date")
-        datetime = datetime_raw.decode(errors='ignore') if isinstance(datetime_raw, (bytes, bytearray)) else str(datetime_raw)
+        date_taken = datetime_raw.decode(errors='ignore') if isinstance(datetime_raw, (bytes, bytearray)) else str(datetime_raw)
         camera_model = camera_model_code
 
-        if ' ' in datetime:
-            index = datetime.index(' ')
-            substring = datetime[:index]
+        if ' ' in date_taken:
+            index = date_taken.index(' ')
+            substring = date_taken[:index]
             if ":" in substring:
                 new_substring = substring.replace(':', '.')
-                datetime = datetime[:index].replace(substring, new_substring) + datetime[index:]
+                date_taken = date_taken[:index].replace(substring, new_substring) + date_taken[index:]
 
-        if "T" in datetime:
-            datetime = datetime.replace("T", " ")
-            index = datetime.index(" ")
-            substring = datetime[:index]
+        if "T" in date_taken:
+            date_taken = date_taken.replace("T", " ")
+            index = date_taken.index(" ")
+            substring = date_taken[:index]
             if ":" in substring:
                 new_substring = substring.replace(':', '.')
-                datetime = datetime[:index].replace(substring, new_substring) + datetime[index:]
+                date_taken = date_taken[:index].replace(substring, new_substring) + date_taken[index:]
 
         if str(lens_info) == "Unknown Lens":
             exif_ids = ["-LensModel", "-Lens", "-LensType"]
@@ -228,13 +228,13 @@ def get_exif_data(image_path, exif_dict=None):
             if int(exposure_time_value) == exposure_time_value:
                 exposure_time_value = int(exposure_time_value)
             if exposure_time_value < 1:
-                shooting_info = f"{focal_length_value}mm  \u0192/{f_number_value}  1/{int(1 / exposure_time_value)}s  ISO{iso_speed}\n{datetime}"
+                shooting_info = f"{focal_length_value}mm  \u0192/{f_number_value}  1/{int(1 / exposure_time_value)}s  ISO{iso_speed}\n{date_taken}"
             else:
-                shooting_info = f"{focal_length_value}mm  \u0192/{f_number_value} {exposure_time_value}s  ISO{iso_speed}\n{datetime}"
+                shooting_info = f"{focal_length_value}mm  \u0192/{f_number_value} {exposure_time_value}s  ISO{iso_speed}\n{date_taken}"
         else:
-            shooting_info = "Invalid shooting info\n" + datetime
+            shooting_info = "Invalid shooting info\n" + date_taken
 
-        round_floats_in_string(lens_info)
+        lens_info = round_floats_in_string(lens_info)
         camera_info = f"{lens_info}\n{camera_model}"
         if "xiaomi" in camera_make.lower():
             camera_info = f"{camera_make}\n{camera_model}"
