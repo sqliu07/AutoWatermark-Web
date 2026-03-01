@@ -95,10 +95,7 @@ def upload_file():
 @bp.route("/status/<task_id>", methods=["GET"])
 def get_task_status(task_id):
     state = current_app.extensions["state"]
-    with state.tasks_lock:
-        task = state.tasks.get(task_id)
-        if task is not None:
-            task = dict(task)
+    task = state.get_task(task_id)
     if not task:
         return jsonify({"status": "unknown"}), 404
     return jsonify(task)

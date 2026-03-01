@@ -21,11 +21,11 @@ def allowed_file(filename: str, allowed_extensions: Set[str]) -> bool:
 def cleanup_old_tasks(state) -> None:
     """Remove tasks older than retention window."""
     current_time = time.time()
-    to_remove = []
     with state.tasks_lock:
-        for tid, info in list(state.tasks.items()):
-            if current_time - info.get("submitted_at", 0) > AppConstants.TASK_RETENTION_SECONDS:
-                to_remove.append(tid)
+        to_remove = [
+            tid for tid, info in state.tasks.items()
+            if current_time - info.get("submitted_at", 0) > AppConstants.TASK_RETENTION_SECONDS
+        ]
         for tid in to_remove:
             state.tasks.pop(tid, None)
 
@@ -56,8 +56,7 @@ def _update_queue_metrics(state, task_id: str, logger) -> None:
         total = state.metrics["total_tasks"]
         failed = state.metrics["failed_tasks"]
     failure_rate = (failed / total) if total else 0
-    with state.tasks_lock:
-        queue_length = sum(1 for info in state.tasks.values() if info.get("status") == "queued")
+    queue_length = state.count_tasks_by_status("queued")
     logger.info(
         "Queued task %s | queue=%s | failure_rate=%.2f%%",
         task_id,
@@ -68,13 +67,12 @@ def _update_queue_metrics(state, task_id: str, logger) -> None:
 
 def create_task(state) -> str:
     task_id = str(uuid.uuid4())
-    with state.tasks_lock:
-        state.tasks[task_id] = {
-            "status": "queued",
-            "submitted_at": time.time(),
-            "progress": 0.0,
-            "stage": "queued",
-        }
+    state.create_task(task_id, {
+        "status": "queued",
+        "submitted_at": time.time(),
+        "progress": 0.0,
+        "stage": "queued",
+    })
     return task_id
 
 
@@ -121,10 +119,12 @@ def background_process(
 ) -> None:
     start_time = time.time()
     try:
+        state.update_task(task_id, status="processing", stage="processing")
+        # Ensure progress is at least 0.01
         with state.tasks_lock:
-            state.tasks[task_id]["status"] = "processing"
-            state.tasks[task_id]["progress"] = max(state.tasks[task_id].get("progress", 0), 0.01)
-            state.tasks[task_id]["stage"] = "processing"
+            task = state.tasks.get(task_id)
+            if task:
+                task["progress"] = max(task.get("progress", 0), 0.01)
 
         def update_progress(progress, stage=None):
             with state.tasks_lock:
@@ -150,13 +150,13 @@ def background_process(
         original_name, extension = os.path.splitext(filename)
         processed_filename = f"{original_name}_watermark{extension}"
 
-        with state.tasks_lock:
-            state.tasks[task_id]["status"] = "succeeded"
-            state.tasks[task_id]["result"] = {
-                "processed_image": f"/upload/{processed_filename}?lang={lang}&burn={burn_after_read}"
-            }
-            state.tasks[task_id]["progress"] = 1.0
-            state.tasks[task_id]["stage"] = "done"
+        state.update_task(
+            task_id,
+            status="succeeded",
+            result={"processed_image": f"/upload/{processed_filename}?lang={lang}&burn={burn_after_read}"},
+            progress=1.0,
+            stage="done",
+        )
 
         with state.metrics_lock:
             state.metrics["succeeded_tasks"] += 1
@@ -168,22 +168,20 @@ def background_process(
         if message_key == "unsupported_manufacturer" and detail:
             message = f"{message} ({detail})"
 
-        with state.tasks_lock:
-            state.tasks[task_id]["status"] = "failed"
-            state.tasks[task_id]["error"] = message
-            state.tasks[task_id]["progress"] = 1.0
-            state.tasks[task_id]["stage"] = "failed"
+        state.update_task(task_id, status="failed", error=message, progress=1.0, stage="failed")
         logger.warning("Task %s failed: %s", task_id, message)
         with state.metrics_lock:
             state.metrics["failed_tasks"] += 1
 
     except Exception:
         logger.exception("Unexpected error in background task %s", task_id)
-        with state.tasks_lock:
-            state.tasks[task_id]["status"] = "failed"
-            state.tasks[task_id]["error"] = get_common_message("unexpected_error", lang)
-            state.tasks[task_id]["progress"] = 1.0
-            state.tasks[task_id]["stage"] = "failed"
+        state.update_task(
+            task_id,
+            status="failed",
+            error=get_common_message("unexpected_error", lang),
+            progress=1.0,
+            stage="failed",
+        )
         with state.metrics_lock:
             state.metrics["failed_tasks"] += 1
 
@@ -193,10 +191,7 @@ def background_process(
             total = state.metrics["total_tasks"]
             failed = state.metrics["failed_tasks"]
         failure_rate = (failed / total) if total else 0
-        with state.tasks_lock:
-            queue_length = sum(
-                1 for info in state.tasks.values() if info.get("status") in {"queued", "processing"}
-            )
+        queue_length = state.count_tasks_by_status("queued", "processing")
         logger.info(
             "Task %s finished in %.2f s | queue=%s | failure_rate=%.2f%%",
             task_id,
