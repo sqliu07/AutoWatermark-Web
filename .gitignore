@@ -1,6 +1,8 @@
 __pycache__/
 upload/
 venv/
+.venv/
+.venvtest/
 experiments/
 logs/
 test/
