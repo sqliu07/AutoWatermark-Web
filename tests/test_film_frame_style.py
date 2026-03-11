@@ -84,13 +84,17 @@ def test_generate_film_frame_style_portrait_uses_portrait_overrides(monkeypatch)
     metrics = captured["metrics"]
     expected_logo_height = max(24, int(round(framed_height * style["frame_logo_height_ratio_portrait"])))
     expected_font_size = max(12, int(round(framed_width * style["frame_font_size_ratio_portrait"])))
+    expected_line_gap = max(10, int(round(framed_width * style["frame_line_gap_ratio_portrait"])))
     landscape_logo_height = max(24, int(round(framed_height * style["frame_logo_height_ratio"])))
     landscape_font_size = max(12, int(round(framed_width * style["frame_font_size_ratio"])))
+    landscape_line_gap = max(10, int(round(framed_width * style["frame_line_gap_ratio"])))
 
     assert metrics["logo_height"] == expected_logo_height
     assert metrics["font_start_size"] == expected_font_size
+    assert metrics["line_gap"] == expected_line_gap
     assert metrics["logo_height"] != landscape_logo_height
     assert metrics["font_start_size"] != landscape_font_size
+    assert metrics["line_gap"] != landscape_line_gap
     assert rendered.height > source.height
     assert rendered.width > source.width
     assert rendered.width == rendered.height

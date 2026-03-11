@@ -222,6 +222,7 @@ def _get_film_frame_metrics(style, framed_photo):
     min_font_start_size = 12
     logo_height_ratio = style["frame_logo_height_ratio_portrait"] if portrait else style["frame_logo_height_ratio"]
     font_size_ratio = style["frame_font_size_ratio_portrait"] if portrait else style["frame_font_size_ratio"]
+    line_gap_ratio = style["frame_line_gap_ratio_portrait"] if portrait else style["frame_line_gap_ratio"]
 
     return {
         "background_color": style["frame_background_color"],
@@ -231,7 +232,7 @@ def _get_film_frame_metrics(style, framed_photo):
         "top_margin": max(min_top_margin, int(round(framed_photo.height * style["frame_top_margin_ratio"]))),
         "text_gap": max(min_text_gap, int(round(framed_photo.height * style["frame_text_gap_ratio"]))),
         "logo_gap": max(min_logo_gap, int(round(framed_photo.width * style["frame_logo_gap_ratio"]))),
-        "line_gap": max(min_line_gap, int(round(framed_photo.width * style["frame_line_gap_ratio"]))),
+        "line_gap": max(min_line_gap, int(round(framed_photo.width * line_gap_ratio))),
         "bottom_margin": max(min_bottom_margin, int(round(framed_photo.height * style["frame_bottom_margin_ratio"]))),
         "logo_height": max(min_logo_height, int(round(framed_photo.height * logo_height_ratio))),
         "font_start_size": max(min_font_start_size, int(round(framed_photo.width * font_size_ratio))),

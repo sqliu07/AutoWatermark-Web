@@ -129,5 +129,6 @@ frame_logo_height_ratio = 0.08
 frame_font_size_ratio = 0.016
 frame_font_max_width_ratio = 0.68
 frame_logo_height_ratio_portrait = 0.055
-frame_font_size_ratio_portrait = 0.022
+frame_font_size_ratio_portrait = 0.026
+frame_line_gap_ratio_portrait = 0.022
 frame_force_square = true
