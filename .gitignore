@@ -15,5 +15,8 @@ tests/fixtures/*.webp
 tests/fixtures/*.tif
 tests/fixtures/*.tiff
 tests/fixtures/*.bmp
+scripts/__pycache__/
+scripts/out.jpg
+scripts/test.jpg
 clear_his.sh
 AGENTS.md

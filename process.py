@@ -137,16 +137,17 @@ def process_image(
         camera_model = get_camera_model(exif_dict)
 
         logo_path = None
-        if manufacturer and "xiaomi" in manufacturer.lower():
-            if logo_preference == "leica":
-                logo_path = find_logo("leica")
+        if style.get("requires_logo", True):
+            if manufacturer and "xiaomi" in manufacturer.lower():
+                if logo_preference == "leica":
+                    logo_path = find_logo("leica")
+                else:
+                    logo_path = find_logo(manufacturer)
             else:
                 logo_path = find_logo(manufacturer)
-        else:
-            logo_path = find_logo(manufacturer)
-        if logo_path is None:
-            detail = manufacturer if not camera_model else f"{manufacturer} {camera_model}"
-            raise UnsupportedManufacturerError(manufacturer, detail=detail)
+            if logo_path is None:
+                detail = manufacturer if not camera_model else f"{manufacturer} {camera_model}"
+                raise UnsupportedManufacturerError(manufacturer, detail=detail)
 
         result = get_exif_data(working_image_path, exif_dict)
         if result is None or result == (None, None):
@@ -171,6 +172,8 @@ def process_image(
             CommonConstants.GLOBAL_FONT_PATH_LIGHT,
             CommonConstants.GLOBAL_FONT_PATH_BOLD,
             watermark_type,
+            font_path_regular=CommonConstants.GLOBAL_FONT_PATH_MONO,
+            font_path_symbol=CommonConstants.GLOBAL_FONT_PATH_REGULAR,
             return_metadata=needs_metadata,
             style_config=style_config,
             style=style,
