@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 import shutil
 import subprocess
@@ -648,6 +649,9 @@ def _get_video_wh(video_path: Path) -> tuple[int, int]:
     except ValueError as exc:
         raise RuntimeError(f"Unable to parse video dimensions from ffprobe output: {s or '<empty>'}") from exc
 
+def _normalize_rotation(value: int | float | str) -> int:
+    return int(round(float(value))) % 360
+
 def _apply_watermark_to_video(
     video_path: Path,
     overlay_path: Path,
@@ -678,10 +682,10 @@ def _apply_watermark_to_video(
     rot_filter = ""
     disp_w, disp_h = vw, vh
     if rotation == 90:
-        rot_filter = ",transpose=1"      # clockwise 90
+        rot_filter = ",transpose=2"      # counter-clockwise 90
         disp_w, disp_h = vh, vw
     elif rotation == 270:
-        rot_filter = ",transpose=2"      # counter-clockwise 90
+        rot_filter = ",transpose=1"      # clockwise 90
         disp_w, disp_h = vh, vw
     elif rotation == 180:
         rot_filter = ",hflip,vflip"
@@ -765,19 +769,28 @@ def _get_video_rotation(video_path: Path) -> Optional[int]:
                 "error",
                 "-select_streams",
                 "v:0",
-                "-show_entries",
-                "stream_tags=rotate",
+                "-show_streams",
                 "-of",
-                "default=noprint_wrappers=1:nokey=1",
+                "json",
                 str(video_path),
             ],
             check=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
+            text=True,
         )
-        output = result.stdout.decode().strip()
-        if output:
-            return int(output)
+        payload = json.loads(result.stdout)
+        stream = (payload.get("streams") or [{}])[0]
+
+        for side_data in stream.get("side_data_list") or []:
+            rotation = side_data.get("rotation")
+            if rotation is not None:
+                return _normalize_rotation(rotation)
+
+        rotate_tag = (stream.get("tags") or {}).get("rotate")
+        if rotate_tag:
+            # Legacy rotate tag uses the opposite sign convention from side_data rotation.
+            return (-_normalize_rotation(rotate_tag)) % 360
     except Exception:
         return None
     return None

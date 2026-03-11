@@ -657,16 +657,24 @@ def _render_layout_film_frame(_final_image, context):
         + caption_group.height
         + metrics["bottom_margin"]
     )
-    canvas = Image.new("RGB", (canvas_width, canvas_height), metrics["background_color"])
+    if style.get("frame_force_square", False):
+        canvas_side = max(canvas_width, canvas_height)
+        canvas = Image.new("RGB", (canvas_side, canvas_side), metrics["background_color"])
+        offset_x = (canvas_side - canvas_width) // 2
+        offset_y = (canvas_side - canvas_height) // 2
+    else:
+        canvas = Image.new("RGB", (canvas_width, canvas_height), metrics["background_color"])
+        offset_x = 0
+        offset_y = 0
 
-    photo_x = (canvas_width - framed_photo.width) // 2
-    photo_y = metrics["top_margin"]
+    photo_x = offset_x + (canvas_width - framed_photo.width) // 2
+    photo_y = offset_y + metrics["top_margin"]
     shadow_blur = max(4, int(round(border_size * 2.5)))
 
     _draw_film_frame_shadow(canvas, framed_photo, photo_x, photo_y, shadow_blur)
     canvas.paste(framed_photo, (photo_x, photo_y))
 
-    caption_x = (canvas_width - caption_group.width) // 2
+    caption_x = offset_x + (canvas_width - caption_group.width) // 2
     caption_y = photo_y + framed_photo.height + metrics["text_gap"]
     canvas.paste(caption_group, (caption_x, caption_y), caption_group)
 

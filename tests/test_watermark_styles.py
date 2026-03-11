@@ -25,6 +25,7 @@ def test_load_default_watermark_style_config():
     assert get_style(config, 4)["background"] == "frosted"
     assert get_style(config, 5)["layout"] == "film_frame"
     assert get_style(config, 5)["requires_logo"] is True
+    assert get_style(config, 5)["frame_force_square"] is True
 
 
 def test_load_default_watermark_style_config_with_relative_path():

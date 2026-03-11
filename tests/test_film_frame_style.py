@@ -36,6 +36,7 @@ def test_generate_film_frame_style_creates_film_frame_layout():
 
     assert rendered.width > source.width
     assert rendered.height > source.height
+    assert rendered.width == rendered.height
     assert rendered.getpixel((10, 10)) == (236, 236, 236)
 
     x0, y0, x1, y1 = metadata["content_box"]
@@ -92,6 +93,7 @@ def test_generate_film_frame_style_portrait_uses_portrait_overrides(monkeypatch)
     assert metrics["font_start_size"] != landscape_font_size
     assert rendered.height > source.height
     assert rendered.width > source.width
+    assert rendered.width == rendered.height
 
 
 def test_process_image_film_frame_style_uses_logo(tmp_path, monkeypatch):

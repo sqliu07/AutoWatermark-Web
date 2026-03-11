@@ -55,6 +55,7 @@ _DEFAULT_STYLE = {
     "frame_font_max_width_ratio": 0.68,
     "frame_logo_height_ratio_portrait": 0.08,
     "frame_font_size_ratio_portrait": 0.016,
+    "frame_force_square": False,
 }
 
 _ALLOWED_LAYOUTS = {"split_lr", "center_stack", "film_frame"}
@@ -165,6 +166,7 @@ def _normalize_style(style_id: int, raw_style: Dict[str, Any]) -> Dict[str, Any]
         "frame_font_size_ratio_portrait": _as_float(
             style["frame_font_size_ratio_portrait"], f"styles.{style_id}.frame_font_size_ratio_portrait"
         ),
+        "frame_force_square": _as_bool(style["frame_force_square"], f"styles.{style_id}.frame_force_square"),
     }
 
     if normalized["layout"] not in _ALLOWED_LAYOUTS:
