@@ -40,9 +40,24 @@ _DEFAULT_STYLE = {
     "bottom_offset_landscape_divisor": 6,
     "supports_motion": True,
     "supports_ultrahdr": True,
+    "requires_logo": True,
+    "frame_background_color": "#ececec",
+    "frame_text_color": "#5f5f5f",
+    "frame_border_ratio": 0.006,
+    "frame_side_margin_ratio": 0.09,
+    "frame_top_margin_ratio": 0.16,
+    "frame_text_gap_ratio": 0.14,
+    "frame_logo_gap_ratio": 0.018,
+    "frame_line_gap_ratio": 0.012,
+    "frame_bottom_margin_ratio": 0.16,
+    "frame_logo_height_ratio": 0.08,
+    "frame_font_size_ratio": 0.016,
+    "frame_font_max_width_ratio": 0.68,
+    "frame_logo_height_ratio_portrait": 0.08,
+    "frame_font_size_ratio_portrait": 0.016,
 }
 
-_ALLOWED_LAYOUTS = {"split_lr", "center_stack"}
+_ALLOWED_LAYOUTS = {"split_lr", "center_stack", "film_frame"}
 _ALLOWED_BACKGROUNDS = {"white", "frosted"}
 _ALLOWED_PADDING_MODES = {"border_left", "footer_ratio"}
 _ALLOWED_TEXT_COLOR_MODES = {"black", "auto_contrast"}
@@ -131,6 +146,25 @@ def _normalize_style(style_id: int, raw_style: Dict[str, Any]) -> Dict[str, Any]
         ),
         "supports_motion": _as_bool(style["supports_motion"], f"styles.{style_id}.supports_motion"),
         "supports_ultrahdr": _as_bool(style["supports_ultrahdr"], f"styles.{style_id}.supports_ultrahdr"),
+        "requires_logo": _as_bool(style["requires_logo"], f"styles.{style_id}.requires_logo"),
+        "frame_background_color": _as_str(style["frame_background_color"], f"styles.{style_id}.frame_background_color"),
+        "frame_text_color": _as_str(style["frame_text_color"], f"styles.{style_id}.frame_text_color"),
+        "frame_border_ratio": _as_float(style["frame_border_ratio"], f"styles.{style_id}.frame_border_ratio"),
+        "frame_side_margin_ratio": _as_float(style["frame_side_margin_ratio"], f"styles.{style_id}.frame_side_margin_ratio"),
+        "frame_top_margin_ratio": _as_float(style["frame_top_margin_ratio"], f"styles.{style_id}.frame_top_margin_ratio"),
+        "frame_text_gap_ratio": _as_float(style["frame_text_gap_ratio"], f"styles.{style_id}.frame_text_gap_ratio"),
+        "frame_logo_gap_ratio": _as_float(style["frame_logo_gap_ratio"], f"styles.{style_id}.frame_logo_gap_ratio"),
+        "frame_line_gap_ratio": _as_float(style["frame_line_gap_ratio"], f"styles.{style_id}.frame_line_gap_ratio"),
+        "frame_bottom_margin_ratio": _as_float(style["frame_bottom_margin_ratio"], f"styles.{style_id}.frame_bottom_margin_ratio"),
+        "frame_logo_height_ratio": _as_float(style["frame_logo_height_ratio"], f"styles.{style_id}.frame_logo_height_ratio"),
+        "frame_font_size_ratio": _as_float(style["frame_font_size_ratio"], f"styles.{style_id}.frame_font_size_ratio"),
+        "frame_font_max_width_ratio": _as_float(style["frame_font_max_width_ratio"], f"styles.{style_id}.frame_font_max_width_ratio"),
+        "frame_logo_height_ratio_portrait": _as_float(
+            style["frame_logo_height_ratio_portrait"], f"styles.{style_id}.frame_logo_height_ratio_portrait"
+        ),
+        "frame_font_size_ratio_portrait": _as_float(
+            style["frame_font_size_ratio_portrait"], f"styles.{style_id}.frame_font_size_ratio_portrait"
+        ),
     }
 
     if normalized["layout"] not in _ALLOWED_LAYOUTS:

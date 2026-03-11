@@ -8,7 +8,9 @@ class CommonConstants:
     }
 
     GLOBAL_FONT_PATH_BOLD = "./fonts/AlibabaPuHuiTi-2-85-Bold.otf"
+    GLOBAL_FONT_PATH_REGULAR = "./fonts/AlibabaPuHuiTi-2-55-Regular.otf"
     GLOBAL_FONT_PATH_LIGHT = "./fonts/AlibabaPuHuiTi-2-45-Light.otf"
+    GLOBAL_FONT_PATH_MONO = "./fonts/RobotoMono-Regular.ttf"
 
     ERROR_MESSAGES = {
         "unsupported_manufacturer": {
