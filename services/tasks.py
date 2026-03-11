@@ -167,9 +167,28 @@ def background_process(
         message = get_common_message(message_key, lang) or detail or get_common_message("unexpected_error", lang)
         if message_key == "unsupported_manufacturer" and detail:
             message = f"{message} ({detail})"
+        elif message_key == "unexpected_error" and detail:
+            message = detail
 
         state.update_task(task_id, status="failed", error=message, progress=1.0, stage="failed")
-        logger.warning("Task %s failed: %s", task_id, message)
+        if message_key == "unexpected_error":
+            logger.exception(
+                "Task %s failed: %s | detail=%s | file=%s | style=%s",
+                task_id,
+                message,
+                detail or "-",
+                filepath,
+                watermark_type,
+            )
+        else:
+            logger.warning(
+                "Task %s failed: %s | detail=%s | file=%s | style=%s",
+                task_id,
+                message,
+                detail or "-",
+                filepath,
+                watermark_type,
+            )
         with state.metrics_lock:
             state.metrics["failed_tasks"] += 1
 

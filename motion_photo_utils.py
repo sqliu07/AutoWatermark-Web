@@ -618,10 +618,10 @@ def _copy_all_metadata_with_exiftool(src_jpg: Path, dst_jpg: Path) -> None:
     except Exception:
         # Do not fail the pipeline if metadata copy fails; motion photo may still work on some devices.
         return
-def _get_video_wh(video_path: Path) -> Optional[tuple[int, int]]:
+def _get_video_wh(video_path: Path) -> tuple[int, int]:
     ffprobe_path = shutil.which("ffprobe")
     if not ffprobe_path:
-        return None
+        raise RuntimeError("ffprobe is required to read motion photo video dimensions but was not found in PATH")
     try:
         r = subprocess.run(
             [
@@ -638,12 +638,16 @@ def _get_video_wh(video_path: Path) -> Optional[tuple[int, int]]:
             text=True,
         )
         s = r.stdout.strip()
-        if "x" in s:
-            w, h = s.split("x", 1)
-            return int(w), int(h)
-    except Exception:
-        return None
-    return None
+        match = re.search(r"(\d+)x(\d+)", s)
+        if match:
+            return int(match.group(1)), int(match.group(2))
+        raise RuntimeError(f"Unable to parse video dimensions from ffprobe output: {s or '<empty>'}")
+    except subprocess.CalledProcessError as exc:
+        detail = exc.stderr.strip() or exc.stdout.strip() or "unknown ffprobe error"
+        raise RuntimeError(f"ffprobe failed to read motion photo video dimensions: {detail}") from exc
+    except ValueError as exc:
+        raise RuntimeError(f"Unable to parse video dimensions from ffprobe output: {s or '<empty>'}") from exc
+
 def _apply_watermark_to_video(
     video_path: Path,
     overlay_path: Path,
@@ -666,10 +670,7 @@ def _apply_watermark_to_video(
         raise ValueError("Invalid content box")
 
     # Video coded size (before rotation metadata)
-    wh = _get_video_wh(video_path)
-    if not wh:
-        raise RuntimeError("ffprobe is required to read video width/height for motion photo overlay")
-    vw, vh = wh
+    vw, vh = _get_video_wh(video_path)
 
     rotation = _get_video_rotation(video_path)  # e.g. 270
 

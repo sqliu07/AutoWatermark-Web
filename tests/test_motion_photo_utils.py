@@ -1,0 +1,15 @@
+from pathlib import Path
+from types import SimpleNamespace
+
+import motion_photo_utils as motion_utils
+
+
+def test_get_video_wh_accepts_trailing_separator(monkeypatch):
+    monkeypatch.setattr(motion_utils.shutil, "which", lambda _: "/usr/local/bin/ffprobe")
+
+    def fake_run(*args, **kwargs):
+        return SimpleNamespace(stdout="1008x1344x\n", stderr="")
+
+    monkeypatch.setattr(motion_utils.subprocess, "run", fake_run)
+
+    assert motion_utils._get_video_wh(Path("/tmp/fake.mp4")) == (1008, 1344)
