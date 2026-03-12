@@ -46,6 +46,8 @@ RUN sed -i 's/\r$//' /app/3rdparty/exiftool/exiftool && \
     rm -rf /app/3rdparty/exiftool/{Changes,MANIFEST,META.json,META.yml,Makefile.PL,README,build_geolocation,build_tag_lookup,html,t,validate,windows_exiftool,windows_exiftool.txt}
 
 ENV FLASK_ENV=production
+RUN mkdir -p /app/upload /app/data /app/logs
+VOLUME ["/app/upload", "/app/data", "/app/logs"]
 EXPOSE 5000
 
 CMD ["gunicorn", "-w", "4", "-b", "0.0.0.0:5000", "app:app"]

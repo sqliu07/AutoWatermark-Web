@@ -100,8 +100,15 @@ supports_ultrahdr = true
     ```bash
     # -d 后台运行
     # -p 映射端口 (宿主机:容器)
+    # -v 挂载上传文件、SQLite 数据库和日志目录
     # --name 容器名称
-    docker run -d -p 5000:5000 --name watermark-app autowatermark-web
+    docker run -d \
+      -p 5000:5000 \
+      -v $(pwd)/upload:/app/upload \
+      -v $(pwd)/data:/app/data \
+      -v $(pwd)/logs:/app/logs \
+      --name watermark-app \
+      autowatermark-web
     ```
 
 3.  **访问**
