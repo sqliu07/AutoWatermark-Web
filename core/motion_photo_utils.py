@@ -112,7 +112,7 @@ class MotionPhotoSession:
             # If watermarking changed canvas size (your type 1/2/3 often adds borders),
             # expand gainmap with neutral pixels so border area has gain=1 (no HDR boost).
             try:
-                from ultrahdr_utils import expand_gainmap_for_borders
+                from core.ultrahdr_utils import expand_gainmap_for_borders
                 from io import BytesIO
                 from PIL import Image
 
@@ -193,7 +193,7 @@ def prepare_motion_photo(image_path: str | Path) -> Optional[MotionPhotoSession]
     # 1) still_path 写 primary_jpeg
     # 2) session 缓存 gainmap_jpeg/xmp，finalize 时再封装回去
     try:
-        from ultrahdr_utils import split_ultrahdr
+        from core.ultrahdr_utils import split_ultrahdr
         from io import BytesIO
         from PIL import Image
 

@@ -5,13 +5,13 @@ venv/
 .venvtest/
 
 # Runtime outputs
-upload/
-logs/
-data/
+/upload/
+/logs/
+/data/
 
 # Local experiments and scratch files
 experiments/
-test/
+/test/
 clear_his.sh
 
 # Test fixture binaries

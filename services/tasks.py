@@ -8,8 +8,8 @@ import piexif
 
 from constants import CommonConstants
 from errors import WatermarkError
-from exif_utils import get_manufacturer
-from process import process_image
+from core.exif_utils import get_manufacturer
+from core.process import process_image
 from services.i18n import get_common_message
 from services.task_store import (
     count_tasks_by_status,

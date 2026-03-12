@@ -3,10 +3,10 @@ from pathlib import Path
 import piexif
 from PIL import Image
 
-import image_utils as image_utils_module
-import process as process_module
+import core.image_utils as image_utils_module
+import core.process as process_module
 from constants import CommonConstants
-from image_utils import generate_watermark_image
+from core.image_utils import generate_watermark_image
 from services.watermark_styles import get_style, load_watermark_styles
 
 

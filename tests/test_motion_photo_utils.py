@@ -2,7 +2,7 @@ from pathlib import Path
 from types import SimpleNamespace
 import json
 
-import motion_photo_utils as motion_utils
+import core.motion_photo_utils as motion_utils
 
 
 def test_get_video_wh_accepts_trailing_separator(monkeypatch):

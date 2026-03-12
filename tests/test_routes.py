@@ -9,11 +9,11 @@ from PIL import Image
 import routes.upload as upload_routes
 from constants import ImageConstants
 from errors import ImageTooLargeError, MissingExifDataError, UnsupportedManufacturerError
-from exif_utils import find_logo, get_manufacturer
-from motion_photo_utils import prepare_motion_photo
-from process import process_image
+from core.exif_utils import find_logo, get_manufacturer
+from core.motion_photo_utils import prepare_motion_photo
+from core.process import process_image
 from services.task_store import insert_task, is_file_scheduled_for_burn, update_task
-from ultrahdr_utils import split_ultrahdr
+from core.ultrahdr_utils import split_ultrahdr
 
 PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[1]
 ASSETS_DIR = PROJECT_ROOT / "tests" / "fixtures"
