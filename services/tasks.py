@@ -6,28 +6,22 @@ from typing import Optional, Set
 from PIL import Image
 import piexif
 
-from constants import CommonConstants, AppConstants
+from constants import CommonConstants
 from errors import WatermarkError
 from exif_utils import get_manufacturer
 from process import process_image
 from services.i18n import get_common_message
+from services.task_store import (
+    count_tasks_by_status,
+    get_task_stats,
+    insert_task,
+    update_task,
+)
 
 
 def allowed_file(filename: str, allowed_extensions: Set[str]) -> bool:
     """Check allowed file extensions."""
     return "." in filename and filename.rsplit(".", 1)[1].lower() in allowed_extensions
-
-
-def cleanup_old_tasks(state) -> None:
-    """Remove tasks older than retention window."""
-    current_time = time.time()
-    with state.tasks_lock:
-        to_remove = [
-            tid for tid, info in state.tasks.items()
-            if current_time - info.get("submitted_at", 0) > AppConstants.TASK_RETENTION_SECONDS
-        ]
-        for tid in to_remove:
-            state.tasks.pop(tid, None)
 
 
 def detect_manufacturer(filepath: str):
@@ -50,13 +44,12 @@ def normalize_image_quality(image_quality: str) -> int:
     return CommonConstants.IMAGE_QUALITY_MAP.get("low")
 
 
-def _update_queue_metrics(state, task_id: str, logger) -> None:
-    with state.metrics_lock:
-        state.metrics["total_tasks"] += 1
-        total = state.metrics["total_tasks"]
-        failed = state.metrics["failed_tasks"]
+def _update_queue_metrics(db_path: str, task_id: str, logger) -> None:
+    stats = get_task_stats(db_path)
+    total = stats["total_tasks"]
+    failed = stats["failed_tasks"]
     failure_rate = (failed / total) if total else 0
-    queue_length = state.count_tasks_by_status("queued")
+    queue_length = count_tasks_by_status(db_path, "queued")
     logger.info(
         "Queued task %s | queue=%s | failure_rate=%.2f%%",
         task_id,
@@ -65,19 +58,34 @@ def _update_queue_metrics(state, task_id: str, logger) -> None:
     )
 
 
-def create_task(state) -> str:
+def create_task(
+    db_path: str,
+    *,
+    filepath: str,
+    lang: str,
+    watermark_type: int,
+    image_quality: int,
+    burn_after_read: bool,
+    logo_preference: Optional[str],
+) -> str:
     task_id = str(uuid.uuid4())
-    state.create_task(task_id, {
-        "status": "queued",
-        "submitted_at": time.time(),
-        "progress": 0.0,
-        "stage": "queued",
-    })
+    insert_task(
+        db_path,
+        task_id=task_id,
+        lang=lang,
+        watermark_type=watermark_type,
+        image_quality=image_quality,
+        burn_after_read=burn_after_read,
+        logo_preference=logo_preference,
+        input_path=filepath,
+        submitted_at=time.time(),
+    )
     return task_id
 
 
 def submit_task(
     state,
+    db_path: str,
     filepath: str,
     lang: str,
     watermark_type: int,
@@ -87,12 +95,21 @@ def submit_task(
     style_config,
     logger,
 ) -> str:
-    task_id = create_task(state)
-    _update_queue_metrics(state, task_id, logger)
+    burn_after_read_bool = str(burn_after_read).strip() == "1"
+    task_id = create_task(
+        db_path,
+        filepath=filepath,
+        lang=lang,
+        watermark_type=watermark_type,
+        image_quality=image_quality,
+        burn_after_read=burn_after_read_bool,
+        logo_preference=logo_preference,
+    )
+    _update_queue_metrics(db_path, task_id, logger)
     state.executor.submit(
         background_process,
         task_id,
-        state,
+        db_path,
         filepath,
         lang,
         watermark_type,
@@ -107,7 +124,7 @@ def submit_task(
 
 def background_process(
     task_id: str,
-    state,
+    db_path: str,
     filepath: str,
     lang: str,
     watermark_type: int,
@@ -119,22 +136,20 @@ def background_process(
 ) -> None:
     start_time = time.time()
     try:
-        state.update_task(task_id, status="processing", stage="processing")
-        # Ensure progress is at least 0.01
-        with state.tasks_lock:
-            task = state.tasks.get(task_id)
-            if task:
-                task["progress"] = max(task.get("progress", 0), 0.01)
+        update_task(
+            db_path,
+            task_id,
+            status="processing",
+            stage="processing",
+            started_at=start_time,
+            progress=0.01,
+        )
 
         def update_progress(progress, stage=None):
-            with state.tasks_lock:
-                task = state.tasks.get(task_id)
-                if not task:
-                    return
-                current = task.get("progress", 0)
-                task["progress"] = max(current, min(progress, 1))
-                if stage:
-                    task["stage"] = stage
+            fields = {"progress": max(0.01, min(progress, 1.0))}
+            if stage:
+                fields["stage"] = stage
+            update_task(db_path, task_id, **fields)
 
         process_image(
             filepath,
@@ -149,17 +164,20 @@ def background_process(
         filename = os.path.basename(filepath)
         original_name, extension = os.path.splitext(filename)
         processed_filename = f"{original_name}_watermark{extension}"
+        result_url = f"/upload/{processed_filename}?lang={lang}&burn={burn_after_read}"
+        output_path = os.path.join(os.path.dirname(filepath), processed_filename)
 
-        state.update_task(
+        update_task(
+            db_path,
             task_id,
             status="succeeded",
-            result={"processed_image": f"/upload/{processed_filename}?lang={lang}&burn={burn_after_read}"},
+            result_url=result_url,
+            output_path=output_path,
             progress=1.0,
             stage="done",
+            finished_at=time.time(),
+            error=None,
         )
-
-        with state.metrics_lock:
-            state.metrics["succeeded_tasks"] += 1
 
     except WatermarkError as err:
         message_key = err.get_message_key()
@@ -170,7 +188,15 @@ def background_process(
         elif message_key == "unexpected_error" and detail:
             message = detail
 
-        state.update_task(task_id, status="failed", error=message, progress=1.0, stage="failed")
+        update_task(
+            db_path,
+            task_id,
+            status="failed",
+            error=message,
+            progress=1.0,
+            stage="failed",
+            finished_at=time.time(),
+        )
         if message_key == "unexpected_error":
             logger.exception(
                 "Task %s failed: %s | detail=%s | file=%s | style=%s",
@@ -189,28 +215,26 @@ def background_process(
                 filepath,
                 watermark_type,
             )
-        with state.metrics_lock:
-            state.metrics["failed_tasks"] += 1
 
     except Exception:
         logger.exception("Unexpected error in background task %s", task_id)
-        state.update_task(
+        update_task(
+            db_path,
             task_id,
             status="failed",
             error=get_common_message("unexpected_error", lang),
             progress=1.0,
             stage="failed",
+            finished_at=time.time(),
         )
-        with state.metrics_lock:
-            state.metrics["failed_tasks"] += 1
 
     finally:
         duration = time.time() - start_time
-        with state.metrics_lock:
-            total = state.metrics["total_tasks"]
-            failed = state.metrics["failed_tasks"]
+        stats = get_task_stats(db_path)
+        total = stats["total_tasks"]
+        failed = stats["failed_tasks"]
         failure_rate = (failed / total) if total else 0
-        queue_length = state.count_tasks_by_status("queued", "processing")
+        queue_length = count_tasks_by_status(db_path, "queued", "processing")
         logger.info(
             "Task %s finished in %.2f s | queue=%s | failure_rate=%.2f%%",
             task_id,

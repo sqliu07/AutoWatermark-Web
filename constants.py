@@ -29,6 +29,10 @@ class CommonConstants:
             'en': "An unexpected error occurred while processing the watermark.",
             'zh': "处理水印时发生未知错误。"
         },
+        "task_interrupted": {
+            'en': "Task processing was interrupted. Please upload the image again.",
+            'zh': "任务处理中断，请重新上传图片。"
+        },
         "image_too_large": {
             'en': "Image size exceeds 100 million pixels, too large to process!",
             'zh': "图片超过一亿像素，尺寸过大，无法处理！"
@@ -55,6 +59,7 @@ class CommonConstants:
 
 class AppConstants:
     UPLOAD_FOLDER = './upload'
+    DATABASE_PATH = './data/watermark.db'
     ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}
     MAX_CONTENT_LENGTH = 200 * 1024 * 1024  # 最大文件 200MB
 
@@ -64,6 +69,7 @@ class AppConstants:
 
     EXECUTOR_MAX_WORKERS = 4
     TASK_RETENTION_SECONDS = 3600
+    TASK_HEARTBEAT_TIMEOUT_SECONDS = 6 * 3600
 
     CLEANER_INTERVAL_SECONDS = 10
     BURN_TTL_SECONDS = 120

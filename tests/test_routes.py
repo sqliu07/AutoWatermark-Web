@@ -12,6 +12,7 @@ from errors import ImageTooLargeError, MissingExifDataError, UnsupportedManufact
 from exif_utils import find_logo, get_manufacturer
 from motion_photo_utils import prepare_motion_photo
 from process import process_image
+from services.task_store import insert_task, is_file_scheduled_for_burn, update_task
 from ultrahdr_utils import split_ultrahdr
 
 PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -56,6 +57,36 @@ def test_status_unknown(client):
     assert payload["status"] == "unknown"
 
 
+def test_status_returns_task_from_sqlite(client):
+    app = client.application
+    db_path = app.config["DATABASE_PATH"]
+    insert_task(
+        db_path,
+        task_id="task-from-db",
+        lang="zh",
+        watermark_type=1,
+        image_quality=100,
+        burn_after_read=False,
+        logo_preference=None,
+        input_path="/tmp/example.jpg",
+        submitted_at=123.0,
+    )
+    update_task(
+        db_path,
+        "task-from-db",
+        status="succeeded",
+        progress=1.0,
+        stage="done",
+        result_url="/upload/example_watermark.jpg?lang=zh&burn=0",
+    )
+
+    response = client.get("/status/task-from-db")
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["status"] == "succeeded"
+    assert payload["result"]["processed_image"] == "/upload/example_watermark.jpg?lang=zh&burn=0"
+
+
 def test_download_zip_no_files(client):
     response = client.post("/download_zip", json={})
     assert response.status_code == 400
@@ -87,6 +118,7 @@ def test_upload_unknown_watermark_type(client):
 
 def test_upload_xiaomi_requires_logo_choice(client, monkeypatch):
     monkeypatch.setattr(upload_routes, "detect_manufacturer", lambda _: "xiaomi")
+    upload_dir = client.application.config["UPLOAD_FOLDER"]
     data = {
         "file": (io.BytesIO(b"fake"), "sample.jpg"),
     }
@@ -94,6 +126,7 @@ def test_upload_xiaomi_requires_logo_choice(client, monkeypatch):
     assert response.status_code == 200
     payload = response.get_json()
     assert payload == {"needs_logo_choice": True}
+    assert os.listdir(upload_dir) == []
 
 
 def test_upload_success_returns_task_id(client, monkeypatch):
@@ -123,8 +156,7 @@ def test_upload_burn_after_read_updates_queue(client):
     response = client.get(f"/upload/{filename}?burn=1")
     assert response.status_code == 200
 
-    state = app.extensions["state"]
-    assert file_path in state.burn_queue
+    assert is_file_scheduled_for_burn(app.config["DATABASE_PATH"], file_path)
 
 
 def test_download_zip_with_valid_file(client):

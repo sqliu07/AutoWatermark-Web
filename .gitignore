@@ -5,6 +5,7 @@ venv/
 .venvtest/
 experiments/
 logs/
+data/
 test/
 tests/fixtures/*.jpg
 tests/fixtures/*.jpeg

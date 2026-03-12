@@ -12,6 +12,7 @@ from routes.upload import bp as upload_bp
 from services.cleanup import start_background_cleaner
 from services.i18n import load_translations
 from services.state import AppState
+from services.task_store import init_db
 from services.watermark_styles import load_cached_watermark_styles
 
 
@@ -27,6 +28,7 @@ def create_app(config_overrides=None):
 
     app.config.from_mapping(
         UPLOAD_FOLDER=AppConstants.UPLOAD_FOLDER,
+        DATABASE_PATH=AppConstants.DATABASE_PATH,
         ALLOWED_EXTENSIONS=AppConstants.ALLOWED_EXTENSIONS,
         MAX_CONTENT_LENGTH=AppConstants.MAX_CONTENT_LENGTH,
         START_BACKGROUND_CLEANER=True,
@@ -37,6 +39,7 @@ def create_app(config_overrides=None):
         app.config.update(config_overrides)
 
     os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
+    init_db(app.config["DATABASE_PATH"])
 
     limiter.init_app(app)
 
@@ -53,6 +56,6 @@ def create_app(config_overrides=None):
     app.register_blueprint(download_bp)
 
     if app.config.get("START_BACKGROUND_CLEANER", True):
-        start_background_cleaner(app, app.extensions["state"], logger)
+        start_background_cleaner(app, app.config["DATABASE_PATH"], logger)
 
     return app

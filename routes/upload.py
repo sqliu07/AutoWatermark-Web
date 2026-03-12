@@ -1,6 +1,7 @@
 import os
 import time
-from datetime import datetime
+import uuid
+from pathlib import Path
 
 from flask import Blueprint, current_app, jsonify, request, render_template, send_file
 from werkzeug.utils import secure_filename
@@ -8,9 +9,9 @@ from werkzeug.utils import secure_filename
 from constants import AppConstants
 from extensions import limiter
 from services.i18n import get_message, get_common_message, normalize_lang
+from services.task_store import get_task, schedule_burn_file
 from services.tasks import (
     allowed_file,
-    cleanup_old_tasks,
     detect_manufacturer,
     normalize_image_quality,
     submit_task,
@@ -24,8 +25,8 @@ bp = Blueprint("upload", __name__)
 @limiter.limit(AppConstants.UPLOAD_RATE_LIMIT)
 def upload_file():
     state = current_app.extensions["state"]
-    cleanup_old_tasks(state)
-
+    upload_dir = current_app.config["UPLOAD_FOLDER"]
+    db_path = current_app.config["DATABASE_PATH"]
     lang = normalize_lang(request.args.get("lang", "zh"))
 
     if "file" not in request.files:
@@ -48,35 +49,38 @@ def upload_file():
 
     image_quality_int = normalize_image_quality(image_quality)
 
-    if watermark_type is None:
-        return jsonify(error="Watermark style not selected!"), 400
+    try:
+        watermark_type_int = int(watermark_type)
+    except (TypeError, ValueError):
+        return jsonify(error=get_common_message("unexpected_error", lang)), 400
 
-    if file and allowed_file(file.filename, current_app.config["ALLOWED_EXTENSIONS"]):
-        timestamp = datetime.fromtimestamp(int(time.time())).strftime("%Y-%m-%d_%H-%M-%S")
+    if not is_style_enabled(style_config, watermark_type_int):
+        return jsonify(error=get_common_message("unexpected_error", lang)), 400
 
-        filename = secure_filename(file.filename)
-        extension = filename.rsplit(".", 1)[1]
-        filename_with_timestamp = f"{filename.rsplit('.', 1)[0]}_{timestamp}.{extension}"
-        filepath = os.path.join(current_app.config["UPLOAD_FOLDER"], filename_with_timestamp)
+    filename = secure_filename(file.filename)
+    stem = Path(filename).stem or "image"
+    extension = Path(filename).suffix.lower()
+    temp_filepath = os.path.join(upload_dir, f"upload_{uuid.uuid4().hex}{extension}")
+    filepath = None
 
-        file.save(filepath)
-
-        manufacturer = detect_manufacturer(filepath)
+    file.save(temp_filepath)
+    try:
+        manufacturer = detect_manufacturer(temp_filepath)
         if manufacturer and "xiaomi" in manufacturer.lower():
             normalized_preference = (logo_preference or "").lower()
             if normalized_preference not in {"xiaomi", "leica"}:
+                if os.path.exists(temp_filepath):
+                    os.remove(temp_filepath)
                 return jsonify({"needs_logo_choice": True}), 200
             logo_preference = normalized_preference
 
-        try:
-            watermark_type_int = int(watermark_type)
-        except ValueError:
-            return jsonify(error=get_common_message("unexpected_error", lang)), 400
-        if not is_style_enabled(style_config, watermark_type_int):
-            return jsonify(error=get_common_message("unexpected_error", lang)), 400
+        final_filename = f"{stem}_{uuid.uuid4().hex}{extension}"
+        filepath = os.path.join(upload_dir, final_filename)
+        os.replace(temp_filepath, filepath)
 
         task_id = submit_task(
             state,
+            db_path,
             filepath,
             lang,
             watermark_type_int,
@@ -86,16 +90,19 @@ def upload_file():
             style_config,
             current_app.logger,
         )
+    except Exception:
+        if os.path.exists(temp_filepath):
+            os.remove(temp_filepath)
+        if filepath and os.path.exists(filepath):
+            os.remove(filepath)
+        raise
 
-        return jsonify({"task_id": task_id}), 202
-
-    return jsonify(error="Invalid file type"), 400
+    return jsonify({"task_id": task_id}), 202
 
 
 @bp.route("/status/<task_id>", methods=["GET"])
 def get_task_status(task_id):
-    state = current_app.extensions["state"]
-    task = state.get_task(task_id)
+    task = get_task(current_app.config["DATABASE_PATH"], task_id)
     if not task:
         return jsonify({"status": "unknown"}), 404
     return jsonify(task)
@@ -117,8 +124,11 @@ def upload_file_served(filename):
         return jsonify(error="File not found"), 404
 
     if str(burn_after_read).strip() == "1":
-        state = current_app.extensions["state"]
-        with state.burn_queue_lock:
-            state.burn_queue[file_path] = time.time() + AppConstants.BURN_TTL_SECONDS
+        schedule_burn_file(
+            current_app.config["DATABASE_PATH"],
+            file_path,
+            time.time() + AppConstants.BURN_TTL_SECONDS,
+            time.time(),
+        )
 
     return send_file(file_path)

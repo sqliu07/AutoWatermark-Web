@@ -76,10 +76,12 @@ from app_factory import create_app
 @pytest.fixture
 def app(tmp_path):
     upload_dir = tmp_path / "uploads"
+    db_path = tmp_path / "data" / "watermark.db"
     app = create_app(
         {
             "TESTING": True,
             "UPLOAD_FOLDER": str(upload_dir),
+            "DATABASE_PATH": str(db_path),
             "RATELIMIT_ENABLED": False,
             "START_BACKGROUND_CLEANER": False,
         }
