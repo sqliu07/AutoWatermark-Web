@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from concurrent.futures import ThreadPoolExecutor
 
-from constants import AppConstants
+from config.constants import AppConstants
 
 
 def _executor_factory() -> ThreadPoolExecutor:

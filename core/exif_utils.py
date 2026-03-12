@@ -1,11 +1,11 @@
-from constants import CommonConstants
+from config.constants import CommonConstants
 from PIL import Image
 import piexif
 import subprocess
 import re
 from pathlib import Path
 
-from logging_utils import get_logger
+from infra.logging import get_logger
 
 
 LOGO_DIR = Path("./logos")

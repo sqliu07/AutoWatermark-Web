@@ -1,9 +1,9 @@
-from constants import CommonConstants, ImageConstants
+from config.constants import CommonConstants, ImageConstants
 from services.watermark_styles import get_style, load_cached_watermark_styles
 
 from functools import lru_cache
 from PIL import Image, ImageDraw, ImageFont, ImageOps, ImageFilter, ImageStat
-from logging_utils import get_logger
+from infra.logging import get_logger
 
 Image.MAX_IMAGE_PIXELS = ImageConstants.MAX_IMAGE_PIXELS
 

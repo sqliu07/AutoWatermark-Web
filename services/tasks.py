@@ -6,17 +6,17 @@ from typing import Optional, Set
 from PIL import Image
 import piexif
 
-from constants import CommonConstants
-from errors import WatermarkError
+from config.constants import CommonConstants
 from core.exif_utils import get_manufacturer
+from core.errors import WatermarkError
 from core.process import process_image
-from services.i18n import get_common_message
-from services.task_store import (
+from infra.sqlite_task_store import (
     count_tasks_by_status,
     get_task_stats,
     insert_task,
     update_task,
 )
+from services.i18n import get_common_message
 
 
 def allowed_file(filename: str, allowed_extensions: Set[str]) -> bool:

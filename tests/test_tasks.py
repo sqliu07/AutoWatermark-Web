@@ -1,7 +1,7 @@
 import logging
 
-from errors import UnexpectedProcessingError
-from services.task_store import get_task, init_db, insert_task
+from core.errors import UnexpectedProcessingError
+from infra.sqlite_task_store import get_task, init_db, insert_task
 from services.tasks import background_process
 
 

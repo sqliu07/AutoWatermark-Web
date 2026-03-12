@@ -2,17 +2,17 @@ import os
 
 from flask import Flask
 
-from constants import AppConstants, CommonConstants
-from extensions import limiter
-from handlers import register_error_handlers
-from logging_utils import get_logger
+from config.constants import AppConstants, CommonConstants
+from infra.logging import get_logger
+from infra.extensions import limiter
 from routes.download import bp as download_bp
+from routes.error_handlers import register_error_handlers
 from routes.index import bp as index_bp
 from routes.upload import bp as upload_bp
 from services.cleanup import start_background_cleaner
 from services.i18n import load_translations
 from services.state import AppState
-from services.task_store import init_db
+from infra.sqlite_task_store import init_db
 from services.watermark_styles import load_cached_watermark_styles
 
 

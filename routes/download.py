@@ -6,8 +6,8 @@ from datetime import datetime
 from flask import Blueprint, current_app, jsonify, request, send_file
 from werkzeug.utils import secure_filename
 
-from constants import AppConstants
-from extensions import limiter
+from config.constants import AppConstants
+from infra.extensions import limiter
 
 bp = Blueprint("download", __name__)
 
@@ -51,4 +51,3 @@ def download_temp_zip(filename):
     if not os.path.exists(file_path):
         return "File not found", 404
     return send_file(file_path, as_attachment=True, download_name=safe_filename)
-

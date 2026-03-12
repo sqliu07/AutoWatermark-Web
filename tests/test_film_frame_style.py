@@ -5,7 +5,7 @@ from PIL import Image
 
 import core.image_utils as image_utils_module
 import core.process as process_module
-from constants import CommonConstants
+from config.constants import CommonConstants
 from core.image_utils import generate_watermark_image
 from services.watermark_styles import get_style, load_watermark_styles
 

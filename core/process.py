@@ -9,8 +9,8 @@ from io import BytesIO
 
 from core.exif_utils import find_logo, get_manufacturer, get_exif_data, get_camera_model
 from core.image_utils import reset_image_orientation, generate_watermark_image
-from constants import CommonConstants, ImageConstants
-from errors import (
+from config.constants import CommonConstants, ImageConstants
+from core.errors import (
     WatermarkError,
     MissingExifDataError,
     UnsupportedManufacturerError,
@@ -26,7 +26,7 @@ from core.ultrahdr_utils import (
     expand_gainmap_for_borders,
 )
 from core.motion_photo_utils import prepare_motion_photo
-from logging_utils import get_logger
+from infra.logging import get_logger
 from services.watermark_styles import get_style, load_cached_watermark_styles
 
 

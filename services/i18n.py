@@ -1,7 +1,7 @@
 import json
 from typing import Dict, Optional
 
-from constants import AppConstants, CommonConstants
+from config.constants import AppConstants, CommonConstants
 
 
 def load_translations(path: str, logger=None) -> Dict:

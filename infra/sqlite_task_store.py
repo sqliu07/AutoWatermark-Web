@@ -63,7 +63,6 @@ def init_db(db_path: str) -> None:
             CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
             CREATE INDEX IF NOT EXISTS idx_tasks_finished_at ON tasks(finished_at);
             CREATE INDEX IF NOT EXISTS idx_tasks_output_path ON tasks(output_path);
-            CREATE INDEX IF NOT EXISTS idx_tasks_heartbeat_at ON tasks(heartbeat_at);
 
             CREATE TABLE IF NOT EXISTS burn_files (
                 file_path TEXT PRIMARY KEY,
@@ -75,6 +74,7 @@ def init_db(db_path: str) -> None:
             """
         )
         _ensure_column(conn, "tasks", "heartbeat_at", "ALTER TABLE tasks ADD COLUMN heartbeat_at REAL")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_tasks_heartbeat_at ON tasks(heartbeat_at)")
 
 
 def _ensure_column(conn: sqlite3.Connection, table_name: str, column_name: str, ddl: str) -> None:
