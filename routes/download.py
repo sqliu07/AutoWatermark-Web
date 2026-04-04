@@ -8,6 +8,7 @@ from werkzeug.utils import secure_filename
 
 from constants import AppConstants
 from extensions import limiter
+from services.download_token import build_signed_url, verify_token
 from services.i18n import get_error_message, normalize_lang
 
 bp = Blueprint("download", __name__)
@@ -51,16 +52,24 @@ def download_zip():
         current_app.logger.exception("Zip creation failed")
         return jsonify(error=get_error_message("zip_create_failed", lang)), 500
 
-    zip_url = f"/download_temp_zip/{zip_filename}"
+    # 生成带签名的 ZIP 下载 URL
+    zip_url = build_signed_url(f"/download_temp_zip/{zip_filename}", zip_filename)
     return jsonify(zip_url=zip_url)
 
 
 @bp.route("/download_temp_zip/<filename>")
 def download_temp_zip(filename):
     lang = normalize_lang(request.args.get("lang", "zh"))
+    token = request.args.get("token", "")
+    expires = request.args.get("expires", "")
+
     safe_filename_str = secure_filename(filename)
     if not safe_filename_str:
         return jsonify(error=get_error_message("file_not_found", lang)), 400
+
+    if not verify_token(safe_filename_str, token, expires):
+        return jsonify(error=get_error_message("link_expired", lang)), 403
+
     file_path = os.path.join(tempfile.gettempdir(), safe_filename_str)
     if not os.path.isfile(file_path):
         return jsonify(error=get_error_message("file_not_found", lang)), 404
