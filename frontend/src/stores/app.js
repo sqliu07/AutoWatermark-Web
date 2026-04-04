@@ -125,7 +125,7 @@ export const useAppStore = defineStore('app', () => {
     while (true) {
       try {
         const data = await api.getTaskStatus(task.id)
-        task.progress = data.progress || 0
+        task.progress = Math.max(task.progress, data.progress || 0)
         task.status = data.status
 
         if (data.status === 'succeeded') {
