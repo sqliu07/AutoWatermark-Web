@@ -25,8 +25,8 @@ def test_load_default_watermark_style_config():
     assert get_style(config, 4)["background"] == "frosted"
     assert get_style(config, 5)["layout"] == "film_frame"
     assert get_style(config, 5)["requires_logo"] is True
-    assert get_style(config, 5)["frame_force_square"] is True
-    assert "frame_line_gap_ratio_portrait" in get_style(config, 5)
+    assert get_style(config, 5)["frame"]["force_square"] is True
+    assert "line_gap_ratio_portrait" in get_style(config, 5)["frame"]
 
 
 def test_load_default_watermark_style_config_with_relative_path():

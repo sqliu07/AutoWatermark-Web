@@ -10,7 +10,10 @@ except ModuleNotFoundError:  # pragma: no cover - Python 3.10 fallback
     import tomli as tomllib
 
 
+CURRENT_CONFIG_VERSION = 1
+
 _DEFAULT_GLOBAL = {
+    "config_version": CURRENT_CONFIG_VERSION,
     "default_style_id": 1,
     "footer_ratio_landscape": 0.09,
     "footer_ratio_portrait": 0.08,
@@ -41,22 +44,26 @@ _DEFAULT_STYLE = {
     "supports_motion": True,
     "supports_ultrahdr": True,
     "requires_logo": True,
-    "frame_background_color": "#ececec",
-    "frame_text_color": "#5f5f5f",
-    "frame_border_ratio": 0.006,
-    "frame_side_margin_ratio": 0.09,
-    "frame_top_margin_ratio": 0.16,
-    "frame_text_gap_ratio": 0.14,
-    "frame_logo_gap_ratio": 0.018,
-    "frame_line_gap_ratio": 0.012,
-    "frame_bottom_margin_ratio": 0.16,
-    "frame_logo_height_ratio": 0.08,
-    "frame_font_size_ratio": 0.016,
-    "frame_font_max_width_ratio": 0.68,
-    "frame_logo_height_ratio_portrait": 0.08,
-    "frame_font_size_ratio_portrait": 0.016,
-    "frame_line_gap_ratio_portrait": 0.012,
-    "frame_force_square": False,
+}
+
+# film_frame 布局专属配置，只在 layout == "film_frame" 时生效
+_DEFAULT_FRAME_CONFIG = {
+    "background_color": "#ececec",
+    "text_color": "#5f5f5f",
+    "border_ratio": 0.006,
+    "side_margin_ratio": 0.09,
+    "top_margin_ratio": 0.16,
+    "text_gap_ratio": 0.14,
+    "logo_gap_ratio": 0.018,
+    "line_gap_ratio": 0.012,
+    "bottom_margin_ratio": 0.16,
+    "logo_height_ratio": 0.08,
+    "font_size_ratio": 0.016,
+    "font_max_width_ratio": 0.68,
+    "logo_height_ratio_portrait": 0.08,
+    "font_size_ratio_portrait": 0.016,
+    "line_gap_ratio_portrait": 0.012,
+    "force_square": False,
 }
 
 _ALLOWED_LAYOUTS = {"split_lr", "center_stack", "film_frame"}
@@ -115,12 +122,41 @@ def _normalize_global(raw_global: Dict[str, Any]) -> Dict[str, Any]:
     return normalized
 
 
+def _normalize_frame_config(style_id: int, raw_frame: Dict[str, Any]) -> Dict[str, Any]:
+    """解析 film_frame 布局的专属配置。"""
+    frame = dict(_DEFAULT_FRAME_CONFIG)
+    frame.update(raw_frame)
+    prefix = f"styles.{style_id}.frame"
+
+    return {
+        "background_color": _as_str(frame["background_color"], f"{prefix}.background_color"),
+        "text_color": _as_str(frame["text_color"], f"{prefix}.text_color"),
+        "border_ratio": _as_float(frame["border_ratio"], f"{prefix}.border_ratio"),
+        "side_margin_ratio": _as_float(frame["side_margin_ratio"], f"{prefix}.side_margin_ratio"),
+        "top_margin_ratio": _as_float(frame["top_margin_ratio"], f"{prefix}.top_margin_ratio"),
+        "text_gap_ratio": _as_float(frame["text_gap_ratio"], f"{prefix}.text_gap_ratio"),
+        "logo_gap_ratio": _as_float(frame["logo_gap_ratio"], f"{prefix}.logo_gap_ratio"),
+        "line_gap_ratio": _as_float(frame["line_gap_ratio"], f"{prefix}.line_gap_ratio"),
+        "bottom_margin_ratio": _as_float(frame["bottom_margin_ratio"], f"{prefix}.bottom_margin_ratio"),
+        "logo_height_ratio": _as_float(frame["logo_height_ratio"], f"{prefix}.logo_height_ratio"),
+        "font_size_ratio": _as_float(frame["font_size_ratio"], f"{prefix}.font_size_ratio"),
+        "font_max_width_ratio": _as_float(frame["font_max_width_ratio"], f"{prefix}.font_max_width_ratio"),
+        "logo_height_ratio_portrait": _as_float(frame["logo_height_ratio_portrait"], f"{prefix}.logo_height_ratio_portrait"),
+        "font_size_ratio_portrait": _as_float(frame["font_size_ratio_portrait"], f"{prefix}.font_size_ratio_portrait"),
+        "line_gap_ratio_portrait": _as_float(frame["line_gap_ratio_portrait"], f"{prefix}.line_gap_ratio_portrait"),
+        "force_square": _as_bool(frame["force_square"], f"{prefix}.force_square"),
+    }
+
+
 def _normalize_style(style_id: int, raw_style: Dict[str, Any]) -> Dict[str, Any]:
     if not isinstance(raw_style, dict):
         raise WatermarkStyleConfigError(f"styles.{style_id} must be a table")
 
     style = dict(_DEFAULT_STYLE)
-    style.update(raw_style)
+    # 把 raw_style 中非 dict 的顶级 key 合并（跳过 "frame" 子表）
+    for k, v in raw_style.items():
+        if not isinstance(v, dict):
+            style[k] = v
 
     normalized = {
         "style_id": style_id,
@@ -149,28 +185,6 @@ def _normalize_style(style_id: int, raw_style: Dict[str, Any]) -> Dict[str, Any]
         "supports_motion": _as_bool(style["supports_motion"], f"styles.{style_id}.supports_motion"),
         "supports_ultrahdr": _as_bool(style["supports_ultrahdr"], f"styles.{style_id}.supports_ultrahdr"),
         "requires_logo": _as_bool(style["requires_logo"], f"styles.{style_id}.requires_logo"),
-        "frame_background_color": _as_str(style["frame_background_color"], f"styles.{style_id}.frame_background_color"),
-        "frame_text_color": _as_str(style["frame_text_color"], f"styles.{style_id}.frame_text_color"),
-        "frame_border_ratio": _as_float(style["frame_border_ratio"], f"styles.{style_id}.frame_border_ratio"),
-        "frame_side_margin_ratio": _as_float(style["frame_side_margin_ratio"], f"styles.{style_id}.frame_side_margin_ratio"),
-        "frame_top_margin_ratio": _as_float(style["frame_top_margin_ratio"], f"styles.{style_id}.frame_top_margin_ratio"),
-        "frame_text_gap_ratio": _as_float(style["frame_text_gap_ratio"], f"styles.{style_id}.frame_text_gap_ratio"),
-        "frame_logo_gap_ratio": _as_float(style["frame_logo_gap_ratio"], f"styles.{style_id}.frame_logo_gap_ratio"),
-        "frame_line_gap_ratio": _as_float(style["frame_line_gap_ratio"], f"styles.{style_id}.frame_line_gap_ratio"),
-        "frame_bottom_margin_ratio": _as_float(style["frame_bottom_margin_ratio"], f"styles.{style_id}.frame_bottom_margin_ratio"),
-        "frame_logo_height_ratio": _as_float(style["frame_logo_height_ratio"], f"styles.{style_id}.frame_logo_height_ratio"),
-        "frame_font_size_ratio": _as_float(style["frame_font_size_ratio"], f"styles.{style_id}.frame_font_size_ratio"),
-        "frame_font_max_width_ratio": _as_float(style["frame_font_max_width_ratio"], f"styles.{style_id}.frame_font_max_width_ratio"),
-        "frame_logo_height_ratio_portrait": _as_float(
-            style["frame_logo_height_ratio_portrait"], f"styles.{style_id}.frame_logo_height_ratio_portrait"
-        ),
-        "frame_font_size_ratio_portrait": _as_float(
-            style["frame_font_size_ratio_portrait"], f"styles.{style_id}.frame_font_size_ratio_portrait"
-        ),
-        "frame_line_gap_ratio_portrait": _as_float(
-            style["frame_line_gap_ratio_portrait"], f"styles.{style_id}.frame_line_gap_ratio_portrait"
-        ),
-        "frame_force_square": _as_bool(style["frame_force_square"], f"styles.{style_id}.frame_force_square"),
     }
 
     if normalized["layout"] not in _ALLOWED_LAYOUTS:
@@ -188,6 +202,16 @@ def _normalize_style(style_id: int, raw_style: Dict[str, Any]) -> Dict[str, Any]
         raise WatermarkStyleConfigError(f"styles.{style_id}.bottom_offset_portrait_divisor must be > 0")
     if normalized["bottom_offset_landscape_divisor"] <= 0:
         raise WatermarkStyleConfigError(f"styles.{style_id}.bottom_offset_landscape_divisor must be > 0")
+
+    # film_frame 专属配置：只在 layout 为 film_frame 时解析
+    if normalized["layout"] == "film_frame":
+        raw_frame = raw_style.get("frame", {})
+        normalized["frame"] = _normalize_frame_config(style_id, raw_frame)
+    else:
+        if "frame" in raw_style:
+            raise WatermarkStyleConfigError(
+                f"styles.{style_id}: [frame] section is only valid for layout = \"film_frame\""
+            )
 
     return normalized
 

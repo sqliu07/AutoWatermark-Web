@@ -14,7 +14,7 @@ class FilmFrameRenderer(LayoutRenderer):
 
         photo = origin.convert("RGB") if origin.mode != "RGB" else origin.copy()
 
-        border_size = max(2, int(round(min(photo.size) * style["frame_border_ratio"])))
+        border_size = max(2, int(round(min(photo.size) * style["frame"]["border_ratio"])))
         framed_photo = ImageOps.expand(photo, border=border_size, fill="black")
         metrics = self._get_metrics(style, framed_photo)
 
@@ -29,7 +29,7 @@ class FilmFrameRenderer(LayoutRenderer):
             + metrics["bottom_margin"]
         )
 
-        if style.get("frame_force_square", False):
+        if style.get("frame", {}).get("force_square", False):
             canvas_side = max(canvas_width, canvas_height)
             canvas = Image.new("RGB", (canvas_side, canvas_side), metrics["background_color"])
             offset_x = (canvas_side - canvas_width) // 2
@@ -61,6 +61,7 @@ class FilmFrameRenderer(LayoutRenderer):
 
     @staticmethod
     def _get_metrics(style, framed_photo):
+        fc = style["frame"]
         portrait = framed_photo.height > framed_photo.width
         min_side_margin = 52
         min_top_margin = 56
@@ -71,24 +72,24 @@ class FilmFrameRenderer(LayoutRenderer):
         min_logo_height = 24
         min_font_size = 10
         min_font_start_size = 12
-        logo_height_ratio = style["frame_logo_height_ratio_portrait"] if portrait else style["frame_logo_height_ratio"]
-        font_size_ratio = style["frame_font_size_ratio_portrait"] if portrait else style["frame_font_size_ratio"]
-        line_gap_ratio = style["frame_line_gap_ratio_portrait"] if portrait else style["frame_line_gap_ratio"]
+        logo_height_ratio = fc["logo_height_ratio_portrait"] if portrait else fc["logo_height_ratio"]
+        font_size_ratio = fc["font_size_ratio_portrait"] if portrait else fc["font_size_ratio"]
+        line_gap_ratio = fc["line_gap_ratio_portrait"] if portrait else fc["line_gap_ratio"]
 
         return {
-            "background_color": style["frame_background_color"],
-            "text_color": style["frame_text_color"],
-            "border_size": max(2, int(round(min(framed_photo.size) * style["frame_border_ratio"]))),
-            "side_margin": max(min_side_margin, int(round(framed_photo.width * style["frame_side_margin_ratio"]))),
-            "top_margin": max(min_top_margin, int(round(framed_photo.height * style["frame_top_margin_ratio"]))),
-            "text_gap": max(min_text_gap, int(round(framed_photo.height * style["frame_text_gap_ratio"]))),
-            "logo_gap": max(min_logo_gap, int(round(framed_photo.width * style["frame_logo_gap_ratio"]))),
+            "background_color": fc["background_color"],
+            "text_color": fc["text_color"],
+            "border_size": max(2, int(round(min(framed_photo.size) * fc["border_ratio"]))),
+            "side_margin": max(min_side_margin, int(round(framed_photo.width * fc["side_margin_ratio"]))),
+            "top_margin": max(min_top_margin, int(round(framed_photo.height * fc["top_margin_ratio"]))),
+            "text_gap": max(min_text_gap, int(round(framed_photo.height * fc["text_gap_ratio"]))),
+            "logo_gap": max(min_logo_gap, int(round(framed_photo.width * fc["logo_gap_ratio"]))),
             "line_gap": max(min_line_gap, int(round(framed_photo.width * line_gap_ratio))),
-            "bottom_margin": max(min_bottom_margin, int(round(framed_photo.height * style["frame_bottom_margin_ratio"]))),
+            "bottom_margin": max(min_bottom_margin, int(round(framed_photo.height * fc["bottom_margin_ratio"]))),
             "logo_height": max(min_logo_height, int(round(framed_photo.height * logo_height_ratio))),
             "font_start_size": max(min_font_start_size, int(round(framed_photo.width * font_size_ratio))),
             "font_min_size": min_font_size,
-            "font_max_width": max(100, int(round(framed_photo.width * style["frame_font_max_width_ratio"]))),
+            "font_max_width": max(100, int(round(framed_photo.width * fc["font_max_width_ratio"]))),
         }
 
     @staticmethod

@@ -74,12 +74,13 @@ def test_generate_film_frame_style_portrait_uses_portrait_overrides(monkeypatch)
 
     framed_width, framed_height = captured["framed_size"]
     metrics = captured["metrics"]
-    expected_logo_height = max(24, int(round(framed_height * style["frame_logo_height_ratio_portrait"])))
-    expected_font_size = max(12, int(round(framed_width * style["frame_font_size_ratio_portrait"])))
-    expected_line_gap = max(10, int(round(framed_width * style["frame_line_gap_ratio_portrait"])))
-    landscape_logo_height = max(24, int(round(framed_height * style["frame_logo_height_ratio"])))
-    landscape_font_size = max(12, int(round(framed_width * style["frame_font_size_ratio"])))
-    landscape_line_gap = max(10, int(round(framed_width * style["frame_line_gap_ratio"])))
+    fc = style["frame"]
+    expected_logo_height = max(24, int(round(framed_height * fc["logo_height_ratio_portrait"])))
+    expected_font_size = max(12, int(round(framed_width * fc["font_size_ratio_portrait"])))
+    expected_line_gap = max(10, int(round(framed_width * fc["line_gap_ratio_portrait"])))
+    landscape_logo_height = max(24, int(round(framed_height * fc["logo_height_ratio"])))
+    landscape_font_size = max(12, int(round(framed_width * fc["font_size_ratio"])))
+    landscape_line_gap = max(10, int(round(framed_width * fc["line_gap_ratio"])))
 
     assert metrics["logo_height"] == expected_logo_height
     assert metrics["font_start_size"] == expected_font_size
