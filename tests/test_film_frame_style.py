@@ -3,10 +3,10 @@ from pathlib import Path
 import piexif
 from PIL import Image
 
-import image_utils as image_utils_module
 import process as process_module
 from constants import CommonConstants
-from image_utils import generate_watermark_image
+from imaging import generate_watermark_image
+from imaging.renderer_film_frame import FilmFrameRenderer
 from services.watermark_styles import get_style, load_watermark_styles
 
 
@@ -50,20 +50,12 @@ def test_generate_film_frame_style_portrait_uses_portrait_overrides(monkeypatch)
     style = get_style(config, 5)
     captured = {}
 
-    def fake_caption_group(
-        camera_info,
-        shooting_info,
-        font_path_regular,
-        framed_photo,
-        logo_path,
-        metrics,
-        font_path_symbol,
-    ):
+    def fake_caption_group(self, context, framed_photo, metrics):
         captured["framed_size"] = framed_photo.size
         captured["metrics"] = dict(metrics)
         return Image.new("RGBA", (120, 80), (255, 255, 255, 0))
 
-    monkeypatch.setattr(image_utils_module, "_create_film_frame_caption_group", fake_caption_group)
+    monkeypatch.setattr(FilmFrameRenderer, "_create_caption_group", fake_caption_group)
 
     source = Image.new("RGB", (600, 900), "#4a7391")
     rendered = generate_watermark_image(

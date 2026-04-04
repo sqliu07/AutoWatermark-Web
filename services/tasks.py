@@ -8,7 +8,7 @@ import piexif
 
 from constants import CommonConstants, AppConstants
 from errors import WatermarkError
-from exif_utils import get_manufacturer
+from exif import get_manufacturer
 from process import process_image
 from services.i18n import get_common_message
 

@@ -7,8 +7,8 @@ from PIL import Image
 from io import BytesIO
 
 
-from exif_utils import find_logo, get_manufacturer, get_exif_data, get_camera_model
-from image_utils import reset_image_orientation, generate_watermark_image
+from exif import find_logo, get_manufacturer, get_exif_data, get_camera_model
+from imaging import reset_image_orientation, generate_watermark_image
 from constants import CommonConstants, ImageConstants
 from errors import (
     WatermarkError,
@@ -19,13 +19,13 @@ from errors import (
     ImageTooLargeError,
 )
 
-from ultrahdr_utils import (
+from media.ultrahdr import (
     split_ultrahdr,
     inject_xmp,
     update_primary_xmp_lengths,
     expand_gainmap_for_borders,
 )
-from motion_photo_utils import prepare_motion_photo
+from media.motion_photo import prepare_motion_photo
 from logging_utils import get_logger
 from services.watermark_styles import get_style, load_cached_watermark_styles
 
