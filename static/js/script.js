@@ -3,6 +3,11 @@ document.addEventListener('DOMContentLoaded', () => {
     function t() {
         return window.t;
     }
+    function escapeHtml(str) {
+        const el = document.createElement('span');
+        el.textContent = str;
+        return el.innerHTML;
+    }
     // === DOM 元素 ===
     const dropZone = document.getElementById('drop-zone');
     const uploadPrompt = document.getElementById('upload-prompt');
@@ -345,22 +350,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function renderSuccess(originalName, url) {
         const t = window.t;
+        const safeName = escapeHtml(originalName);
+        const safeUrl = escapeHtml(url);
         const div = document.createElement('div');
         div.className = "bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden fade-in";
         div.innerHTML = `
             <div class="relative group bg-slate-100 aspect-[4/3] flex items-center justify-center overflow-hidden">
-                <img src="${url}" class="max-w-full max-h-full object-contain shadow-sm" alt="${originalName}">
+                <img src="${safeUrl}" class="max-w-full max-h-full object-contain shadow-sm" alt="${safeName}">
                 <div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4 backdrop-blur-[2px]">
-                    <a href="${url}" target="_blank" class="px-4 py-2 bg-white text-slate-900 rounded-full text-sm font-bold hover:scale-105 transition-transform">
+                    <a href="${safeUrl}" target="_blank" class="px-4 py-2 bg-white text-slate-900 rounded-full text-sm font-bold hover:scale-105 transition-transform">
                         ${t.btnPreview}
                     </a>
-                    <a href="${url}" download="${originalName}_watermark" class="px-4 py-2 bg-brand-600 text-white rounded-full text-sm font-bold hover:scale-105 transition-transform">
+                    <a href="${safeUrl}" download="${safeName}_watermark" class="px-4 py-2 bg-brand-600 text-white rounded-full text-sm font-bold hover:scale-105 transition-transform">
                         ${t.btnDownload}
                     </a>
                 </div>
             </div>
             <div class="p-4 flex items-center justify-between">
-                <div class="truncate text-sm font-medium text-slate-700 max-w-[70%]">${originalName}</div>
+                <div class="truncate text-sm font-medium text-slate-700 max-w-[70%]">${safeName}</div>
                 <div class="flex gap-2">
                      <span class="text-xs px-2 py-1 bg-green-100 text-green-700 rounded-md">${t.statusSuccess}</span>
                 </div>
@@ -387,8 +394,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 <svg class="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
             </div>
             <div class="min-w-0 flex-1">
-                <p class="text-sm font-bold text-slate-900">${originalName}</p>
-                <p class="text-xs text-red-500 truncate">${errorMsg}</p>
+                <p class="text-sm font-bold text-slate-900">${escapeHtml(originalName)}</p>
+                <p class="text-xs text-red-500 truncate">${escapeHtml(errorMsg)}</p>
             </div>
         `;
         resultContainer.appendChild(div);

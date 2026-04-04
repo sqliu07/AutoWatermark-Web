@@ -49,7 +49,7 @@ def upload_file():
     image_quality_int = normalize_image_quality(image_quality)
 
     if watermark_type is None:
-        return jsonify(error="Watermark style not selected!"), 400
+        return jsonify(error=get_common_message("unexpected_error", lang)), 400
 
     if file and allowed_file(file.filename, current_app.config["ALLOWED_EXTENSIONS"]):
         timestamp = datetime.fromtimestamp(int(time.time())).strftime("%Y-%m-%d_%H-%M-%S")
@@ -89,7 +89,7 @@ def upload_file():
 
         return jsonify({"task_id": task_id}), 202
 
-    return jsonify(error="Invalid file type"), 400
+    return jsonify(error=get_message("invalid_file_type", lang)), 400
 
 
 @bp.route("/status/<task_id>", methods=["GET"])

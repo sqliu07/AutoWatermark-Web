@@ -21,6 +21,11 @@ def download_zip():
     if not filenames:
         return jsonify(error="No files provided"), 400
 
+    if len(filenames) > AppConstants.ZIP_MAX_FILES:
+        return jsonify(error=f"Too many files (max {AppConstants.ZIP_MAX_FILES})"), 400
+
+    upload_folder = os.path.realpath(current_app.config["UPLOAD_FOLDER"])
+
     count = len(filenames)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     zip_filename = f"Packed_Watermark_Images_{count}_{timestamp}.zip"
@@ -30,14 +35,19 @@ def download_zip():
         with zipfile.ZipFile(zip_path, "w") as zipf:
             for fname in filenames:
                 safe_fname = secure_filename(fname)
-                full_path = os.path.join(current_app.config["UPLOAD_FOLDER"], safe_fname)
-                if os.path.exists(full_path) and os.path.isfile(full_path):
+                if not safe_fname:
+                    continue
+                full_path = os.path.realpath(os.path.join(upload_folder, safe_fname))
+                if not full_path.startswith(upload_folder + os.sep):
+                    current_app.logger.warning("Path traversal blocked: %s", fname)
+                    continue
+                if os.path.isfile(full_path):
                     zipf.write(full_path, arcname=safe_fname)
                 else:
-                    current_app.logger.warning("Skipping zip for invalid file: %s", fname)
-    except Exception as e:
-        current_app.logger.error("Zip creation failed: %s", str(e))
-        return jsonify(error=str(e)), 500
+                    current_app.logger.warning("Skipping zip for missing file: %s", safe_fname)
+    except Exception:
+        current_app.logger.exception("Zip creation failed")
+        return jsonify(error="Failed to create zip"), 500
 
     zip_url = f"/download_temp_zip/{zip_filename}"
     return jsonify(zip_url=zip_url)
@@ -45,10 +55,10 @@ def download_zip():
 
 @bp.route("/download_temp_zip/<filename>")
 def download_temp_zip(filename):
-    safe_filename = secure_filename(filename)
-    file_path = os.path.join(tempfile.gettempdir(), safe_filename)
-    current_app.logger.info("zip file path: %s", file_path)
-    if not os.path.exists(file_path):
+    safe_filename_str = secure_filename(filename)
+    if not safe_filename_str:
+        return "Invalid filename", 400
+    file_path = os.path.join(tempfile.gettempdir(), safe_filename_str)
+    if not os.path.isfile(file_path):
         return "File not found", 404
-    return send_file(file_path, as_attachment=True, download_name=safe_filename)
-
+    return send_file(file_path, as_attachment=True, download_name=safe_filename_str)

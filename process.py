@@ -39,7 +39,7 @@ def _enforce_image_pixel_limit(image):
     max_pixels = ImageConstants.MAX_IMAGE_PIXELS
     image_size = image.width * image.height
     logger.info("Image size: %dx%d=%d, max allowed pixels: %s", image.width, image.height, image_size, str(max_pixels) if max_pixels else "unlimited")
-    if max_pixels and image_size >= max_pixels:
+    if max_pixels and image_size > max_pixels:
         detail = f"{image.width}x{image.height}"
         raise ImageTooLargeError(detail=detail)
 
@@ -253,6 +253,16 @@ def process_image(
     except Exception as exc:
         raise UnexpectedProcessingError(detail=str(exc)) from exc
     finally:
+        if 'image' in locals() and image is not None:
+            try:
+                image.close()
+            except Exception:
+                pass
+        if 'new_image' in locals() and new_image is not None:
+            try:
+                new_image.close()
+            except Exception:
+                pass
         if 'motion_session' in locals() and motion_session is not None:
             motion_session.cleanup()
 

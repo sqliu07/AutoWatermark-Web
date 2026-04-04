@@ -48,3 +48,6 @@ class AppState:
     def count_tasks_by_status(self, *statuses: str) -> int:
         with self.tasks_lock:
             return sum(1 for info in self.tasks.values() if info.get("status") in statuses)
+
+    def shutdown(self, wait: bool = True) -> None:
+        self.executor.shutdown(wait=wait)

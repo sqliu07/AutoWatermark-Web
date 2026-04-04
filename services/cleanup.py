@@ -68,12 +68,24 @@ def start_background_cleaner(app, state, logger) -> threading.Thread:
                 except OSError:
                     pass
 
-            if cleaned_burn or cleaned_zip or cleaned_stale:
+            # 4) Stale tasks in memory
+            cleaned_tasks = 0
+            with state.tasks_lock:
+                to_remove = [
+                    tid for tid, info in state.tasks.items()
+                    if current_time - info.get("submitted_at", 0) > AppConstants.TASK_RETENTION_SECONDS
+                ]
+                for tid in to_remove:
+                    state.tasks.pop(tid, None)
+                    cleaned_tasks += 1
+
+            if cleaned_burn or cleaned_zip or cleaned_stale or cleaned_tasks:
                 logger.info(
-                    "[Auto-Clean] Summary - burn: %s, zip: %s, stale: %s",
+                    "[Auto-Clean] Summary - burn: %s, zip: %s, stale: %s, tasks: %s",
                     cleaned_burn,
                     cleaned_zip,
                     cleaned_stale,
+                    cleaned_tasks,
                 )
 
     thread = threading.Thread(target=background_cleaner, daemon=True)

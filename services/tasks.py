@@ -55,7 +55,7 @@ def _update_queue_metrics(state, task_id: str, logger) -> None:
         state.metrics["total_tasks"] += 1
         total = state.metrics["total_tasks"]
         failed = state.metrics["failed_tasks"]
-    failure_rate = (failed / total) if total else 0
+        failure_rate = (failed / total) if total else 0
     queue_length = state.count_tasks_by_status("queued")
     logger.info(
         "Queued task %s | queue=%s | failure_rate=%.2f%%",
@@ -167,8 +167,8 @@ def background_process(
         message = get_common_message(message_key, lang) or detail or get_common_message("unexpected_error", lang)
         if message_key == "unsupported_manufacturer" and detail:
             message = f"{message} ({detail})"
-        elif message_key == "unexpected_error" and detail:
-            message = detail
+        elif message_key == "unexpected_error":
+            pass  # 不向客户端暴露内部错误详情，detail 仅记录到日志
 
         state.update_task(task_id, status="failed", error=message, progress=1.0, stage="failed")
         if message_key == "unexpected_error":
@@ -209,7 +209,7 @@ def background_process(
         with state.metrics_lock:
             total = state.metrics["total_tasks"]
             failed = state.metrics["failed_tasks"]
-        failure_rate = (failed / total) if total else 0
+            failure_rate = (failed / total) if total else 0
         queue_length = state.count_tasks_by_status("queued", "processing")
         logger.info(
             "Task %s finished in %.2f s | queue=%s | failure_rate=%.2f%%",

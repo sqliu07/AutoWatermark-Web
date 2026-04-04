@@ -48,6 +48,14 @@ def create_app(config_overrides=None):
 
     register_error_handlers(app)
 
+    @app.after_request
+    def _set_security_headers(response):
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        return response
+
     app.register_blueprint(index_bp)
     app.register_blueprint(upload_bp)
     app.register_blueprint(download_bp)

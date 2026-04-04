@@ -19,19 +19,26 @@ def is_image_bright(image, threshold=ImageConstants.WATERMARK_GLASS_BG_THRESHOLD
     :return: True (亮背景) / False (暗背景)
     为了避免误判，同时判断图片下半部分的亮度
     """
-    # 转换为灰度图
     gray_img = image.convert("L")
-    # 使用 ImageStat 计算平均亮度
-    stat = ImageStat.Stat(gray_img)
-    avg_brightness = stat.mean[0]
-    logger.info("Current image avg brightness: %s", str(avg_brightness))
+    try:
+        stat = ImageStat.Stat(gray_img)
+        avg_brightness = stat.mean[0]
+        logger.info("Current image avg brightness: %s", str(avg_brightness))
+    finally:
+        gray_img.close()
 
     w, h = image.size
     bottom_half = image.crop((0, h // 2, w, h))
-    gray_img = bottom_half.convert("L")
-    stat = ImageStat.Stat(gray_img)
-    avg_brightness_half = stat.mean[0]
-    logger.info("Bottom-half avg brightness: %s", str(avg_brightness_half))
+    try:
+        gray_half = bottom_half.convert("L")
+        try:
+            stat = ImageStat.Stat(gray_half)
+            avg_brightness_half = stat.mean[0]
+            logger.info("Bottom-half avg brightness: %s", str(avg_brightness_half))
+        finally:
+            gray_half.close()
+    finally:
+        bottom_half.close()
 
     return avg_brightness > threshold and avg_brightness_half > threshold
 def reset_image_orientation(image):
@@ -167,7 +174,8 @@ def create_right_block(logo_path, text_block_img, footer_height, with_line=True,
     组合右侧元素：[Logo] [竖线] [参数文字]
     """
     logo_target_height = int(footer_height * ImageConstants.LOGO_HEIGHT_RATIO)
-    logo = Image.open(logo_path).convert("RGBA")
+    with Image.open(logo_path) as _logo_raw:
+        logo = _logo_raw.convert("RGBA")
     logo = image_resize(logo, logo_target_height)
 
     # 元素水平间距：底栏高度的 20%
@@ -271,18 +279,34 @@ def _draw_film_frame_shadow(canvas, framed_photo, photo_x, photo_y, blur_radius)
 
 
 def _fit_text_font_size(text_lines, font_path, start_size, min_size, max_width):
-    font_size = max(min_size, int(start_size))
-    while font_size > min_size:
-        widest = 0
+    lo = max(1, int(min_size))
+    hi = max(lo, int(start_size))
+
+    def _fits(size):
+        try:
+            font = ImageFont.truetype(font_path, int(size))
+        except Exception:
+            font = ImageFont.load_default()
         for line in text_lines:
             if not line:
                 continue
-            width = text_to_image(line, font_path, font_size, "black").width
-            widest = max(widest, width)
-        if widest <= max_width:
-            return font_size
-        font_size -= 1
-    return min_size
+            bbox = font.getbbox(line)
+            width = bbox[2] - bbox[0] + int(size * 0.2)
+            if width > max_width:
+                return False
+        return True
+
+    if _fits(hi):
+        return hi
+
+    while lo < hi:
+        mid = (lo + hi + 1) // 2
+        if _fits(mid):
+            lo = mid
+        else:
+            hi = mid - 1
+
+    return lo
 
 
 def _create_film_frame_caption_group(
@@ -295,7 +319,8 @@ def _create_film_frame_caption_group(
     font_path_symbol,
 ):
     logo_target_height = metrics["logo_height"]
-    logo_image = Image.open(logo_path).convert("RGBA")
+    with Image.open(logo_path) as _logo_raw:
+        logo_image = _logo_raw.convert("RGBA")
     logo_image = image_resize(logo_image, logo_target_height)
 
     caption_lines = [
@@ -573,7 +598,8 @@ def _render_layout_center_stack(final_image, context):
     origin_image = context["origin_image"]
 
     logo_target_height = int(footer_height * style["center_logo_ratio"])
-    logo = Image.open(logo_path).convert("RGBA")
+    with Image.open(logo_path) as _logo_raw:
+        logo = _logo_raw.convert("RGBA")
     logo = image_resize(logo, logo_target_height)
 
     text_color = _TEXT_COLOR_RESOLVERS[style["text_color_mode"]](origin_image)

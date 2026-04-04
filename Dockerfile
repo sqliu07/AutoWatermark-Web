@@ -45,6 +45,11 @@ RUN pip install --no-cache-dir -r requirements-deploy.txt
 RUN sed -i 's/\r$//' /app/3rdparty/exiftool/exiftool && \
     rm -rf /app/3rdparty/exiftool/{Changes,MANIFEST,META.json,META.yml,Makefile.PL,README,build_geolocation,build_tag_lookup,html,t,validate,windows_exiftool,windows_exiftool.txt}
 
+RUN useradd -r -s /usr/sbin/nologin appuser && \
+    chown -R appuser:appuser /app
+
+USER appuser
+
 ENV FLASK_ENV=production
 EXPOSE 5000
 

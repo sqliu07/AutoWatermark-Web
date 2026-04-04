@@ -61,6 +61,7 @@ class AppConstants:
     DEFAULT_RATE_LIMITS = ["2000 per day", "500 per hour"]
     UPLOAD_RATE_LIMIT = "10 per minute"
     ZIP_RATE_LIMIT = "10 per minute"
+    ZIP_MAX_FILES = 50
 
     EXECUTOR_MAX_WORKERS = 4
     TASK_RETENTION_SECONDS = 3600

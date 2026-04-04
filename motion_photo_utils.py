@@ -118,14 +118,20 @@ class MotionPhotoSession:
 
                 if self.ultrahdr_gainmap_xmp is not None:
                     new_im = Image.open(BytesIO(watermarked_still_bytes))
-                    new_im.load()
-                    new_size = new_im.size
+                    try:
+                        new_im.load()
+                        new_size = new_im.size
+                    finally:
+                        new_im.close()
 
                     orig_size = self.ultrahdr_primary_size
                     if orig_size is None:
                         src_im = Image.open(self.still_path)
-                        src_im.load()
-                        orig_size = src_im.size
+                        try:
+                            src_im.load()
+                            orig_size = src_im.size
+                        finally:
+                            src_im.close()
 
                     if orig_size and tuple(orig_size) != tuple(new_size):
                         gainmap_jpeg = expand_gainmap_for_borders(
@@ -204,8 +210,11 @@ def prepare_motion_photo(image_path: str | Path) -> Optional[MotionPhotoSession]
             ultrahdr_gainmap_xmp = parts.gainmap_xmp
             try:
                 im = Image.open(BytesIO(parts.primary_jpeg))
-                im.load()
-                ultrahdr_primary_size = im.size
+                try:
+                    im.load()
+                    ultrahdr_primary_size = im.size
+                finally:
+                    im.close()
             except Exception:
                 ultrahdr_primary_size = None
     except Exception:
@@ -615,6 +624,7 @@ def _copy_all_metadata_with_exiftool(src_jpg: Path, dst_jpg: Path) -> None:
             check=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
+            timeout=30,
         )
     except Exception:
         # Do not fail the pipeline if metadata copy fails; motion photo may still work on some devices.
@@ -637,6 +647,7 @@ def _get_video_wh(video_path: Path) -> tuple[int, int]:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
+            timeout=30,
         )
         s = r.stdout.strip()
         match = re.search(r"(\d+)x(\d+)", s)
@@ -750,7 +761,7 @@ def _apply_watermark_to_video(
     ]
 
     try:
-        subprocess.run(command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        subprocess.run(command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=120)
     except subprocess.CalledProcessError as exc:
         raise RuntimeError(
             f"Failed to overlay watermark onto motion video: {exc.stderr.decode(errors='ignore')}"
@@ -778,6 +789,7 @@ def _get_video_rotation(video_path: Path) -> Optional[int]:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
+            timeout=30,
         )
         payload = json.loads(result.stdout)
         stream = (payload.get("streams") or [{}])[0]
