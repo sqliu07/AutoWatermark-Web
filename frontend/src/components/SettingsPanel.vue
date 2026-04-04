@@ -46,7 +46,7 @@
       <a-button
         v-if="store.files.length > 0 && !store.isProcessing"
         block
-        @click="store.clearFiles()"
+        @click="reselect"
       >
         {{ t('upload.reselect') }}
       </a-button>
@@ -75,13 +75,22 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '../stores/app'
 import StyleSelector from './StyleSelector.vue'
 
 const { t } = useI18n()
 const store = useAppStore()
+
+function reselect() {
+  store.clearFiles()
+  // 等 DOM 更新后 UploadZone 挂载，触发其文件选择器
+  nextTick(() => {
+    const input = document.querySelector('.upload-zone input[type="file"]')
+    if (input) input.click()
+  })
+}
 
 const qualityOptions = computed(() => [
   { label: t('settings.qualityHigh'), value: 'high' },
