@@ -42,6 +42,7 @@ export default {
   compare: {
     original: '原图',
     watermarked: '水印图',
+    motionHint: '悬停播放动态照片',
   },
   lang: {
     zh: '中文',

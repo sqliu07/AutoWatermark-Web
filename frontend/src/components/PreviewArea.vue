@@ -18,9 +18,30 @@
             <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
         </div>
-        <div class="compare-card result">
-          <div class="compare-label">{{ t('compare.watermarked') }}</div>
+        <div
+          class="compare-card result"
+          @mouseenter="onMotionHover(true)"
+          @mouseleave="onMotionHover(false)"
+          @touchstart.passive="onMotionHover(true)"
+          @touchend.passive="onMotionHover(false)"
+        >
+          <div class="compare-label">
+            {{ t('compare.watermarked') }}
+            <span v-if="isMotion" class="motion-badge">LIVE</span>
+          </div>
+          <!-- Motion Photo: hover 时播放视频 -->
+          <video
+            v-if="isMotion && motionPlaying"
+            ref="motionVideoRef"
+            :src="motionVideoUrl"
+            class="compare-img"
+            autoplay
+            loop
+            muted
+            playsinline
+          />
           <img
+            v-else
             :src="previewTask.result.processed_image"
             class="compare-img"
             :alt="previewTask.originalName"
@@ -139,6 +160,7 @@
 import { ref, computed, watch, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '../stores/app'
+import { buildMotionVideoUrl } from '../api'
 
 const { t } = useI18n()
 const store = useAppStore()
@@ -176,6 +198,20 @@ const currentProcessingName = computed(() => {
   const task = store.tasks.find(t => t.status === 'processing' || t.status === 'uploading')
   return task?.originalName || ''
 })
+
+// Motion Photo 播放
+const isMotion = computed(() => previewTask.value?.result?.is_motion === true)
+const motionVideoUrl = computed(() => {
+  if (!isMotion.value) return null
+  return buildMotionVideoUrl(previewTask.value.result.processed_image)
+})
+const motionPlaying = ref(false)
+const motionVideoRef = ref(null)
+
+function onMotionHover(entering) {
+  if (!isMotion.value) return
+  motionPlaying.value = entering
+}
 
 function openFullscreen(src) {
   fullscreenSrc.value = src
@@ -261,6 +297,25 @@ function openFullscreen(src) {
 .compare-arrow {
   color: var(--color-text-tertiary);
   flex-shrink: 0;
+}
+
+.motion-badge {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: #e8453c;
+  color: #fff;
+  vertical-align: middle;
+  margin-left: 6px;
+  animation: live-pulse 2s ease-in-out infinite;
+}
+
+@keyframes live-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
 }
 
 /* --- 操作栏 --- */

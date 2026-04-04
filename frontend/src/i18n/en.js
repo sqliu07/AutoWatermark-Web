@@ -42,6 +42,7 @@ export default {
   compare: {
     original: 'Original',
     watermarked: 'Watermarked',
+    motionHint: 'Hover to play motion photo',
   },
   lang: {
     zh: '中文',

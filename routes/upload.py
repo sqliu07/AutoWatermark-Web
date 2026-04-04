@@ -1,6 +1,7 @@
 import os
 import time
 from datetime import datetime
+from io import BytesIO
 
 from flask import Blueprint, current_app, jsonify, render_template, request, send_file
 from werkzeug.utils import secure_filename
@@ -132,3 +133,35 @@ def upload_file_served(filename):
             state.burn_queue[file_path] = time.time() + AppConstants.BURN_TTL_SECONDS
 
     return send_file(file_path)
+
+
+@bp.route("/upload/<filename>/video")
+def upload_motion_video(filename):
+    """从 Motion Photo 文件中提取视频部分，返回 video/mp4。"""
+    lang = normalize_lang(request.args.get("lang", "zh"))
+    token = request.args.get("token", "")
+    expires = request.args.get("expires", "")
+
+    filename = secure_filename(filename)
+    if not verify_token(filename, token, expires):
+        return jsonify(error=get_error_message("link_expired", lang)), 403
+
+    file_path = os.path.join(current_app.config["UPLOAD_FOLDER"], filename)
+    if not os.path.exists(file_path):
+        return jsonify(error=get_error_message("file_not_found", lang)), 404
+
+    from media.motion_photo import _split_motion_photo
+    try:
+        data = open(file_path, "rb").read()
+        components = _split_motion_photo(data)
+        if not components.video_bytes:
+            return jsonify(error="Not a motion photo"), 404
+
+        return send_file(
+            BytesIO(components.video_bytes),
+            mimetype="video/mp4",
+            download_name=f"{filename}.mp4",
+        )
+    except Exception:
+        current_app.logger.exception("Failed to extract motion video from %s", filename)
+        return jsonify(error=get_error_message("unexpected_error", lang)), 500

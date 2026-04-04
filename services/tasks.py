@@ -137,7 +137,7 @@ def background_process(
                 if stage:
                     task["stage"] = stage
 
-        process_image(
+        result = process_image(
             filepath,
             lang=lang,
             watermark_type=watermark_type,
@@ -146,6 +146,8 @@ def background_process(
             progress_callback=update_progress,
             style_config=style_config,
         )
+
+        is_motion = isinstance(result, dict) and result.get("is_motion", False)
 
         filename = os.path.basename(filepath)
         original_name, extension = os.path.splitext(filename)
@@ -158,10 +160,14 @@ def background_process(
             burn=burn_after_read,
         )
 
+        task_result = {"processed_image": signed_url}
+        if is_motion:
+            task_result["is_motion"] = True
+
         state.update_task(
             task_id,
             status="succeeded",
-            result={"processed_image": signed_url},
+            result=task_result,
             progress=1.0,
             stage="done",
         )

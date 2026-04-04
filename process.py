@@ -189,7 +189,9 @@ def process_image(
             return new_image
         else:
             advance_progress("saving")
+            is_motion = False
             if motion_session and watermark_metadata and style["supports_motion"]:
+                is_motion = True
                 temp_output = Path(motion_session.still_path.parent) / "watermarked_motion_frame.jpg"
                 new_image.save(temp_output, exif=exif_bytes, quality=image_quality)
                 motion_session.finalize(temp_output, Path(output_path), watermark_metadata)
@@ -245,7 +247,7 @@ def process_image(
                 new_image.save(output_path, exif=exif_bytes, quality=image_quality)
                 advance_progress("saved")
                 return True
-            return True
+            return {"is_motion": True} if is_motion else True
     except WatermarkError:
         raise
     except Exception as exc:

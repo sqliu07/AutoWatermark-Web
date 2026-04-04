@@ -31,3 +31,10 @@ export async function downloadZip(filenames) {
   const { data } = await http.post('/download_zip', { filenames })
   return data
 }
+
+export function buildMotionVideoUrl(imageUrl) {
+  // imageUrl: "/upload/xxx.jpg?token=...&expires=..."
+  // 视频端点: "/upload/xxx.jpg/video?token=...&expires=..."
+  const [path, query] = imageUrl.split('?')
+  return `${path}/video${query ? '?' + query : ''}`
+}
