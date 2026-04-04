@@ -11,20 +11,26 @@
         <img
           v-if="style.preview_image"
           :src="style.preview_image"
-          :alt="style.name"
+          :alt="styleName(style)"
           class="style-img"
         />
-        <div v-else class="style-placeholder">{{ style.style_id }}</div>
+        <div v-else class="style-placeholder">{{ style.display_code || style.style_id }}</div>
       </div>
-      <span class="style-name">{{ style.name }}</span>
+      <span class="style-name">{{ styleName(style) }}</span>
     </div>
   </div>
 </template>
 
 <script setup>
+import { useI18n } from 'vue-i18n'
 import { useAppStore } from '../stores/app'
 
+const { locale } = useI18n()
 const store = useAppStore()
+
+function styleName(style) {
+  return locale.value === 'zh' ? style.label_zh : style.label_en
+}
 </script>
 
 <style scoped>

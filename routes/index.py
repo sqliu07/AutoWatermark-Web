@@ -19,7 +19,9 @@ def api_styles():
         "styles": [
             {
                 "style_id": s["style_id"],
-                "name": s.get("name", f"Style {s['style_id']}"),
+                "label_zh": s.get("label_zh", f"样式 {s['style_id']}"),
+                "label_en": s.get("label_en", f"Style {s['style_id']}"),
+                "display_code": s.get("display_code", ""),
                 "layout": s.get("layout", ""),
                 "preview_image": f"/static/{s['preview_image']}" if s.get("preview_image") else None,
             }
