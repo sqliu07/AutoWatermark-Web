@@ -87,14 +87,39 @@
       <div v-if="store.isProcessing" class="progress-overlay">
         <div class="progress-card">
           <a-progress
+            type="circle"
             :percent="progressPercent"
-            :stroke-color="{ from: '#2c2c2c', to: '#6b6860' }"
-            :show-info="false"
-            :stroke-width="4"
-          />
-          <span class="progress-text">
-            {{ t('status.processing', { current: store.completedCount, total: store.totalCount }) }}
-          </span>
+            :size="96"
+            :stroke-width="6"
+            :stroke-color="{ '0%': '#2c2c2c', '100%': '#6b6860' }"
+          >
+            <template #format="{ percent }">
+              <span class="progress-circle-text">{{ percent }}%</span>
+            </template>
+          </a-progress>
+
+          <div class="progress-info">
+            <span class="progress-count">
+              {{ t('status.processing', { current: store.completedCount, total: store.totalCount }) }}
+            </span>
+            <span v-if="currentProcessingName" class="progress-filename">
+              {{ currentProcessingName }}
+            </span>
+          </div>
+
+          <!-- 微型文件列表 -->
+          <div v-if="store.totalCount > 1" class="progress-list">
+            <div
+              v-for="(task, i) in store.tasks"
+              :key="i"
+              class="progress-dot"
+              :class="{
+                done: task.status === 'succeeded',
+                fail: task.status === 'failed',
+                active: task.status === 'processing' || task.status === 'uploading',
+              }"
+            />
+          </div>
         </div>
       </div>
     </Transition>
@@ -142,6 +167,11 @@ onUnmounted(() => {
 const progressPercent = computed(() => {
   if (store.totalCount === 0) return 0
   return Math.round((store.completedCount / store.totalCount) * 100)
+})
+
+const currentProcessingName = computed(() => {
+  const task = store.tasks.find(t => t.status === 'processing' || t.status === 'uploading')
+  return task?.originalName || ''
 })
 
 function openFullscreen(src) {
@@ -302,27 +332,91 @@ function openFullscreen(src) {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(247, 246, 243, 0.85);
-  backdrop-filter: blur(4px);
+  background: rgba(247, 246, 243, 0.88);
+  backdrop-filter: blur(6px);
   border-radius: var(--radius-md);
+  z-index: 10;
 }
 
 .progress-card {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
-  padding: 32px 48px;
+  gap: 20px;
+  padding: 40px 48px;
   background: var(--color-surface);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
-  min-width: 240px;
+  min-width: 260px;
+  animation: progress-enter 0.35s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.progress-text {
-  font-size: 13px;
-  color: var(--color-text-secondary);
-  font-weight: 500;
+@keyframes progress-enter {
+  from { opacity: 0; transform: scale(0.95) translateY(8px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.progress-circle-text {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--color-text);
+  letter-spacing: -0.5px;
+}
+
+.progress-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.progress-count {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.progress-filename {
+  font-size: 12px;
+  color: var(--color-text-tertiary);
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.progress-list {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: center;
+  max-width: 200px;
+}
+
+.progress-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-border);
+  transition: all 0.3s ease;
+}
+
+.progress-dot.done {
+  background: var(--color-success);
+}
+
+.progress-dot.fail {
+  background: var(--color-error);
+}
+
+.progress-dot.active {
+  background: var(--color-accent);
+  animation: dot-pulse 1s ease-in-out infinite;
+}
+
+@keyframes dot-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.4); opacity: 0.7; }
 }
 
 /* --- 全屏预览 --- */
