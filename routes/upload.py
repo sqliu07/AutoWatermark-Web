@@ -111,15 +111,18 @@ def upload_file_served(filename):
 
     filename = secure_filename(filename)
 
+    is_browser = "text/html" in request.headers.get("Accept", "")
+
     # 签名校验：无 token 或校验失败则拒绝
     if not verify_token(filename, token, expires):
-        return jsonify(error="Link expired or invalid"), 403
+        if is_browser:
+            return render_template("image_deleted.html"), 404
+        return jsonify(error=get_error_message("link_expired", lang)), 403
 
     file_path = os.path.join(current_app.config["UPLOAD_FOLDER"], filename)
 
     if not os.path.exists(file_path):
-        accept = request.headers.get("Accept", "")
-        if "text/html" in accept:
+        if is_browser:
             return render_template("image_deleted.html"), 404
         return jsonify(error=get_error_message("file_not_found", lang)), 404
 
