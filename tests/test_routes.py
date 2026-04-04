@@ -13,6 +13,7 @@ from exif import find_logo, get_manufacturer
 from media.motion_photo import prepare_motion_photo
 from process import process_image
 from media.ultrahdr import split_ultrahdr
+from services.download_token import generate_token
 
 PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[1]
 ASSETS_DIR = PROJECT_ROOT / "tests" / "fixtures"
@@ -120,7 +121,8 @@ def test_upload_burn_after_read_updates_queue(client):
     with open(file_path, "wb") as f:
         f.write(b"burn")
 
-    response = client.get(f"/upload/{filename}?burn=1")
+    token, expires = generate_token(filename)
+    response = client.get(f"/upload/{filename}?burn=1&token={token}&expires={expires}")
     assert response.status_code == 200
 
     state = app.extensions["state"]

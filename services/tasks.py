@@ -10,6 +10,7 @@ from constants import CommonConstants, AppConstants
 from errors import WatermarkError
 from exif import get_manufacturer
 from process import process_image
+from services.download_token import build_signed_url
 from services.i18n import get_common_message
 
 
@@ -150,10 +151,17 @@ def background_process(
         original_name, extension = os.path.splitext(filename)
         processed_filename = f"{original_name}_watermark{extension}"
 
+        signed_url = build_signed_url(
+            f"/upload/{processed_filename}",
+            processed_filename,
+            lang=lang,
+            burn=burn_after_read,
+        )
+
         state.update_task(
             task_id,
             status="succeeded",
-            result={"processed_image": f"/upload/{processed_filename}?lang={lang}&burn={burn_after_read}"},
+            result={"processed_image": signed_url},
             progress=1.0,
             stage="done",
         )

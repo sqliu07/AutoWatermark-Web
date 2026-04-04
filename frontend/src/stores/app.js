@@ -65,22 +65,23 @@ export const useAppStore = defineStore('app', () => {
   async function processAll() {
     if (files.value.length === 0) return
     isProcessing.value = true
-    tasks.value = []
 
-    for (const file of files.value) {
-      const task = {
-        id: null,
-        file,
-        originalName: file.name,
-        status: 'uploading',
-        progress: 0,
-        result: null,
-        error: null,
-      }
-      tasks.value.push(task)
+    // 一次性创建所有 task，total 从一开始就确定
+    tasks.value = files.value.map(file => ({
+      id: null,
+      file,
+      originalName: file.name,
+      status: 'pending',
+      progress: 0,
+      result: null,
+      error: null,
+    }))
+
+    for (const task of tasks.value) {
+      task.status = 'uploading'
 
       try {
-        const res = await api.uploadFile(file, {
+        const res = await api.uploadFile(task.file, {
           watermark_type: selectedStyle.value,
           image_quality: imageQuality.value,
           burn_after_read: burnAfterRead.value ? '1' : '0',

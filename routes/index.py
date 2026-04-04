@@ -21,6 +21,7 @@ def api_styles():
                 "style_id": s["style_id"],
                 "name": s.get("name", f"Style {s['style_id']}"),
                 "layout": s.get("layout", ""),
+                "preview_image": f"/static/{s['preview_image']}" if s.get("preview_image") else None,
             }
             for s in styles
         ],

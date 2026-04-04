@@ -7,6 +7,7 @@ from werkzeug.utils import secure_filename
 
 from constants import AppConstants
 from extensions import limiter
+from services.download_token import verify_token
 from services.i18n import get_message, get_common_message, normalize_lang
 from services.tasks import (
     allowed_file,
@@ -105,8 +106,15 @@ def get_task_status(task_id):
 def upload_file_served(filename):
     lang = normalize_lang(request.args.get("lang", "zh"))
     burn_after_read = request.args.get("burn", "0")
+    token = request.args.get("token", "")
+    expires = request.args.get("expires", "")
 
     filename = secure_filename(filename)
+
+    # 签名校验：无 token 或校验失败则拒绝
+    if not verify_token(filename, token, expires):
+        return jsonify(error="Link expired or invalid"), 403
+
     file_path = os.path.join(current_app.config["UPLOAD_FOLDER"], filename)
 
     if not os.path.exists(file_path):
