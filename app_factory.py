@@ -1,6 +1,6 @@
 import os
 
-from flask import Flask
+from flask import Flask, send_from_directory
 
 from constants import AppConstants, CommonConstants
 from extensions import limiter
@@ -55,6 +55,13 @@ def create_app(config_overrides=None):
         response.headers["X-XSS-Protection"] = "1; mode=block"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         return response
+
+    # Vue 构建产物的静态文件路由
+    dist_dir = os.path.join(app.static_folder, "dist")
+
+    @app.route("/assets/<path:filename>")
+    def dist_assets(filename):
+        return send_from_directory(os.path.join(dist_dir, "assets"), filename)
 
     app.register_blueprint(index_bp)
     app.register_blueprint(upload_bp)

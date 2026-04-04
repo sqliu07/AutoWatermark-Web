@@ -1,7 +1,19 @@
-# 基础镜像
+# ============ 第一阶段：构建 Vue 前端 ============
+FROM node:18-alpine AS frontend-build
+
+WORKDIR /build
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci --production=false
+
+COPY frontend/ ./
+RUN npm run build
+# 产出在 ../static/dist/ (由 vite.config.js 配置)
+# 但容器内路径是 /build/../static/dist -> /static/dist
+# 需要调整：直接复制 dist 目录
+
+# ============ 第二阶段：Python 应用 ============
 FROM python:3.10-slim
 
-# 设置时区
 ENV TZ=Asia/Shanghai
 
 # 复制 ffmpeg 二进制文件
@@ -10,33 +22,16 @@ COPY --from=mwader/static-ffmpeg:6.0 /ffprobe /usr/local/bin/
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        curl tzdata perl-base \
-        nodejs \
-        npm && \
+        curl tzdata perl-base && \
     rm -rf /var/lib/apt/lists/*
-
-# 2. 全局安装 JS 混淆工具
-RUN npm install -g javascript-obfuscator
 
 WORKDIR /app
 
-# 拷贝项目文件
+# 拷贝项目文件（排除 frontend/ 源码）
 COPY . /app
 
-# 3. 在构建时执行混淆
-RUN javascript-obfuscator ./static/js/script.js \
-    --output ./static/js/script.js \
-    --compact true \
-    --self-defending true \
-    --rename-globals true \
-    --string-array true \
-    --string-array-encoding 'base64'
-
-# 4. 混淆完成后卸载 Node.js 以减小镜像体积
-RUN npm uninstall -g javascript-obfuscator && \
-    apt-get remove -y nodejs npm && \
-    apt-get autoremove -y && \
-    apt-get clean
+# 从前端构建阶段复制产物
+COPY --from=frontend-build /static/dist /app/static/dist
 
 # 安装 Python 依赖
 RUN pip install --no-cache-dir -r requirements-deploy.txt
