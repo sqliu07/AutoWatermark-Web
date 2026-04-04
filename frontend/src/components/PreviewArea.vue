@@ -3,10 +3,28 @@
     <!-- 处理完成：并排对比 -->
     <template v-if="previewTask?.status === 'succeeded'">
       <div class="compare-view">
-        <div class="compare-card">
-          <div class="compare-label">{{ t('compare.original') }}</div>
+        <div
+          class="compare-card"
+          @mouseenter="onOriginalHover(true)"
+          @mouseleave="onOriginalHover(false)"
+          @touchstart.passive="onOriginalHover(true)"
+          @touchend.passive="onOriginalHover(false)"
+        >
+          <div class="compare-label">
+            {{ t('compare.original') }}
+            <span v-if="isMotion" class="motion-badge">LIVE</span>
+          </div>
+          <video
+            v-if="isMotion && originalMotionPlaying && originalVideoUrl"
+            :src="originalVideoUrl"
+            class="compare-img"
+            autoplay
+            loop
+            muted
+            playsinline
+          />
           <img
-            v-if="originalUrl"
+            v-else-if="originalUrl"
             :src="originalUrl"
             class="compare-img"
             :alt="previewTask.originalName"
@@ -170,6 +188,16 @@ const fullscreenSrc = ref(null)
 
 const previewTask = computed(() => store.currentPreview)
 
+// 切换预览任务时重置视频状态
+watch(previewTask, () => {
+  motionPlaying.value = false
+  originalMotionPlaying.value = false
+  if (originalVideoUrl.value) {
+    URL.revokeObjectURL(originalVideoUrl.value)
+    originalVideoUrl.value = null
+  }
+})
+
 // 原图的本地 URL
 const originalUrl = computed(() => {
   const task = previewTask.value
@@ -185,6 +213,7 @@ watch(() => store.files[0], (file) => {
 
 onUnmounted(() => {
   if (localPreviewUrl.value) URL.revokeObjectURL(localPreviewUrl.value)
+  if (originalVideoUrl.value) URL.revokeObjectURL(originalVideoUrl.value)
 })
 
 const progressPercent = computed(() => {
@@ -201,16 +230,61 @@ const currentProcessingName = computed(() => {
 
 // Motion Photo 播放
 const isMotion = computed(() => previewTask.value?.result?.is_motion === true)
+
+// 水印图视频（从后端端点获取）
 const motionVideoUrl = computed(() => {
   if (!isMotion.value) return null
   return buildMotionVideoUrl(previewTask.value.result.processed_image)
 })
 const motionPlaying = ref(false)
-const motionVideoRef = ref(null)
 
 function onMotionHover(entering) {
   if (!isMotion.value) return
   motionPlaying.value = entering
+}
+
+// 原图视频（从本地文件提取）
+const originalVideoUrl = ref(null)
+const originalMotionPlaying = ref(false)
+
+function onOriginalHover(entering) {
+  if (!isMotion.value) return
+  originalMotionPlaying.value = entering
+  // 首次 hover 时提取视频
+  if (entering && !originalVideoUrl.value && previewTask.value?.file) {
+    extractVideoFromFile(previewTask.value.file)
+  }
+}
+
+async function extractVideoFromFile(file) {
+  try {
+    const buffer = await file.arrayBuffer()
+    const bytes = new Uint8Array(buffer)
+    const videoStart = findMp4Start(bytes)
+    if (videoStart === null) return
+    const videoBlob = new Blob([bytes.slice(videoStart)], { type: 'video/mp4' })
+    originalVideoUrl.value = URL.createObjectURL(videoBlob)
+  } catch {
+    // 提取失败则不播放
+  }
+}
+
+function findMp4Start(bytes) {
+  // 从尾部向前搜索 'ftyp' 标记（MP4 box header: [4字节size][ftyp]）
+  const ftyp = [0x66, 0x74, 0x79, 0x70] // 'ftyp'
+  const searchStart = Math.max(0, bytes.length - 32 * 1024 * 1024)
+  for (let i = bytes.length - 8; i >= searchStart; i--) {
+    if (bytes[i] === ftyp[0] && bytes[i+1] === ftyp[1] &&
+        bytes[i+2] === ftyp[2] && bytes[i+3] === ftyp[3] && i >= 4) {
+      // ftyp 前 4 字节是 box size
+      const start = i - 4
+      const size = (bytes[start] << 24) | (bytes[start+1] << 16) | (bytes[start+2] << 8) | bytes[start+3]
+      if (size >= 8 && size <= bytes.length - start) {
+        return start
+      }
+    }
+  }
+  return null
 }
 
 function openFullscreen(src) {
