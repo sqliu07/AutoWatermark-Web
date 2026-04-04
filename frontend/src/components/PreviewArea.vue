@@ -128,7 +128,11 @@
     <Transition name="fade">
       <div v-if="fullscreenSrc" class="fullscreen-overlay" @click="fullscreenSrc = null">
         <img :src="fullscreenSrc" class="fullscreen-img" @click.stop />
-        <button class="fullscreen-close" @click="fullscreenSrc = null">&times;</button>
+        <button class="fullscreen-close" @click="fullscreenSrc = null">
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+            <path d="M4 4l10 10M14 4L4 14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </button>
       </div>
     </Transition>
   </div>
@@ -444,13 +448,12 @@ function openFullscreen(src) {
   position: absolute;
   top: 16px;
   right: 20px;
-  width: 36px;
-  height: 36px;
+  width: 40px;
+  height: 40px;
   border: none;
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.15);
   color: white;
-  font-size: 22px;
   cursor: pointer;
   display: flex;
   align-items: center;
