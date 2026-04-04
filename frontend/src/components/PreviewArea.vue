@@ -351,6 +351,7 @@ function openFullscreen(src) {
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
   min-width: 260px;
+  max-width: 90%;
   animation: progress-enter 0.35s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
@@ -382,7 +383,7 @@ function openFullscreen(src) {
 .progress-filename {
   font-size: 12px;
   color: var(--color-text-tertiary);
-  max-width: 200px;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
