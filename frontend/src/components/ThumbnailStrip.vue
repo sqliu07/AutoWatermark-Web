@@ -88,6 +88,18 @@ function onClickThumb(task) {
   padding: 10px 20px;
 }
 
+@media (max-width: 768px) {
+  .thumbnail-strip {
+    height: 72px;
+    padding: 8px 12px;
+  }
+
+  .thumb-item {
+    width: 52px;
+    height: 52px;
+  }
+}
+
 .strip-scroll {
   display: flex;
   gap: 8px;

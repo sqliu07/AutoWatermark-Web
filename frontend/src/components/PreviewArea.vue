@@ -171,6 +171,29 @@ function openFullscreen(src) {
   padding: 0 8px;
 }
 
+@media (max-width: 768px) {
+  .compare-view {
+    flex-direction: column;
+    gap: 12px;
+    max-height: none;
+    overflow-y: auto;
+  }
+
+  .compare-arrow {
+    transform: rotate(90deg);
+  }
+
+  .compare-img {
+    max-height: 40vh;
+  }
+
+  .action-bar {
+    flex-direction: column;
+    gap: 8px;
+    text-align: center;
+  }
+}
+
 .compare-card {
   flex: 1;
   min-width: 0;

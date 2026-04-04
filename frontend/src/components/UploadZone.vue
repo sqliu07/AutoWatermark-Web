@@ -78,6 +78,13 @@ function onDrop(e) {
   background: var(--color-surface);
 }
 
+@media (max-width: 768px) {
+  .upload-zone {
+    padding: 32px 20px;
+    max-width: 100%;
+  }
+}
+
 .upload-zone:hover,
 .upload-zone.dragging {
   border-color: var(--color-accent);

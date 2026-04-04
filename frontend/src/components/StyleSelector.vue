@@ -40,6 +40,12 @@ function styleName(style) {
   gap: 10px;
 }
 
+@media (max-width: 768px) {
+  .style-grid {
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  }
+}
+
 .style-card {
   display: flex;
   flex-direction: column;

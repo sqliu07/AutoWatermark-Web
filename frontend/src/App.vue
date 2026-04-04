@@ -17,15 +17,15 @@
         </div>
       </header>
 
-      <!-- 主体：三栏布局 -->
-      <main class="app-main" :class="{ 'has-results': store.tasks.length > 0 }">
-        <!-- 左侧：大预览区 -->
+      <!-- 主体 -->
+      <main class="app-main">
+        <!-- 预览区 -->
         <section class="preview-area">
           <UploadZone v-if="store.files.length === 0" />
           <PreviewArea v-else />
         </section>
 
-        <!-- 右侧：设置栏 -->
+        <!-- 设置栏 -->
         <aside class="settings-sidebar">
           <SettingsPanel />
         </aside>
@@ -136,12 +136,12 @@ function chooseLogo(choice) {
   font-weight: 400;
 }
 
+/* 桌面端：左右分栏 */
 .app-main {
   display: grid;
   grid-template-columns: 1fr 320px;
   flex: 1;
   overflow: hidden;
-  transition: grid-template-rows 0.3s ease;
 }
 
 .preview-area {
@@ -158,6 +158,35 @@ function chooseLogo(choice) {
   border-left: 1px solid var(--color-border-light);
   overflow-y: auto;
   padding: 24px 20px;
+}
+
+/* 移动端：上下堆叠 */
+@media (max-width: 768px) {
+  .app-header {
+    padding: 0 16px;
+    height: 48px;
+  }
+
+  .brand-sub {
+    display: none;
+  }
+
+  .app-main {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+    overflow-y: auto;
+  }
+
+  .preview-area {
+    padding: 16px;
+    min-height: 200px;
+  }
+
+  .settings-sidebar {
+    border-left: none;
+    border-top: 1px solid var(--color-border-light);
+    padding: 16px;
+  }
 }
 
 .logo-desc {
