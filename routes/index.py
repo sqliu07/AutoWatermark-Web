@@ -1,8 +1,7 @@
 import os
 
-from flask import Blueprint, jsonify, request, current_app, send_from_directory
+from flask import Blueprint, jsonify, current_app, send_from_directory
 
-from services.i18n import normalize_lang
 from services.watermark_styles import get_default_style_id, list_enabled_styles
 
 bp = Blueprint("index", __name__)
@@ -35,24 +34,4 @@ def api_styles():
 def index():
     """SPA 入口：返回 Vue 构建产物的 index.html。"""
     dist_dir = os.path.join(current_app.static_folder, "dist")
-    index_path = os.path.join(dist_dir, "index.html")
-    if os.path.isfile(index_path):
-        return send_from_directory(dist_dir, "index.html")
-    # 兼容：如果 Vue 还没构建，回退到旧模板
-    from flask import render_template
-    style_config = current_app.extensions.get("watermark_styles", {})
-    watermark_styles = list_enabled_styles(style_config)
-    default_style_id = get_default_style_id(style_config) if watermark_styles else None
-    return render_template(
-        "index.html",
-        watermark_styles=watermark_styles,
-        default_style_id=default_style_id,
-    )
-
-
-@bp.route("/not_found")
-def not_found_page():
-    lang = normalize_lang(request.args.get("lang", "zh"))
-    translations = current_app.extensions.get("translations", {})
-    from flask import render_template
-    return render_template("image_deleted.html", lang=lang, translations=translations), 404
+    return send_from_directory(dist_dir, "index.html")

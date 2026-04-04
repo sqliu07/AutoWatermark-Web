@@ -77,9 +77,12 @@ export const useAppStore = defineStore('app', () => {
       error: null,
     }))
 
-    for (const task of tasks.value) {
-      task.status = 'uploading'
+    // 并发上传+轮询，限制并发数
+    const concurrency = 3
+    const queue = [...tasks.value]
 
+    async function processOne(task) {
+      task.status = 'uploading'
       try {
         const res = await api.uploadFile(task.file, {
           watermark_type: selectedStyle.value,
@@ -90,7 +93,7 @@ export const useAppStore = defineStore('app', () => {
 
         if (res.needs_logo_choice) {
           task.status = 'needs_logo'
-          continue
+          return
         }
 
         task.id = res.task_id
@@ -101,6 +104,16 @@ export const useAppStore = defineStore('app', () => {
         task.error = e.message || 'Upload failed'
       }
     }
+
+    const executing = new Set()
+    for (const task of queue) {
+      const p = processOne(task).then(() => executing.delete(p))
+      executing.add(p)
+      if (executing.size >= concurrency) {
+        await Promise.race(executing)
+      }
+    }
+    await Promise.all(executing)
 
     isProcessing.value = false
   }

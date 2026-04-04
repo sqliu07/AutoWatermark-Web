@@ -8,7 +8,7 @@ from werkzeug.utils import secure_filename
 from constants import AppConstants
 from extensions import limiter
 from services.download_token import verify_token
-from services.i18n import get_message, get_common_message, normalize_lang
+from services.i18n import get_error_message, normalize_lang
 from services.tasks import (
     allowed_file,
     cleanup_old_tasks,
@@ -30,15 +30,15 @@ def upload_file():
     lang = normalize_lang(request.args.get("lang", "zh"))
 
     if "file" not in request.files:
-        return jsonify(error=get_message("no_file_uploaded", lang)), 400
+        return jsonify(error=get_error_message("no_file_uploaded", lang)), 400
 
     file = request.files["file"]
 
     if file.filename == "":
-        return jsonify(error=get_message("no_file_selected", lang)), 400
+        return jsonify(error=get_error_message("no_file_selected", lang)), 400
 
     if not allowed_file(file.filename, current_app.config["ALLOWED_EXTENSIONS"]):
-        return jsonify(error=get_message("invalid_file_type", lang)), 400
+        return jsonify(error=get_error_message("invalid_file_type", lang)), 400
 
     style_config = current_app.extensions.get("watermark_styles", {})
     default_style = str(get_default_style_id(style_config)) if style_config else "1"
@@ -50,7 +50,7 @@ def upload_file():
     image_quality_int = normalize_image_quality(image_quality)
 
     if watermark_type is None:
-        return jsonify(error=get_common_message("unexpected_error", lang)), 400
+        return jsonify(error=get_error_message("unexpected_error", lang)), 400
 
     if file and allowed_file(file.filename, current_app.config["ALLOWED_EXTENSIONS"]):
         timestamp = datetime.fromtimestamp(int(time.time())).strftime("%Y-%m-%d_%H-%M-%S")
@@ -72,9 +72,9 @@ def upload_file():
         try:
             watermark_type_int = int(watermark_type)
         except ValueError:
-            return jsonify(error=get_common_message("unexpected_error", lang)), 400
+            return jsonify(error=get_error_message("unexpected_error", lang)), 400
         if not is_style_enabled(style_config, watermark_type_int):
-            return jsonify(error=get_common_message("unexpected_error", lang)), 400
+            return jsonify(error=get_error_message("unexpected_error", lang)), 400
 
         task_id = submit_task(
             state,
@@ -90,7 +90,7 @@ def upload_file():
 
         return jsonify({"task_id": task_id}), 202
 
-    return jsonify(error=get_message("invalid_file_type", lang)), 400
+    return jsonify(error=get_error_message("invalid_file_type", lang)), 400
 
 
 @bp.route("/status/<task_id>", methods=["GET"])

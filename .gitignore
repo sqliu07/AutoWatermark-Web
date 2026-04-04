@@ -17,6 +17,7 @@ tests/fixtures/*.tiff
 tests/fixtures/*.bmp
 scripts/
 scripts/__pycache__/
+node_modules/
 scripts/out.jpg
 scripts/test.jpg
 clear_his.sh

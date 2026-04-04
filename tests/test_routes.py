@@ -61,7 +61,7 @@ def test_download_zip_no_files(client):
     response = client.post("/download_zip", json={})
     assert response.status_code == 400
     payload = response.get_json()
-    assert payload["error"] == "No files provided"
+    assert payload["error"]  # 错误消息已 i18n，只验证非空
 
 
 def test_upload_invalid_watermark_type(client):

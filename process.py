@@ -27,13 +27,11 @@ from media.ultrahdr import (
 )
 from media.motion_photo import prepare_motion_photo
 from logging_utils import get_logger
+from services.i18n import get_common_message as get_message
 from services.watermark_styles import get_style, load_cached_watermark_styles
 
 
 logger = get_logger("autowatermark.process")
-
-def get_message(key, lang='zh'):
-    return CommonConstants.ERROR_MESSAGES.get(key, {}).get(lang)
 
 def _enforce_image_pixel_limit(image):
     max_pixels = ImageConstants.MAX_IMAGE_PIXELS

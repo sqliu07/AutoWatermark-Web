@@ -306,47 +306,5 @@ def _ensure_offset_length_attrs(xmp_text: str, video_length: int) -> str:
     return xmp_text
 
 
-def _strip_existing_xmp(jpeg_bytes: bytes) -> bytes:
-    if not jpeg_bytes.startswith(b"\xff\xd8"):
-        raise ValueError("Input is not a JPEG file")
-
-    output = bytearray()
-    output.extend(jpeg_bytes[:2])
-    idx = 2
-
-    while idx < len(jpeg_bytes):
-        if jpeg_bytes[idx] != 0xFF:
-            output.extend(jpeg_bytes[idx:])
-            break
-
-        marker = jpeg_bytes[idx:idx + 2]
-        if marker == b"\xff\xda":
-            output.extend(jpeg_bytes[idx:])
-            break
-
-        if idx + 4 > len(jpeg_bytes):
-            output.extend(jpeg_bytes[idx:])
-            break
-
-        seg_length = int.from_bytes(jpeg_bytes[idx + 2:idx + 4], "big")
-        segment = jpeg_bytes[idx:idx + 2 + seg_length]
-
-        if marker == b"\xff\xe1" and segment[4:4 + len(XMP_HEADER)] == XMP_HEADER:
-            idx += 2 + seg_length
-            continue
-
-        output.extend(segment)
-        idx += 2 + seg_length
-
-    return bytes(output)
-
-
-def _build_xmp_segment(xmp_bytes: bytes) -> bytes:
-    payload = XMP_HEADER + xmp_bytes
-    length = len(payload) + 2
-    return b"\xff\xe1" + length.to_bytes(2, "big") + payload
-
-
-def _inject_xmp(jpeg_bytes: bytes, xmp_bytes: bytes) -> bytes:
-    stripped = _strip_existing_xmp(jpeg_bytes)
-    return stripped[:2] + _build_xmp_segment(xmp_bytes) + stripped[2:]
+# 复用 ultrahdr.py 中更健壮的 JPEG XMP 操作实现
+from media.ultrahdr import inject_xmp as _inject_xmp  # noqa: F401

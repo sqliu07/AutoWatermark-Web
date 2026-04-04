@@ -5,7 +5,15 @@ import hmac
 import os
 import time
 
-_SECRET = os.environ.get("DOWNLOAD_TOKEN_SECRET", "autowatermark-default-secret")
+_SECRET = os.environ.get("DOWNLOAD_TOKEN_SECRET", "")
+if not _SECRET:
+    import warnings
+    warnings.warn(
+        "DOWNLOAD_TOKEN_SECRET not set; using random secret (tokens will invalidate on restart)",
+        stacklevel=1,
+    )
+    import secrets
+    _SECRET = secrets.token_hex(32)
 DEFAULT_TTL = 3600  # 1 小时
 
 

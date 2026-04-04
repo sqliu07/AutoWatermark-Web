@@ -8,6 +8,7 @@ from werkzeug.utils import secure_filename
 
 from constants import AppConstants
 from extensions import limiter
+from services.i18n import get_error_message, normalize_lang
 
 bp = Blueprint("download", __name__)
 
@@ -15,14 +16,15 @@ bp = Blueprint("download", __name__)
 @bp.route("/download_zip", methods=["POST"])
 @limiter.limit(AppConstants.ZIP_RATE_LIMIT)
 def download_zip():
+    lang = normalize_lang(request.args.get("lang", "zh"))
     data = request.json or {}
     filenames = data.get("filenames", [])
 
     if not filenames:
-        return jsonify(error="No files provided"), 400
+        return jsonify(error=get_error_message("zip_no_files", lang)), 400
 
     if len(filenames) > AppConstants.ZIP_MAX_FILES:
-        return jsonify(error=f"Too many files (max {AppConstants.ZIP_MAX_FILES})"), 400
+        return jsonify(error=get_error_message("zip_too_many_files", lang)), 400
 
     upload_folder = os.path.realpath(current_app.config["UPLOAD_FOLDER"])
 
@@ -47,7 +49,7 @@ def download_zip():
                     current_app.logger.warning("Skipping zip for missing file: %s", safe_fname)
     except Exception:
         current_app.logger.exception("Zip creation failed")
-        return jsonify(error="Failed to create zip"), 500
+        return jsonify(error=get_error_message("zip_create_failed", lang)), 500
 
     zip_url = f"/download_temp_zip/{zip_filename}"
     return jsonify(zip_url=zip_url)
@@ -55,10 +57,11 @@ def download_zip():
 
 @bp.route("/download_temp_zip/<filename>")
 def download_temp_zip(filename):
+    lang = normalize_lang(request.args.get("lang", "zh"))
     safe_filename_str = secure_filename(filename)
     if not safe_filename_str:
-        return "Invalid filename", 400
+        return jsonify(error=get_error_message("file_not_found", lang)), 400
     file_path = os.path.join(tempfile.gettempdir(), safe_filename_str)
     if not os.path.isfile(file_path):
-        return "File not found", 404
+        return jsonify(error=get_error_message("file_not_found", lang)), 404
     return send_file(file_path, as_attachment=True, download_name=safe_filename_str)

@@ -10,7 +10,6 @@ from routes.download import bp as download_bp
 from routes.index import bp as index_bp
 from routes.upload import bp as upload_bp
 from services.cleanup import start_background_cleaner
-from services.i18n import load_translations
 from services.state import AppState
 from services.watermark_styles import load_cached_watermark_styles
 
@@ -40,9 +39,7 @@ def create_app(config_overrides=None):
 
     limiter.init_app(app)
 
-    translations = load_translations("static/i18n/translations.json", logger)
     watermark_styles = load_cached_watermark_styles(app.config["WATERMARK_STYLE_CONFIG_PATH"])
-    app.extensions["translations"] = translations
     app.extensions["watermark_styles"] = watermark_styles
     app.extensions["state"] = AppState()
 

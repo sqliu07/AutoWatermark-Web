@@ -42,25 +42,37 @@
 </template>
 
 <script setup>
-import { ref, watch } from 'vue'
+import { ref, watch, onUnmounted } from 'vue'
 import { useAppStore } from '../stores/app'
 
 const store = useAppStore()
 
-// 为每个任务生成缩略图 URL（优先处理后的图，否则用原图）
 const thumbUrls = ref([])
+const blobUrls = ref([]) // 追踪需要释放的 blob URL
 
 watch(() => store.tasks, (tasks) => {
-  thumbUrls.value = tasks.map((task, i) => {
+  // 释放旧的 blob URL
+  blobUrls.value.forEach(url => URL.revokeObjectURL(url))
+  const newBlobUrls = []
+
+  thumbUrls.value = tasks.map(task => {
     if (task.status === 'succeeded' && task.result?.processed_image) {
       return task.result.processed_image
     }
     if (task.file) {
-      return URL.createObjectURL(task.file)
+      const url = URL.createObjectURL(task.file)
+      newBlobUrls.push(url)
+      return url
     }
     return null
   })
+
+  blobUrls.value = newBlobUrls
 }, { deep: true, immediate: true })
+
+onUnmounted(() => {
+  blobUrls.value.forEach(url => URL.revokeObjectURL(url))
+})
 
 function onClickThumb(task) {
   store.setPreview(task)

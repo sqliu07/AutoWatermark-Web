@@ -1,7 +1,7 @@
 import json
 from typing import Dict, Optional
 
-from constants import AppConstants, CommonConstants
+from constants import CommonConstants
 
 
 def load_translations(path: str, logger=None) -> Dict:
@@ -20,9 +20,11 @@ def normalize_lang(lang: Optional[str]) -> str:
     return lang.split("?")[0]
 
 
-def get_message(key: str, lang: str = "zh") -> Optional[str]:
-    return AppConstants.ERROR_MESSAGES.get(key, {}).get(lang)
-
-
-def get_common_message(key: str, lang: str = "zh") -> Optional[str]:
+def get_error_message(key: str, lang: str = "zh") -> Optional[str]:
+    """统一的错误消息查找函数，从 CommonConstants.ERROR_MESSAGES 获取。"""
     return CommonConstants.ERROR_MESSAGES.get(key, {}).get(lang)
+
+
+# 兼容别名，后续清理
+get_message = get_error_message
+get_common_message = get_error_message
