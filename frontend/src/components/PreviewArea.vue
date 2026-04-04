@@ -170,7 +170,9 @@ onUnmounted(() => {
 
 const progressPercent = computed(() => {
   if (store.totalCount === 0) return 0
-  return Math.round((store.completedCount / store.totalCount) * 100)
+  // 所有任务的 progress 加权平均（每个任务 0.0~1.0）
+  const sum = store.tasks.reduce((acc, t) => acc + (t.progress || 0), 0)
+  return Math.round((sum / store.totalCount) * 100)
 })
 
 const currentProcessingName = computed(() => {

@@ -83,6 +83,7 @@ export const useAppStore = defineStore('app', () => {
 
     async function processOne(task) {
       task.status = 'uploading'
+      task.progress = 0.05  // 上传开始
       try {
         const res = await api.uploadFile(task.file, {
           watermark_type: selectedStyle.value,
@@ -101,6 +102,7 @@ export const useAppStore = defineStore('app', () => {
         await pollTask(task)
       } catch (e) {
         task.status = 'failed'
+        task.progress = 1
         task.error = e.message || 'Upload failed'
       }
     }
@@ -127,6 +129,7 @@ export const useAppStore = defineStore('app', () => {
         task.status = data.status
 
         if (data.status === 'succeeded') {
+          task.progress = 1
           task.result = data.result
           if (!currentPreview.value || currentPreview.value.status !== 'succeeded') {
             currentPreview.value = task
@@ -134,11 +137,13 @@ export const useAppStore = defineStore('app', () => {
           return
         }
         if (data.status === 'failed') {
+          task.progress = 1
           task.error = data.error
           return
         }
       } catch {
         task.status = 'failed'
+        task.progress = 1
         task.error = 'Connection lost'
         return
       }
