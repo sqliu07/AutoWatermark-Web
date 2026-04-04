@@ -144,12 +144,18 @@ const qualityOptions = computed(() => [
 .process-btn {
   background: var(--color-accent) !important;
   border-color: var(--color-accent) !important;
+  color: #fff !important;
   font-weight: 600;
   letter-spacing: 0.3px;
 }
-.process-btn:hover {
+.process-btn:hover:not(:disabled) {
   background: var(--color-accent-hover) !important;
   border-color: var(--color-accent-hover) !important;
+}
+.process-btn:disabled {
+  background: var(--color-border) !important;
+  border-color: var(--color-border) !important;
+  color: var(--color-text-tertiary) !important;
 }
 
 .status-done {
