@@ -26,8 +26,6 @@ __all__ = [
     "_prepare_xmp",
     "_update_attribute_if_exists",
     "_ensure_offset_length_attrs",
-    "_strip_existing_xmp",
-    "_build_xmp_segment",
     "_inject_xmp",
 ]
 

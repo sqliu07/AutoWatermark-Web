@@ -2,7 +2,7 @@ import os
 import time
 from datetime import datetime
 
-from flask import Blueprint, current_app, jsonify, request, render_template, send_file
+from flask import Blueprint, current_app, jsonify, request, send_file
 from werkzeug.utils import secure_filename
 
 from constants import AppConstants
@@ -118,11 +118,7 @@ def upload_file_served(filename):
     file_path = os.path.join(current_app.config["UPLOAD_FOLDER"], filename)
 
     if not os.path.exists(file_path):
-        accept = request.headers.get("Accept", "")
-        if "text/html" in accept:
-            translations = current_app.extensions.get("translations", {})
-            return render_template("image_deleted.html", lang=lang, translations=translations), 404
-        return jsonify(error="File not found"), 404
+        return jsonify(error=get_error_message("file_not_found", lang)), 404
 
     if str(burn_after_read).strip() == "1":
         state = current_app.extensions["state"]

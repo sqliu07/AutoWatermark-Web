@@ -27,7 +27,7 @@ from media.ultrahdr import (
 )
 from media.motion_photo import prepare_motion_photo
 from logging_utils import get_logger
-from services.i18n import get_common_message as get_message
+from services.i18n import get_error_message as get_message
 from services.watermark_styles import get_style, load_cached_watermark_styles
 
 
