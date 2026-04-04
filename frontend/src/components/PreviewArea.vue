@@ -335,6 +335,7 @@ function openFullscreen(src) {
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: auto;
   background: rgba(247, 246, 243, 0.88);
   backdrop-filter: blur(6px);
   border-radius: var(--radius-md);
@@ -352,6 +353,7 @@ function openFullscreen(src) {
   box-shadow: var(--shadow-lg);
   min-width: 260px;
   max-width: 90%;
+  overflow: visible;
   animation: progress-enter 0.35s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
@@ -382,11 +384,13 @@ function openFullscreen(src) {
 
 .progress-filename {
   font-size: 12px;
+  line-height: 1.6;
   color: var(--color-text-tertiary);
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  padding-bottom: 2px;
 }
 
 .progress-list {
