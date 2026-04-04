@@ -92,11 +92,8 @@
             :size="96"
             :stroke-width="6"
             :stroke-color="{ '0%': '#2c2c2c', '100%': '#6b6860' }"
-          >
-            <template #format="{ percent }">
-              <span class="progress-circle-text">{{ percent }}%</span>
-            </template>
-          </a-progress>
+            :format="() => `${progressPercent}%`"
+          />
 
           <div class="progress-info">
             <span class="progress-count">
