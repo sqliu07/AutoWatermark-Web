@@ -104,6 +104,9 @@ supports_ultrahdr = true
     # DOWNLOAD_TOKEN_SECRET 必须设置
     docker run -d -p 5000:5000 \
       -e DOWNLOAD_TOKEN_SECRET=replace-with-strong-secret \
+      -e GUNICORN_WORKERS=1 \
+      -e GUNICORN_BIND=0.0.0.0:5000 \
+      -e UPLOAD_FOLDER=/app/upload \
       --name watermark-app autowatermark-web
     ```
 

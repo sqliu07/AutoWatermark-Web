@@ -13,7 +13,12 @@ FROM python:3.10-slim
 
 ENV TZ=Asia/Shanghai \
     PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    # 在容器 UI 中可直接看到并修改这些关键变量
+    DOWNLOAD_TOKEN_SECRET=__CHANGE_ME__ \
+    GUNICORN_WORKERS=1 \
+    GUNICORN_BIND=0.0.0.0:5000 \
+    UPLOAD_FOLDER=/app/upload
 
 # 复制 ffmpeg 二进制文件
 COPY --from=mwader/static-ffmpeg:6.0 /ffmpeg /usr/local/bin/
@@ -48,5 +53,6 @@ USER appuser
 
 ENV FLASK_ENV=production
 EXPOSE 5000
+VOLUME ["/app/upload", "/app/logs"]
 
-CMD ["gunicorn", "-w", "1", "-b", "0.0.0.0:5000", "app:app"]
+CMD ["/bin/sh", "-c", "exec gunicorn -w ${GUNICORN_WORKERS} -b ${GUNICORN_BIND} app:app"]

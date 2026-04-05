@@ -26,7 +26,7 @@ def create_app(config_overrides=None):
     app.logger.propagate = False
 
     app.config.from_mapping(
-        UPLOAD_FOLDER=AppConstants.UPLOAD_FOLDER,
+        UPLOAD_FOLDER=os.environ.get("UPLOAD_FOLDER", AppConstants.UPLOAD_FOLDER),
         STATE_DB_PATH=None,
         ALLOWED_EXTENSIONS=AppConstants.ALLOWED_EXTENSIONS,
         MAX_CONTENT_LENGTH=AppConstants.MAX_CONTENT_LENGTH,

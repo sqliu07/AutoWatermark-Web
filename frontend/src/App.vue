@@ -31,6 +31,11 @@
         </aside>
       </main>
 
+      <!-- 底部：缩略图条 -->
+      <Transition name="slide-up">
+        <ThumbnailStrip v-if="store.tasks.length > 0" />
+      </Transition>
+
       <footer class="app-footer">
         <span>&copy; {{ copyrightYears }} Gabriel Liu</span>
         <span class="footer-dot">•</span>
@@ -53,11 +58,6 @@
           </svg>
         </a>
       </footer>
-
-      <!-- 底部：缩略图条 -->
-      <Transition name="slide-up">
-        <ThumbnailStrip v-if="store.tasks.length > 0" />
-      </Transition>
 
       <!-- Logo 选择弹窗 -->
       <a-modal

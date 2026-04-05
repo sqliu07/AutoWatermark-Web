@@ -7,6 +7,7 @@ import time
 from urllib.parse import urlencode
 
 DEFAULT_TTL = 3600  # 1 小时
+_SECRET_PLACEHOLDER = "__CHANGE_ME__"
 
 
 def _get_secret() -> str:
@@ -15,14 +16,15 @@ def _get_secret() -> str:
 
 
 def ensure_secret_configured() -> None:
-    if not _get_secret():
-        raise RuntimeError("DOWNLOAD_TOKEN_SECRET is required in production and testing environments")
+    secret = _get_secret()
+    if not secret or secret == _SECRET_PLACEHOLDER:
+        raise RuntimeError("DOWNLOAD_TOKEN_SECRET must be set to a non-placeholder value")
 
 
 def generate_token(filename: str, ttl: int = DEFAULT_TTL) -> tuple[str, int]:
     """生成带过期时间的签名 token。返回 (token, expires)。"""
     secret = _get_secret()
-    if not secret:
+    if not secret or secret == _SECRET_PLACEHOLDER:
         raise RuntimeError("DOWNLOAD_TOKEN_SECRET is not configured")
     expires = int(time.time()) + ttl
     payload = f"{filename}:{expires}"

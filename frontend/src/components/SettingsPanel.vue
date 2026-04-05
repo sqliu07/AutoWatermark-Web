@@ -63,12 +63,13 @@
     <!-- 状态 -->
     <Transition name="fade">
       <section v-if="store.allDone" class="section status-done">
-        <a-result
-          :status="store.succeededTasks.length > 0 ? 'success' : 'error'"
-          :title="t('status.done')"
-          :sub-title="`${store.succeededTasks.length}/${store.totalCount}`"
-          style="padding: 16px 0;"
-        />
+        <div
+          class="done-summary"
+          :class="store.succeededTasks.length > 0 ? 'done-ok' : 'done-fail'"
+        >
+          <span class="done-title">{{ t('status.done') }}</span>
+          <span class="done-count">{{ store.succeededTasks.length }}/{{ store.totalCount }}</span>
+        </div>
       </section>
     </Transition>
   </div>
@@ -169,5 +170,35 @@ const qualityOptions = computed(() => [
 
 .status-done {
   padding-top: 8px;
+  padding-bottom: 0;
+}
+
+.done-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border-light);
+  padding: 10px 12px;
+  background: var(--color-surface-hover);
+}
+
+.done-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.done-count {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.done-ok .done-count {
+  color: var(--color-success);
+}
+
+.done-fail .done-count {
+  color: var(--color-error);
 }
 </style>
