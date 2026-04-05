@@ -101,7 +101,10 @@ supports_ultrahdr = true
     # -d 后台运行
     # -p 映射端口 (宿主机:容器)
     # --name 容器名称
-    docker run -d -p 5000:5000 --name watermark-app autowatermark-web
+    # DOWNLOAD_TOKEN_SECRET 必须设置
+    docker run -d -p 5000:5000 \
+      -e DOWNLOAD_TOKEN_SECRET=replace-with-strong-secret \
+      --name watermark-app autowatermark-web
     ```
 
 3.  **访问**
@@ -134,8 +137,8 @@ supports_ultrahdr = true
         ```
     * **生产模式**:
         ```bash
-        # 启动 4 个 Worker 进程
-        gunicorn -w 4 -b 0.0.0.0:5000 app:app
+        # 单实例部署建议固定 1 个 Worker，避免进程间状态不一致
+        DOWNLOAD_TOKEN_SECRET=replace-with-strong-secret gunicorn -w 1 -b 0.0.0.0:5000 app:app
         ```
 ---
 

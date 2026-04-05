@@ -94,6 +94,7 @@ class CommonConstants:
 
 class AppConstants:
     UPLOAD_FOLDER = './upload'
+    STATE_DB_FILENAME = "app_state.sqlite3"
     ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}
     MAX_CONTENT_LENGTH = 200 * 1024 * 1024  # 最大文件 200MB
 

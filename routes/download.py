@@ -3,7 +3,7 @@ import tempfile
 import zipfile
 from datetime import datetime
 
-from flask import Blueprint, current_app, jsonify, request, send_file
+from flask import Blueprint, current_app, jsonify, redirect, request, send_file
 from werkzeug.utils import secure_filename
 
 from constants import AppConstants
@@ -12,6 +12,15 @@ from services.download_token import build_signed_url, verify_token
 from services.i18n import get_error_message, normalize_lang
 
 bp = Blueprint("download", __name__)
+
+
+def _is_browser_request() -> bool:
+    return "text/html" in request.headers.get("Accept", "")
+
+
+@bp.route("/download_zip", methods=["GET"])
+def download_zip_entry_redirect():
+    return redirect("/")
 
 
 @bp.route("/download_zip", methods=["POST"])
@@ -62,15 +71,22 @@ def download_temp_zip(filename):
     lang = normalize_lang(request.args.get("lang", "zh"))
     token = request.args.get("token", "")
     expires = request.args.get("expires", "")
+    is_browser = _is_browser_request()
 
     safe_filename_str = secure_filename(filename)
     if not safe_filename_str:
+        if is_browser:
+            return redirect("/")
         return jsonify(error=get_error_message("file_not_found", lang)), 400
 
     if not verify_token(safe_filename_str, token, expires):
+        if is_browser:
+            return redirect("/")
         return jsonify(error=get_error_message("link_expired", lang)), 403
 
     file_path = os.path.join(tempfile.gettempdir(), safe_filename_str)
     if not os.path.isfile(file_path):
+        if is_browser:
+            return redirect("/")
         return jsonify(error=get_error_message("file_not_found", lang)), 404
     return send_file(file_path, as_attachment=True, download_name=safe_filename_str)

@@ -7,7 +7,7 @@ from services.tasks import background_process
 
 def test_background_process_logs_unexpected_watermark_detail(monkeypatch, caplog, tmp_path):
     task_id = "task-unexpected"
-    state = AppState()
+    state = AppState(str(tmp_path / "state.sqlite3"))
     state.create_task(task_id, {"status": "queued", "submitted_at": 0, "progress": 0.0, "stage": "queued"})
 
     def fake_process_image(*args, **kwargs):

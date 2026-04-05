@@ -198,12 +198,17 @@ watch(previewTask, () => {
   }
 })
 
-// 原图的本地 URL
-const originalUrl = computed(() => {
-  const task = previewTask.value
-  if (!task?.file) return null
-  return URL.createObjectURL(task.file)
-})
+const originalUrl = ref(null)
+
+watch(() => previewTask.value?.file, (file) => {
+  if (originalUrl.value) {
+    URL.revokeObjectURL(originalUrl.value)
+    originalUrl.value = null
+  }
+  if (file) {
+    originalUrl.value = URL.createObjectURL(file)
+  }
+}, { immediate: true })
 
 // 没有选中任务时，预览第一个文件
 watch(() => store.files[0], (file) => {
@@ -214,6 +219,7 @@ watch(() => store.files[0], (file) => {
 onUnmounted(() => {
   if (localPreviewUrl.value) URL.revokeObjectURL(localPreviewUrl.value)
   if (originalVideoUrl.value) URL.revokeObjectURL(originalVideoUrl.value)
+  if (originalUrl.value) URL.revokeObjectURL(originalUrl.value)
 })
 
 const progressPercent = computed(() => {

@@ -17,7 +17,10 @@ def load_translations(path: str, logger=None) -> Dict:
 def normalize_lang(lang: Optional[str]) -> str:
     if not lang:
         return "zh"
-    return lang.split("?")[0]
+    candidate = lang.split("?")[0].strip().lower()
+    if candidate in {"zh", "en"}:
+        return candidate
+    return "zh"
 
 
 def get_error_message(key: str, lang: str = "zh") -> Optional[str]:

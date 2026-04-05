@@ -27,6 +27,14 @@ export async function getTaskStatus(taskId) {
   return data
 }
 
+export async function confirmLogoChoice(taskId, logoPreference) {
+  const { data } = await http.post('/upload/confirm_logo', {
+    task_id: taskId,
+    logo_preference: logoPreference,
+  })
+  return data
+}
+
 export async function downloadZip(filenames) {
   const { data } = await http.post('/download_zip', { filenames })
   return data

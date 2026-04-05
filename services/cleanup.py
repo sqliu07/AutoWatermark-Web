@@ -30,14 +30,8 @@ def start_background_cleaner(app, state, logger) -> threading.Thread:
             cleaned_stale = 0
 
             # 1) Burn queue cleanup
-            to_burn = []
-            with state.burn_queue_lock:
-                for fp, expire_at in list(state.burn_queue.items()):
-                    if current_time > expire_at:
-                        to_burn.append(fp)
-                        del state.burn_queue[fp]
-
-            for fp in to_burn:
+            expired_burn_files = state.pop_expired_burn_files(current_time)
+            for fp in expired_burn_files:
                 cleanup_file_and_original(fp, logger)
                 cleaned_burn += 1
 
@@ -69,15 +63,7 @@ def start_background_cleaner(app, state, logger) -> threading.Thread:
                     pass
 
             # 4) Stale tasks in memory
-            cleaned_tasks = 0
-            with state.tasks_lock:
-                to_remove = [
-                    tid for tid, info in state.tasks.items()
-                    if current_time - info.get("submitted_at", 0) > AppConstants.TASK_RETENTION_SECONDS
-                ]
-                for tid in to_remove:
-                    state.tasks.pop(tid, None)
-                    cleaned_tasks += 1
+            cleaned_tasks = state.cleanup_old_tasks(current_time)
 
             if cleaned_burn or cleaned_zip or cleaned_stale or cleaned_tasks:
                 logger.info(

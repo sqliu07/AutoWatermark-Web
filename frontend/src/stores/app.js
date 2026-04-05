@@ -76,6 +76,8 @@ export const useAppStore = defineStore('app', () => {
       result: null,
       error: null,
     }))
+    // 新一轮处理必须重置预览引用，避免继续显示上一次任务结果
+    currentPreview.value = tasks.value[0] || null
 
     // 并发上传+轮询，限制并发数
     const concurrency = 3
@@ -93,6 +95,7 @@ export const useAppStore = defineStore('app', () => {
         })
 
         if (res.needs_logo_choice) {
+          task.id = res.task_id
           task.status = 'needs_logo'
           return
         }
@@ -104,6 +107,41 @@ export const useAppStore = defineStore('app', () => {
         task.status = 'failed'
         task.progress = 1
         task.error = e.message || 'Upload failed'
+      }
+    }
+
+    const executing = new Set()
+    for (const task of queue) {
+      const p = processOne(task).then(() => executing.delete(p))
+      executing.add(p)
+      if (executing.size >= concurrency) {
+        await Promise.race(executing)
+      }
+    }
+    await Promise.all(executing)
+
+    isProcessing.value = false
+  }
+
+  async function processPendingLogoTasks(choice) {
+    const pendingTasks = tasks.value.filter(t => t.status === 'needs_logo' && t.id)
+    if (pendingTasks.length === 0) return
+
+    logoPreference.value = choice
+    isProcessing.value = true
+
+    const concurrency = 3
+    const queue = [...pendingTasks]
+
+    async function processOne(task) {
+      try {
+        await api.confirmLogoChoice(task.id, choice)
+        task.status = 'processing'
+        await pollTask(task)
+      } catch (e) {
+        task.status = 'failed'
+        task.progress = 1
+        task.error = e.message || 'Confirm logo failed'
       }
     }
 
@@ -173,6 +211,6 @@ export const useAppStore = defineStore('app', () => {
     burnAfterRead, logoPreference, isProcessing, tasks,
     currentPreview, completedCount, totalCount, allDone,
     succeededTasks, stylesLoaded, loadStyles, addFiles,
-    clearFiles, setPreview, processAll, downloadZip,
+    clearFiles, setPreview, processAll, processPendingLogoTasks, downloadZip,
   }
 })

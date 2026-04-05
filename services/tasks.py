@@ -6,7 +6,7 @@ from typing import Optional, Set
 from PIL import Image
 import piexif
 
-from constants import CommonConstants, AppConstants
+from constants import CommonConstants
 from errors import WatermarkError
 from exif import get_manufacturer
 from process import process_image
@@ -21,14 +21,7 @@ def allowed_file(filename: str, allowed_extensions: Set[str]) -> bool:
 
 def cleanup_old_tasks(state) -> None:
     """Remove tasks older than retention window."""
-    current_time = time.time()
-    with state.tasks_lock:
-        to_remove = [
-            tid for tid, info in state.tasks.items()
-            if current_time - info.get("submitted_at", 0) > AppConstants.TASK_RETENTION_SECONDS
-        ]
-        for tid in to_remove:
-            state.tasks.pop(tid, None)
+    state.cleanup_old_tasks(current_time=time.time())
 
 
 def detect_manufacturer(filepath: str):
@@ -66,15 +59,57 @@ def _update_queue_metrics(state, task_id: str, logger) -> None:
     )
 
 
-def create_task(state) -> str:
+def create_task(state, initial_data: Optional[dict] = None) -> str:
     task_id = str(uuid.uuid4())
-    state.create_task(task_id, {
+    payload = {
         "status": "queued",
         "submitted_at": time.time(),
         "progress": 0.0,
         "stage": "queued",
-    })
+    }
+    if initial_data:
+        payload.update(initial_data)
+    state.create_task(task_id, payload)
     return task_id
+
+
+def _submit_task_with_id(
+    task_id: str,
+    state,
+    filepath: str,
+    lang: str,
+    watermark_type: int,
+    image_quality: int,
+    burn_after_read: str,
+    logo_preference: Optional[str],
+    style_config,
+    logger,
+) -> None:
+    state.update_task(
+        task_id,
+        status="queued",
+        stage="queued",
+        filepath=filepath,
+        lang=lang,
+        watermark_type=watermark_type,
+        image_quality=image_quality,
+        burn_after_read=burn_after_read,
+        logo_preference=logo_preference,
+    )
+    _update_queue_metrics(state, task_id, logger)
+    state.executor.submit(
+        background_process,
+        task_id,
+        state,
+        filepath,
+        lang,
+        watermark_type,
+        image_quality,
+        burn_after_read,
+        logo_preference,
+        style_config,
+        logger,
+    )
 
 
 def submit_task(
@@ -89,9 +124,34 @@ def submit_task(
     logger,
 ) -> str:
     task_id = create_task(state)
-    _update_queue_metrics(state, task_id, logger)
-    state.executor.submit(
-        background_process,
+    _submit_task_with_id(
+        task_id,
+        state,
+        filepath,
+        lang,
+        watermark_type,
+        image_quality,
+        burn_after_read,
+        logo_preference,
+        style_config,
+        logger,
+    )
+    return task_id
+
+
+def submit_existing_task(
+    task_id: str,
+    state,
+    filepath: str,
+    lang: str,
+    watermark_type: int,
+    image_quality: int,
+    burn_after_read: str,
+    logo_preference: Optional[str],
+    style_config,
+    logger,
+) -> str:
+    _submit_task_with_id(
         task_id,
         state,
         filepath,
@@ -120,22 +180,17 @@ def background_process(
 ) -> None:
     start_time = time.time()
     try:
-        state.update_task(task_id, status="processing", stage="processing")
-        # Ensure progress is at least 0.01
-        with state.tasks_lock:
-            task = state.tasks.get(task_id)
-            if task:
-                task["progress"] = max(task.get("progress", 0), 0.01)
+        state.update_task(task_id, status="processing", stage="processing", progress=0.01)
 
         def update_progress(progress, stage=None):
-            with state.tasks_lock:
-                task = state.tasks.get(task_id)
-                if not task:
-                    return
-                current = task.get("progress", 0)
-                task["progress"] = max(current, min(progress, 1))
-                if stage:
-                    task["stage"] = stage
+            task = state.get_task(task_id)
+            if not task:
+                return
+            current = task.get("progress", 0)
+            updates = {"progress": max(current, min(progress, 1))}
+            if stage:
+                updates["stage"] = stage
+            state.update_task(task_id, **updates)
 
         result = process_image(
             filepath,

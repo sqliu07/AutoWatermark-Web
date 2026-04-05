@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import tempfile
+import mmap
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -14,6 +15,7 @@ __all__ = [
     "_split_motion_photo",
     "_mp4_looks_valid",
     "_find_mp4_start_by_ftyp",
+    "find_motion_video_start",
 ]
 
 from media.xmp import (
@@ -306,4 +308,52 @@ def _find_mp4_start_by_ftyp(data: bytes, scan_tail_bytes: int = 32 * 1024 * 1024
                     return start
 
         idx = tail.rfind(b"ftyp", 0, idx)
+    return None
+
+
+def _mp4_looks_valid_at(data, start: int, file_size: int) -> bool:
+    if start < 0 or start >= file_size:
+        return False
+    head_end = min(file_size, start + 65536)
+    head = data[start:head_end]
+    return b"ftyp" in head
+
+
+def find_motion_video_start(file_path: str | Path) -> Optional[int]:
+    """
+    Locate the appended MP4 start offset for a motion photo file.
+    Returns None when the file does not look like a motion photo.
+    """
+    path = Path(file_path)
+    if not path.exists() or not path.is_file():
+        return None
+
+    with path.open("rb") as fp:
+        with mmap.mmap(fp.fileno(), 0, access=mmap.ACCESS_READ) as mm:
+            file_size = len(mm)
+            if file_size < 16:
+                return None
+
+            xmp = _extract_xmp_segment(mm)
+            if not xmp:
+                return None
+
+            length = _parse_first_match(MICRO_VIDEO_LENGTH_PATTERN, xmp)
+            offset = _parse_first_match(MICRO_VIDEO_OFFSET_PATTERN, xmp)
+
+            if length and length > 0:
+                video_start = file_size - length
+                if 0 < video_start < file_size and _mp4_looks_valid_at(mm, video_start, file_size):
+                    return video_start
+
+            if offset and offset > 0:
+                video_start = file_size - offset
+                if 0 < video_start < file_size and _mp4_looks_valid_at(mm, video_start, file_size):
+                    return video_start
+
+            if _looks_like_motionphoto_flag(xmp):
+                start = _find_mp4_start_by_ftyp(mm)
+                if start is not None and 0 < start < file_size and _mp4_looks_valid_at(mm, start, file_size):
+                    return start
+
     return None
