@@ -1,18 +1,21 @@
-from flask import jsonify, render_template, request
+from flask import jsonify, redirect, request
 from flask_limiter.errors import RateLimitExceeded
 
-from services.i18n import normalize_lang
+from services.i18n import get_error_message, normalize_lang
 
 
 def register_error_handlers(app):
+    def _is_browser_request() -> bool:
+        return "text/html" in request.headers.get("Accept", "")
+
     @app.errorhandler(RateLimitExceeded)
     def handle_rate_limit_error(e):
         lang = normalize_lang(request.args.get("lang", "zh"))
-        msg = "请求过于频繁，请稍后再试。" if lang == "zh" else "Too many requests, please try again later."
-        return jsonify(error=msg), 429
+        return jsonify(error=get_error_message("rate_limit_exceeded", lang)), 429
 
     @app.errorhandler(404)
     def not_found_error(error):
+        if _is_browser_request():
+            return redirect("/")
         lang = normalize_lang(request.args.get("lang", "zh"))
-        translations = app.extensions.get("translations", {})
-        return render_template("image_deleted.html", lang=lang, translations=translations), 404
+        return jsonify(error=get_error_message("file_not_found", lang)), 404

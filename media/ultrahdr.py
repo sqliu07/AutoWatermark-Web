@@ -419,31 +419,41 @@ def expand_gainmap_for_borders(
 
     # Decode gainmap JPEG to image
     gm_img = Image.open(BytesIO(orig_gainmap_jpeg))
-    gm_img.load()
+    try:
+        gm_img.load()
+        gm_rgb = gm_img.convert("RGB")
+    finally:
+        gm_img.close()
 
-    # Gain map is defined as single-channel; but it may be stored as RGB JPEG.
-    # We'll work in L then save as grayscale JPEG.
-    gm_rgb = gm_img.convert("RGB")
-    gw, gh = gm_rgb.size
+    try:
+        # Gain map is defined as single-channel; but it may be stored as RGB JPEG.
+        # We'll work in L then save as grayscale JPEG.
+        gw, gh = gm_rgb.size
 
-    # Compute new gainmap canvas size so aspect matches new primary, preserving normalized mapping
-    new_gw = max(1, int(round(gw * (nw / bw))))
-    new_gh = max(1, int(round(gh * (nh / bh))))
+        # Compute new gainmap canvas size so aspect matches new primary, preserving normalized mapping
+        new_gw = max(1, int(round(gw * (nw / bw))))
+        new_gh = max(1, int(round(gh * (nh / bh))))
 
-    # Compute padding in gainmap pixel space
-    pad_x = int(round(left_px * (gw / bw)))
-    pad_y = int(round(top_px * (gh / bh)))
+        # Compute padding in gainmap pixel space
+        pad_x = int(round(left_px * (gw / bw)))
+        pad_y = int(round(top_px * (gh / bh)))
 
-    # Neutral fill value from gainmap XMP
-    params = parse_gainmap_params_from_xmp(orig_gainmap_xmp)
-    neutral = neutral_encoded_recovery_for_gain_1(params)
+        # Neutral fill value from gainmap XMP
+        params = parse_gainmap_params_from_xmp(orig_gainmap_xmp)
+        neutral = neutral_encoded_recovery_for_gain_1(params)
 
-    canvas = Image.new("L", (new_gw, new_gh), color=neutral)
-    canvas.paste(gm_rgb, (pad_x, pad_y))
+        canvas = Image.new("L", (new_gw, new_gh), color=neutral)
+        canvas.paste(gm_rgb, (pad_x, pad_y))
+    finally:
+        gm_rgb.close()
 
-    # Re-encode JPEG (quality not too low to avoid banding)
     out = BytesIO()
-    canvas.save(out, format="JPEG", quality=100, optimize=False)
-
-    # Ensure the required hdrgm XMP stays in the gainmap JPEG
-    return inject_xmp(out.getvalue(), orig_gainmap_xmp)
+    try:
+        # Re-encode JPEG (quality not too low to avoid banding)
+        canvas.save(out, format="JPEG", quality=100, optimize=False)
+        # Ensure the required hdrgm XMP stays in the gainmap JPEG
+        result = inject_xmp(out.getvalue(), orig_gainmap_xmp)
+    finally:
+        canvas.close()
+        out.close()
+    return result

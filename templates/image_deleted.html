@@ -1,108 +1,102 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AutoWatermark Web</title>
-
-  <link rel="icon" href="{{ url_for('static', filename='images/favicon.ico') }}" type="image/x-icon">
-  <script src="https://cdn.tailwindcss.com"></script>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          fontFamily: { sans: ['Inter', 'sans-serif'] },
-          colors: { brand: { 500: '#2563eb', 600: '#1d4ed8' } }
-        }
-      }
+  <title>AutoWatermark</title>
+  <link rel="icon" href="/static/images/favicon.ico" type="image/x-icon">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700&family=Noto+Sans+SC:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Plus Jakarta Sans', 'Noto Sans SC', sans-serif;
+      background: #f7f6f3;
+      color: #1a1a1a;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      -webkit-font-smoothing: antialiased;
     }
-  </script>
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 28px;
+      height: 56px;
+      background: #fff;
+      border-bottom: 1px solid #f0ede8;
+    }
+    .brand { font-size: 18px; font-weight: 700; letter-spacing: -0.3px; }
+    .lang-switch { display: flex; gap: 8px; font-size: 13px; }
+    .lang-switch button {
+      background: none; border: 1px solid #e8e5df; border-radius: 6px;
+      padding: 4px 10px; cursor: pointer; font-size: 12px; font-weight: 600;
+      color: #6b6860; transition: all 0.15s;
+    }
+    .lang-switch button:hover, .lang-switch button.active {
+      background: #2c2c2c; color: #fff; border-color: #2c2c2c;
+    }
+    main {
+      flex: 1; display: flex; align-items: center; justify-content: center; padding: 24px;
+    }
+    .card {
+      background: #fff; border: 1px solid #e8e5df; border-radius: 16px;
+      padding: 48px 40px; text-align: center; max-width: 400px; width: 100%;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.06);
+    }
+    .icon {
+      width: 56px; height: 56px; margin: 0 auto 20px; border-radius: 50%;
+      background: #f7f6f3; display: flex; align-items: center; justify-content: center;
+    }
+    .icon svg { color: #9e9a92; }
+    h1 { font-size: 22px; font-weight: 700; margin-bottom: 8px; }
+    .desc { font-size: 14px; color: #6b6860; line-height: 1.6; }
+    .btn {
+      display: inline-block; margin-top: 24px; padding: 10px 28px;
+      background: #2c2c2c; color: #fff; border-radius: 999px;
+      text-decoration: none; font-size: 14px; font-weight: 600;
+      transition: background 0.15s;
+    }
+    .btn:hover { background: #404040; }
+  </style>
 </head>
-
-<body class="bg-slate-50 text-slate-800 font-sans min-h-screen flex flex-col">
-
-  <nav class="bg-white border-b border-slate-200 sticky top-0 z-50 backdrop-blur-md bg-white/80">
-    <div class="max-w-5xl mx-auto px-6 h-16 flex items-center justify-between">
-      <span id="ui-app-name" class="font-bold text-lg tracking-tight text-slate-900">
-        AutoWatermark Web
-      </span>
-
-      <div class="flex items-center gap-4 text-sm font-medium">
-        <button id="lang-zh" class="transition">中文</button>
-        <span class="text-slate-300">/</span>
-        <button id="lang-en" class="transition">English</button>
-      </div>
+<body>
+  <header>
+    <span class="brand">AutoWatermark</span>
+    <div class="lang-switch">
+      <button onclick="setLang('zh')" id="btn-zh">中文</button>
+      <button onclick="setLang('en')" id="btn-en">EN</button>
     </div>
-  </nav>
-
-  <main class="flex-grow flex items-center justify-center px-6 py-16 fade-in">
-    <div class="max-w-md w-full bg-white border border-slate-200 rounded-2xl shadow-sm p-8 text-center">
-
-      <div class="w-14 h-14 mx-auto mb-4 rounded-full bg-slate-100 flex items-center justify-center">
-        <svg class="w-7 h-7 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+  </header>
+  <main>
+    <div class="card">
+      <div class="icon">
+        <svg width="28" height="28" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
             d="M9 13h6m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5l5 5v11a2 2 0 01-2 2z"/>
         </svg>
       </div>
-
-      <h1 id="deletedTitle" class="text-2xl font-bold text-slate-900 mb-2"></h1>
-
-      <p id="deletedMessage" class="text-slate-500 text-sm leading-relaxed"></p>
-
-      <div class="mt-6">
-        <a
-          href="/"
-          id="deletedBack"
-          class="inline-flex items-center justify-center px-5 py-2.5 rounded-full
-                 bg-slate-900 text-white text-sm font-semibold
-                 hover:bg-slate-800 transition"
-        ></a>
-      </div>
+      <h1 id="title"></h1>
+      <p class="desc" id="desc"></p>
+      <a href="/" class="btn" id="back-btn"></a>
     </div>
   </main>
-
-  <script src="{{ url_for('static', filename='js/i18n.js') }}"></script>
-  <script src="{{ url_for('static', filename='js/footer.js') }}"></script>
-
   <script>
-    document.addEventListener('DOMContentLoaded', () => {
-      initI18n();
-
-      function applyI18n() {
-        const t = window.t;
-        if (!t) return;
-
-        document.title = t.appName;
-        document.getElementById('ui-app-name').textContent = t.appName;
-        document.getElementById('deletedTitle').textContent = t.imageDeleted;
-        document.getElementById('deletedMessage').textContent = t.imageDeletedMessage;
-        document.getElementById('deletedBack').textContent = t.backToHome;
-      }
-
-      function waitForI18nReady() {
-        if (window.t) {
-          applyI18n();
-        } else {
-          setTimeout(waitForI18nReady, 30);
-        }
-      }
-
-      waitForI18nReady();
-
-      document.getElementById('lang-zh').onclick = () => {
-        switchLang('zh');
-        applyI18n();
-      };
-
-      document.getElementById('lang-en').onclick = () => {
-        switchLang('en');
-        applyI18n();
-      };
-    });
+    const i18n = {
+      zh: { title: '文件已删除', desc: '该文件已过期或被删除，请重新上传处理。', back: '返回首页' },
+      en: { title: 'File Deleted', desc: 'This file has expired or been deleted. Please re-upload.', back: 'Back to Home' },
+    };
+    function setLang(lang) {
+      const t = i18n[lang] || i18n.zh;
+      document.getElementById('title').textContent = t.title;
+      document.getElementById('desc').textContent = t.desc;
+      document.getElementById('back-btn').textContent = t.back;
+      document.getElementById('btn-zh').classList.toggle('active', lang === 'zh');
+      document.getElementById('btn-en').classList.toggle('active', lang === 'en');
+      localStorage.setItem('lang', lang);
+    }
+    setLang(localStorage.getItem('lang') || new URLSearchParams(location.search).get('lang') || 'zh');
   </script>
-
 </body>
 </html>

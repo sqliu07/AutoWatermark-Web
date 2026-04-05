@@ -7,8 +7,8 @@ from PIL import Image
 from io import BytesIO
 
 
-from exif_utils import find_logo, get_manufacturer, get_exif_data, get_camera_model
-from image_utils import reset_image_orientation, generate_watermark_image
+from exif import find_logo, get_manufacturer, get_exif_data, get_camera_model
+from imaging import reset_image_orientation, generate_watermark_image
 from constants import CommonConstants, ImageConstants
 from errors import (
     WatermarkError,
@@ -19,27 +19,25 @@ from errors import (
     ImageTooLargeError,
 )
 
-from ultrahdr_utils import (
+from media.ultrahdr import (
     split_ultrahdr,
     inject_xmp,
     update_primary_xmp_lengths,
     expand_gainmap_for_borders,
 )
-from motion_photo_utils import prepare_motion_photo
+from media.motion_photo import prepare_motion_photo
 from logging_utils import get_logger
+from services.i18n import get_error_message as get_message
 from services.watermark_styles import get_style, load_cached_watermark_styles
 
 
 logger = get_logger("autowatermark.process")
 
-def get_message(key, lang='zh'):
-    return CommonConstants.ERROR_MESSAGES.get(key, {}).get(lang)
-
 def _enforce_image_pixel_limit(image):
     max_pixels = ImageConstants.MAX_IMAGE_PIXELS
     image_size = image.width * image.height
     logger.info("Image size: %dx%d=%d, max allowed pixels: %s", image.width, image.height, image_size, str(max_pixels) if max_pixels else "unlimited")
-    if max_pixels and image_size >= max_pixels:
+    if max_pixels and image_size > max_pixels:
         detail = f"{image.width}x{image.height}"
         raise ImageTooLargeError(detail=detail)
 
@@ -191,7 +189,9 @@ def process_image(
             return new_image
         else:
             advance_progress("saving")
+            is_motion = False
             if motion_session and watermark_metadata and style["supports_motion"]:
+                is_motion = True
                 temp_output = Path(motion_session.still_path.parent) / "watermarked_motion_frame.jpg"
                 new_image.save(temp_output, exif=exif_bytes, quality=image_quality)
                 motion_session.finalize(temp_output, Path(output_path), watermark_metadata)
@@ -247,12 +247,22 @@ def process_image(
                 new_image.save(output_path, exif=exif_bytes, quality=image_quality)
                 advance_progress("saved")
                 return True
-            return True
+            return {"is_motion": True} if is_motion else True
     except WatermarkError:
         raise
     except Exception as exc:
         raise UnexpectedProcessingError(detail=str(exc)) from exc
     finally:
+        if 'image' in locals() and image is not None:
+            try:
+                image.close()
+            except Exception:
+                pass
+        if 'new_image' in locals() and new_image is not None:
+            try:
+                new_image.close()
+            except Exception:
+                pass
         if 'motion_session' in locals() and motion_session is not None:
             motion_session.cleanup()
 

@@ -30,14 +30,8 @@ def start_background_cleaner(app, state, logger) -> threading.Thread:
             cleaned_stale = 0
 
             # 1) Burn queue cleanup
-            to_burn = []
-            with state.burn_queue_lock:
-                for fp, expire_at in list(state.burn_queue.items()):
-                    if current_time > expire_at:
-                        to_burn.append(fp)
-                        del state.burn_queue[fp]
-
-            for fp in to_burn:
+            expired_burn_files = state.pop_expired_burn_files(current_time)
+            for fp in expired_burn_files:
                 cleanup_file_and_original(fp, logger)
                 cleaned_burn += 1
 
@@ -68,12 +62,16 @@ def start_background_cleaner(app, state, logger) -> threading.Thread:
                 except OSError:
                     pass
 
-            if cleaned_burn or cleaned_zip or cleaned_stale:
+            # 4) Stale tasks in memory
+            cleaned_tasks = state.cleanup_old_tasks(current_time)
+
+            if cleaned_burn or cleaned_zip or cleaned_stale or cleaned_tasks:
                 logger.info(
-                    "[Auto-Clean] Summary - burn: %s, zip: %s, stale: %s",
+                    "[Auto-Clean] Summary - burn: %s, zip: %s, stale: %s, tasks: %s",
                     cleaned_burn,
                     cleaned_zip,
                     cleaned_stale,
+                    cleaned_tasks,
                 )
 
     thread = threading.Thread(target=background_cleaner, daemon=True)

@@ -3,10 +3,10 @@ from pathlib import Path
 import piexif
 from PIL import Image
 
-import image_utils as image_utils_module
 import process as process_module
 from constants import CommonConstants
-from image_utils import generate_watermark_image
+from imaging import generate_watermark_image
+from imaging.renderer_film_frame import FilmFrameRenderer
 from services.watermark_styles import get_style, load_watermark_styles
 
 
@@ -50,20 +50,12 @@ def test_generate_film_frame_style_portrait_uses_portrait_overrides(monkeypatch)
     style = get_style(config, 5)
     captured = {}
 
-    def fake_caption_group(
-        camera_info,
-        shooting_info,
-        font_path_regular,
-        framed_photo,
-        logo_path,
-        metrics,
-        font_path_symbol,
-    ):
+    def fake_caption_group(self, context, framed_photo, metrics):
         captured["framed_size"] = framed_photo.size
         captured["metrics"] = dict(metrics)
         return Image.new("RGBA", (120, 80), (255, 255, 255, 0))
 
-    monkeypatch.setattr(image_utils_module, "_create_film_frame_caption_group", fake_caption_group)
+    monkeypatch.setattr(FilmFrameRenderer, "_create_caption_group", fake_caption_group)
 
     source = Image.new("RGB", (600, 900), "#4a7391")
     rendered = generate_watermark_image(
@@ -82,12 +74,13 @@ def test_generate_film_frame_style_portrait_uses_portrait_overrides(monkeypatch)
 
     framed_width, framed_height = captured["framed_size"]
     metrics = captured["metrics"]
-    expected_logo_height = max(24, int(round(framed_height * style["frame_logo_height_ratio_portrait"])))
-    expected_font_size = max(12, int(round(framed_width * style["frame_font_size_ratio_portrait"])))
-    expected_line_gap = max(10, int(round(framed_width * style["frame_line_gap_ratio_portrait"])))
-    landscape_logo_height = max(24, int(round(framed_height * style["frame_logo_height_ratio"])))
-    landscape_font_size = max(12, int(round(framed_width * style["frame_font_size_ratio"])))
-    landscape_line_gap = max(10, int(round(framed_width * style["frame_line_gap_ratio"])))
+    fc = style["frame"]
+    expected_logo_height = max(24, int(round(framed_height * fc["logo_height_ratio_portrait"])))
+    expected_font_size = max(12, int(round(framed_width * fc["font_size_ratio_portrait"])))
+    expected_line_gap = max(10, int(round(framed_width * fc["line_gap_ratio_portrait"])))
+    landscape_logo_height = max(24, int(round(framed_height * fc["logo_height_ratio"])))
+    landscape_font_size = max(12, int(round(framed_width * fc["font_size_ratio"])))
+    landscape_line_gap = max(10, int(round(framed_width * fc["line_gap_ratio"])))
 
     assert metrics["logo_height"] == expected_logo_height
     assert metrics["font_start_size"] == expected_font_size

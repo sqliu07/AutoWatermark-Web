@@ -1,5 +1,6 @@
 import pathlib
 import sys
+import os
 from datetime import datetime
 
 import pytest
@@ -33,6 +34,7 @@ def _next_log_path():
 
 @pytest.hookimpl(tryfirst=True)
 def pytest_configure(config):
+    os.environ.setdefault("DOWNLOAD_TOKEN_SECRET", "test-secret-for-ci")
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     config.option.log_file = str(_next_log_path())
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")

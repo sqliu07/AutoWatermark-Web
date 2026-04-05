@@ -1,36 +1,16 @@
-from constants import CommonConstants
+"""EXIF 数据提取和格式化。"""
+
+import re
+import subprocess
+from pathlib import Path
+
 from PIL import Image
 import piexif
-import subprocess
-import re
-from pathlib import Path
 
 from logging_utils import get_logger
 
-
-LOGO_DIR = Path("./logos")
 logger = get_logger("autowatermark.exif_utils")
 
-
-def _normalize_brand(value):
-    cleaned = re.sub(r"[^a-z0-9]", "", value.lower())
-    return cleaned
-
-
-def _build_logo_index():
-    index = {}
-    if not LOGO_DIR.exists():
-        return index
-
-    for file_path in LOGO_DIR.rglob("*"):
-        if file_path.is_file():
-            stem = _normalize_brand(file_path.stem)
-            if stem and stem not in index:
-                index[stem] = str(file_path)
-    return index
-
-
-_LOGO_INDEX = _build_logo_index()
 
 def convert_to_int(value):
     if isinstance(value, tuple):
@@ -95,33 +75,6 @@ def get_camera_model(exif_dict):
         return None
 
 
-def find_logo(manufacturer):
-    if not manufacturer:
-        return None
-
-    normalized = _normalize_brand(manufacturer)
-    candidates = []
-    if normalized:
-        candidates.append(normalized)
-
-    alias = CommonConstants.BRAND_ALIASES.get(normalized)
-    if alias:
-        alias_normalized = _normalize_brand(alias)
-        if alias_normalized:
-            candidates.append(alias_normalized)
-
-    for token in manufacturer.split():
-        token_normalized = _normalize_brand(token)
-        if token_normalized and token_normalized not in candidates:
-            candidates.append(token_normalized)
-
-    for candidate in candidates:
-        if candidate in _LOGO_INDEX:
-            return _LOGO_INDEX[candidate]
-
-    return None
-
-
 def get_exif_table(image_path, exif_dict=None):
     exif_dict = _ensure_exif_dict(image_path, exif_dict)
     if not exif_dict:
@@ -162,6 +115,7 @@ def round_floats_in_string(s, decimal_places=2):
     result = re.sub(float_pattern, round_match, s)
 
     return result
+
 def get_exif_data(image_path, exif_dict=None):
     exif_dict = _ensure_exif_dict(image_path, exif_dict)
     if not exif_dict:

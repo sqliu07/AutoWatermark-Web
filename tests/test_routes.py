@@ -9,10 +9,11 @@ from PIL import Image
 import routes.upload as upload_routes
 from constants import ImageConstants
 from errors import ImageTooLargeError, MissingExifDataError, UnsupportedManufacturerError
-from exif_utils import find_logo, get_manufacturer
-from motion_photo_utils import prepare_motion_photo
+from exif import find_logo, get_manufacturer
+from media.motion_photo import prepare_motion_photo
 from process import process_image
-from ultrahdr_utils import split_ultrahdr
+from media.ultrahdr import split_ultrahdr
+from services.download_token import generate_token
 
 PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[1]
 ASSETS_DIR = PROJECT_ROOT / "tests" / "fixtures"
@@ -34,11 +35,36 @@ def test_index_ok(client):
     assert response.status_code == 200
 
 
+def test_unknown_path_browser_redirects_home(client):
+    response = client.get("/123", headers={"Accept": "text/html"})
+    assert response.status_code == 302
+    assert response.headers["Location"].endswith("/")
+
+
+def test_unknown_path_api_keeps_json_404(client):
+    response = client.get("/123", headers={"Accept": "application/json"})
+    assert response.status_code == 404
+    payload = response.get_json()
+    assert payload["error"]
+
+
 def test_upload_missing_file(client):
     response = client.post("/upload")
     assert response.status_code == 400
     payload = response.get_json()
     assert payload["error"] == "未上传文件！"
+
+
+def test_upload_get_redirects_home(client):
+    response = client.get("/upload")
+    assert response.status_code == 302
+    assert response.headers["Location"].endswith("/")
+
+
+def test_confirm_logo_get_redirects_home(client):
+    response = client.get("/upload/confirm_logo")
+    assert response.status_code == 302
+    assert response.headers["Location"].endswith("/")
 
 
 def test_upload_invalid_extension(client):
@@ -60,7 +86,13 @@ def test_download_zip_no_files(client):
     response = client.post("/download_zip", json={})
     assert response.status_code == 400
     payload = response.get_json()
-    assert payload["error"] == "No files provided"
+    assert payload["error"]  # 错误消息已 i18n，只验证非空
+
+
+def test_download_zip_get_redirects_home(client):
+    response = client.get("/download_zip")
+    assert response.status_code == 302
+    assert response.headers["Location"].endswith("/")
 
 
 def test_upload_invalid_watermark_type(client):
@@ -93,7 +125,8 @@ def test_upload_xiaomi_requires_logo_choice(client, monkeypatch):
     response = client.post("/upload", data=data, content_type="multipart/form-data")
     assert response.status_code == 200
     payload = response.get_json()
-    assert payload == {"needs_logo_choice": True}
+    assert payload["needs_logo_choice"] is True
+    assert payload["task_id"]
 
 
 def test_upload_success_returns_task_id(client, monkeypatch):
@@ -112,6 +145,35 @@ def test_upload_success_returns_task_id(client, monkeypatch):
     assert payload["task_id"] == "task-123"
 
 
+def test_confirm_logo_choice_submits_existing_task(client, monkeypatch):
+    monkeypatch.setattr(upload_routes, "detect_manufacturer", lambda _: "xiaomi")
+
+    submitted = {}
+
+    def fake_submit_existing_task(task_id, *_args, **_kwargs):
+        submitted["task_id"] = task_id
+        return task_id
+
+    monkeypatch.setattr(upload_routes, "submit_existing_task", fake_submit_existing_task)
+
+    upload_response = client.post(
+        "/upload",
+        data={"file": (io.BytesIO(b"fake"), "sample.jpg")},
+        content_type="multipart/form-data",
+    )
+    assert upload_response.status_code == 200
+    task_id = upload_response.get_json()["task_id"]
+
+    confirm_response = client.post(
+        "/upload/confirm_logo",
+        json={"task_id": task_id, "logo_preference": "leica"},
+    )
+    assert confirm_response.status_code == 202
+    payload = confirm_response.get_json()
+    assert payload["task_id"] == task_id
+    assert submitted["task_id"] == task_id
+
+
 def test_upload_burn_after_read_updates_queue(client):
     app = client.application
     upload_dir = app.config["UPLOAD_FOLDER"]
@@ -120,7 +182,8 @@ def test_upload_burn_after_read_updates_queue(client):
     with open(file_path, "wb") as f:
         f.write(b"burn")
 
-    response = client.get(f"/upload/{filename}?burn=1")
+    token, expires = generate_token(filename)
+    response = client.get(f"/upload/{filename}?burn=1&token={token}&expires={expires}")
     assert response.status_code == 200
 
     state = app.extensions["state"]
@@ -143,6 +206,38 @@ def test_download_zip_with_valid_file(client):
 
     download_response = client.get(f"/download_temp_zip/{zip_name}")
     assert download_response.status_code == 200
+
+
+def test_download_temp_zip_browser_invalid_token_redirects_home(client):
+    response = client.get("/download_temp_zip/demo.zip", headers={"Accept": "text/html"})
+    assert response.status_code == 302
+    assert response.headers["Location"].endswith("/")
+
+
+def test_upload_motion_video_streams_mp4(client):
+    app = client.application
+    upload_dir = app.config["UPLOAD_FOLDER"]
+    filename = "motion.jpg"
+    file_path = os.path.join(upload_dir, filename)
+
+    fake_mp4 = (
+        b"\x00\x00\x00\x18ftypisom"
+        b"\x00\x00\x02\x00isomiso2"
+    )
+    xmp = (
+        b'<x:xmpmeta xmlns:x="adobe:ns:meta/">'
+        b'<rdf:Description GCamera:MotionPhotoOffset="%d" />'
+        b"</x:xmpmeta>" % len(fake_mp4)
+    )
+    fake_jpeg = b"\xff\xd8" + xmp + b"\xff\xd9"
+    with open(file_path, "wb") as f:
+        f.write(fake_jpeg + fake_mp4)
+
+    token, expires = generate_token(filename)
+    response = client.get(f"/upload/{filename}/video?token={token}&expires={expires}")
+    assert response.status_code == 200
+    assert response.mimetype == "video/mp4"
+    assert response.data == fake_mp4
 
 
 def test_process_image_with_real_photo(tmp_path):

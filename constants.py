@@ -13,6 +13,7 @@ class CommonConstants:
     GLOBAL_FONT_PATH_MONO = "./fonts/RobotoMono-Regular.ttf"
 
     ERROR_MESSAGES = {
+        # 图像处理类
         "unsupported_manufacturer": {
             'en': "Unsupported camera! Please wait for our update.",
             'zh': "暂不支持该品牌相机！请等待我们的更新。"
@@ -32,6 +33,44 @@ class CommonConstants:
         "image_too_large": {
             'en': "Image size exceeds 100 million pixels, too large to process!",
             'zh': "图片超过一亿像素，尺寸过大，无法处理！"
+        },
+        # 上传校验类
+        "invalid_file_type": {
+            'en': "Invalid file type! Please upload a PNG, JPG or JPEG file.",
+            'zh': "无效的文件类型！请上传PNG、JPG或JPEG文件。"
+        },
+        "no_file_uploaded": {
+            'en': "No file uploaded!",
+            'zh': "未上传文件！"
+        },
+        "no_file_selected": {
+            'en': "No file selected!",
+            'zh': "未选择文件！"
+        },
+        # HTTP 错误
+        "rate_limit_exceeded": {
+            'en': "Too many requests, please try again later.",
+            'zh': "请求过于频繁，请稍后再试。"
+        },
+        "file_not_found": {
+            'en': "File not found.",
+            'zh': "文件不存在。"
+        },
+        "link_expired": {
+            'en': "Link expired or invalid.",
+            'zh': "链接已过期或无效。"
+        },
+        "zip_too_many_files": {
+            'en': "Too many files.",
+            'zh': "文件数量过多。"
+        },
+        "zip_no_files": {
+            'en': "No files provided.",
+            'zh': "未提供文件。"
+        },
+        "zip_create_failed": {
+            'en': "Failed to create zip.",
+            'zh': "创建压缩包失败。"
         },
     }
     
@@ -55,12 +94,14 @@ class CommonConstants:
 
 class AppConstants:
     UPLOAD_FOLDER = './upload'
+    STATE_DB_FILENAME = "app_state.sqlite3"
     ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}
     MAX_CONTENT_LENGTH = 200 * 1024 * 1024  # 最大文件 200MB
 
     DEFAULT_RATE_LIMITS = ["2000 per day", "500 per hour"]
     UPLOAD_RATE_LIMIT = "10 per minute"
     ZIP_RATE_LIMIT = "10 per minute"
+    ZIP_MAX_FILES = 50
 
     EXECUTOR_MAX_WORKERS = 4
     TASK_RETENTION_SECONDS = 3600
@@ -70,33 +111,12 @@ class AppConstants:
     ZIP_RETENTION_SECONDS = 3600
     UPLOAD_RETENTION_SECONDS = 86400
 
-    ERROR_MESSAGES = {
-        "invalid_file_type": {
-            'en': "Invalid file type! Please upload a PNG, JPG or JPEG file.",
-            'zh': "无效的文件类型！请上传PNG、JPG或JPEG文件。"
-        },
-        "no_file_uploaded": {
-            'en': "No file uploaded!",
-            'zh': "未上传文件！"
-        },
-        "no_file_selected": {
-            'en': "No file selected!",
-            'zh': "未选择文件！"
-        },
-    }
 
 
 class ImageConstants:
     MAX_IMAGE_PIXELS = 100_000_000
 
-    # 底栏高度占图片高度的比例
-    FOOTER_RATIO_LANDSCAPE = 0.09  # 横图 9%
-    FOOTER_RATIO_PORTRAIT = 0.08   # 竖图 8%
-
-    # 关键：字号占底栏高度的比例
-    FONT_SIZE_RATIO = 0.22 
-
-    # Logo 高度占底栏高度的比例
+    # split_lr 布局中右侧 Logo 高度占底栏的比例
     LOGO_HEIGHT_RATIO = 0.5
 
     WATERMARK_GLASS_BG_SCALE = 1.15
