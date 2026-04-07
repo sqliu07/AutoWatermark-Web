@@ -1,4 +1,5 @@
 import os
+import tempfile
 
 from flask import Flask, send_from_directory
 
@@ -13,6 +14,68 @@ from services.cleanup import start_background_cleaner
 from services.download_token import ensure_secret_configured
 from services.state import AppState
 from services.watermark_styles import load_cached_watermark_styles
+
+
+def _dir_is_writable(path: str) -> bool:
+    try:
+        os.makedirs(path, exist_ok=True)
+        probe = os.path.join(path, ".writable_probe")
+        with open(probe, "w", encoding="utf-8") as fp:
+            fp.write("ok")
+        os.remove(probe)
+        return True
+    except OSError:
+        return False
+
+
+def _db_path_is_writable(db_path: str) -> bool:
+    db_dir = os.path.dirname(db_path) or "."
+    if not _dir_is_writable(db_dir):
+        return False
+
+    if not os.path.exists(db_path):
+        return True
+
+    try:
+        with open(db_path, "a", encoding="utf-8"):
+            return True
+    except OSError:
+        return False
+
+
+def _resolve_runtime_paths(app, logger) -> None:
+    upload_folder = app.config["UPLOAD_FOLDER"]
+    if not _dir_is_writable(upload_folder):
+        fallback_upload = os.path.join(tempfile.gettempdir(), "autowatermark", "upload")
+        os.makedirs(fallback_upload, exist_ok=True)
+        logger.warning(
+            "UPLOAD_FOLDER '%s' is not writable, fallback to '%s'",
+            upload_folder,
+            fallback_upload,
+        )
+        upload_folder = fallback_upload
+    app.config["UPLOAD_FOLDER"] = upload_folder
+
+    requested_state_db = app.config.get("STATE_DB_PATH")
+    if not requested_state_db:
+        requested_state_db = os.path.join(upload_folder, AppConstants.STATE_DB_FILENAME)
+
+    if not _db_path_is_writable(requested_state_db):
+        fallback_state_db = os.path.join(
+            tempfile.gettempdir(), "autowatermark", AppConstants.STATE_DB_FILENAME
+        )
+        if not _db_path_is_writable(fallback_state_db):
+            raise RuntimeError(
+                f"STATE_DB_PATH '{requested_state_db}' is not writable and fallback '{fallback_state_db}' failed"
+            )
+        logger.warning(
+            "STATE_DB_PATH '%s' is not writable, fallback to '%s'",
+            requested_state_db,
+            fallback_state_db,
+        )
+        requested_state_db = fallback_state_db
+
+    app.config["STATE_DB_PATH"] = requested_state_db
 
 
 def create_app(config_overrides=None):
@@ -37,11 +100,7 @@ def create_app(config_overrides=None):
     if config_overrides:
         app.config.update(config_overrides)
 
-    os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
-    if not app.config.get("STATE_DB_PATH"):
-        app.config["STATE_DB_PATH"] = os.path.join(
-            app.config["UPLOAD_FOLDER"], AppConstants.STATE_DB_FILENAME
-        )
+    _resolve_runtime_paths(app, logger)
 
     ensure_secret_configured()
 

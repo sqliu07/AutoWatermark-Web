@@ -17,6 +17,47 @@ def cleanup_file_and_original(file_path: str, logger) -> None:
             pass
 
 
+def _protected_upload_files(app) -> set[str]:
+    protected: set[str] = set()
+    state_db_path = app.config.get("STATE_DB_PATH")
+    if not state_db_path:
+        return protected
+
+    db_real = os.path.realpath(state_db_path)
+    protected.add(db_real)
+    protected.add(db_real + "-wal")
+    protected.add(db_real + "-shm")
+    protected.add(db_real + "-journal")
+    return protected
+
+
+def _cleanup_stale_uploads(app, current_time: float, logger) -> int:
+    upload_dir = app.config["UPLOAD_FOLDER"]
+    if not os.path.isdir(upload_dir):
+        return 0
+
+    protected = _protected_upload_files(app)
+    cleaned_stale = 0
+
+    for filename in os.listdir(upload_dir):
+        file_path = os.path.realpath(os.path.join(upload_dir, filename))
+        if file_path in protected:
+            continue
+
+        try:
+            if (
+                os.path.isfile(file_path)
+                and (current_time - os.path.getmtime(file_path) > AppConstants.UPLOAD_RETENTION_SECONDS)
+            ):
+                os.remove(file_path)
+                logger.info("[Auto-Clean] Deleted stale file: %s", filename)
+                cleaned_stale += 1
+        except OSError:
+            pass
+
+    return cleaned_stale
+
+
 def start_background_cleaner(app, state, logger) -> threading.Thread:
     """Start background cleanup worker for burn queue, zip temp files, and stale uploads."""
 
@@ -48,19 +89,7 @@ def start_background_cleaner(app, state, logger) -> threading.Thread:
                     pass
 
             # 3) Stale uploads in upload folder
-            upload_dir = app.config["UPLOAD_FOLDER"]
-            for filename in os.listdir(upload_dir):
-                file_path = os.path.join(upload_dir, filename)
-                try:
-                    if (
-                        os.path.isfile(file_path)
-                        and (current_time - os.path.getmtime(file_path) > AppConstants.UPLOAD_RETENTION_SECONDS)
-                    ):
-                        os.remove(file_path)
-                        logger.info("[Auto-Clean] Deleted stale file: %s", filename)
-                        cleaned_stale += 1
-                except OSError:
-                    pass
+            cleaned_stale = _cleanup_stale_uploads(app, current_time, logger)
 
             # 4) Stale tasks in memory
             cleaned_tasks = state.cleanup_old_tasks(current_time)
