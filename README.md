@@ -116,7 +116,7 @@ supports_ultrahdr = true
 ### 方式二：手动部署
 
 **前置要求**:
-* Python 3.8+（推荐 3.10+）
+* Python 3.10+
 * FFmpeg (用于处理动态照片)
 * Perl (用于 ExifTool)
 
