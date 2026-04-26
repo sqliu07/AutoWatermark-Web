@@ -7,7 +7,7 @@ from PIL import Image
 from io import BytesIO
 
 
-from exif import find_logo, get_manufacturer, get_exif_data, get_camera_model
+from exif import find_logo, get_manufacturer, get_exif_data, get_exif_data_with_exiftool, get_camera_model
 from imaging import reset_image_orientation, generate_watermark_image
 from constants import CommonConstants, ImageConstants
 from errors import (
@@ -23,6 +23,7 @@ from media.ultrahdr import (
     split_ultrahdr,
     inject_xmp,
     update_primary_xmp_lengths,
+    build_primary_xmp_for_gainmap,
     expand_gainmap_for_borders,
 )
 from media.motion_photo import prepare_motion_photo
@@ -105,6 +106,17 @@ def process_image(
             ultrahdr_parts = split_ultrahdr(data_bytes)
         except Exception:
             ultrahdr_parts = None
+        if ultrahdr_parts is not None and (
+            ultrahdr_parts.primary_xmp is None or ultrahdr_parts.gainmap_xmp is None
+        ):
+            if ultrahdr_parts.primary_xmp is None and ultrahdr_parts.gainmap_xmp is not None:
+                ultrahdr_parts.primary_xmp = build_primary_xmp_for_gainmap(len(ultrahdr_parts.gainmap_jpeg))
+            else:
+                logger.warning(
+                    "Incomplete Ultra HDR metadata for %s; fallback to SDR output.",
+                    working_image_path,
+                )
+                ultrahdr_parts = None
 
         if ultrahdr_parts is not None:
             image = Image.open(BytesIO(ultrahdr_parts.primary_jpeg))
@@ -117,6 +129,7 @@ def process_image(
 
         exif_bytes = image.info.get('exif')
         exif_dict = None
+        fallback_metadata = None
         if exif_bytes:
             try:
                 exif_dict = piexif.load(exif_bytes)
@@ -126,13 +139,22 @@ def process_image(
             exif_bytes = b''
 
         if exif_dict is None:
-            raise MissingExifDataError()
+            fallback_metadata = get_exif_data_with_exiftool(working_image_path)
+            if not fallback_metadata:
+                raise MissingExifDataError()
 
+        using_fallback_metadata = exif_dict is None
         manufacturer = get_manufacturer(working_image_path, exif_dict)
         if not manufacturer:
-            raise MissingExifDataError()
+            fallback_metadata = fallback_metadata or get_exif_data_with_exiftool(working_image_path)
+            manufacturer = fallback_metadata.get("manufacturer") if fallback_metadata else None
+            if not manufacturer:
+                raise MissingExifDataError()
+            using_fallback_metadata = True
 
-        camera_model = get_camera_model(exif_dict)
+        camera_model = get_camera_model(exif_dict) if exif_dict is not None else None
+        if not camera_model and fallback_metadata:
+            camera_model = fallback_metadata.get("camera_model")
 
         logo_path = None
         if style.get("requires_logo", True):
@@ -147,7 +169,12 @@ def process_image(
                 detail = manufacturer if not camera_model else f"{manufacturer} {camera_model}"
                 raise UnsupportedManufacturerError(manufacturer, detail=detail)
 
-        result = get_exif_data(working_image_path, exif_dict)
+        result = None if using_fallback_metadata else get_exif_data(working_image_path, exif_dict)
+        if (result is None or result == (None, None)) and fallback_metadata:
+            result = (
+                fallback_metadata.get("camera_info"),
+                fallback_metadata.get("shooting_info"),
+            )
         if result is None or result == (None, None):
              raise ExifProcessingError()
 

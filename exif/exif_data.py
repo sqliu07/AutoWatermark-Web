@@ -1,6 +1,8 @@
 """EXIF 数据提取和格式化。"""
 
+import json
 import re
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -10,6 +12,143 @@ import piexif
 from logging_utils import get_logger
 
 logger = get_logger("autowatermark.exif_utils")
+
+
+def _sanitize_make(value):
+    sanitized = ''.join(ch for ch in str(value or "") if re.match(r'[a-zA-Z ]', ch))
+    return ' '.join(sanitized.split())
+
+
+def _sanitize_model(value):
+    sanitized = ''.join(ch for ch in str(value or "") if re.match(r'[a-zA-Z0-9\- ]', ch))
+    sanitized = ' '.join(sanitized.split())
+    return sanitized or None
+
+
+def _format_decimal(value):
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if number <= 0:
+        return None
+    if number.is_integer():
+        return str(int(number))
+    return str(round(number, 2)).rstrip("0").rstrip(".")
+
+
+def _format_exiftool_date(value):
+    date_taken = str(value or "Unknown Date")
+    if ' ' in date_taken:
+        index = date_taken.index(' ')
+        substring = date_taken[:index]
+        if ":" in substring:
+            new_substring = substring.replace(':', '.')
+            date_taken = date_taken[:index].replace(substring, new_substring) + date_taken[index:]
+
+    if "T" in date_taken:
+        date_taken = date_taken.replace("T", " ")
+        index = date_taken.index(" ")
+        substring = date_taken[:index]
+        if ":" in substring:
+            new_substring = substring.replace(':', '.')
+            date_taken = date_taken[:index].replace(substring, new_substring) + date_taken[index:]
+    return date_taken
+
+
+def _find_exiftool():
+    executable = shutil.which("exiftool")
+    if executable:
+        return executable
+
+    project_root = Path(__file__).resolve().parents[1]
+    local_exiftool = project_root / "3rdparty" / "exiftool" / "exiftool"
+    if local_exiftool.exists():
+        return str(local_exiftool)
+    return None
+
+
+def get_exif_data_with_exiftool(image_path):
+    """Fallback metadata extraction for files that piexif cannot parse."""
+    exiftool = _find_exiftool()
+    if not exiftool:
+        return None
+
+    tags = [
+        "-Make",
+        "-Model",
+        "-XiaomiModel",
+        "-LensModel",
+        "-Lens",
+        "-LensType",
+        "-FocalLengthIn35mmFormat",
+        "-FocalLength",
+        "-FNumber",
+        "-ExposureTime",
+        "-ISO",
+        "-DateTimeOriginal",
+    ]
+    try:
+        output = subprocess.check_output(
+            [exiftool, "-j", "-n", *tags, image_path],
+            stderr=subprocess.STDOUT,
+            timeout=10,
+        )
+        rows = json.loads(output.decode(errors="ignore"))
+    except Exception as exc:
+        logger.info("exiftool fallback failed for %s: %s", image_path, exc)
+        return None
+
+    if not rows:
+        return None
+
+    payload = rows[0]
+    manufacturer = _sanitize_make(payload.get("Make"))
+    camera_model = _sanitize_model(payload.get("Model"))
+    xiaomi_model = _sanitize_model(payload.get("XiaomiModel"))
+    if not manufacturer and xiaomi_model:
+        manufacturer = "Xiaomi"
+        camera_model = xiaomi_model
+    elif not camera_model and xiaomi_model:
+        camera_model = xiaomi_model
+    if not manufacturer:
+        return None
+
+    lens_info = payload.get("LensModel") or payload.get("Lens") or payload.get("LensType") or "Unknown Lens"
+    lens_info = round_floats_in_string(str(lens_info).replace("f", "\u0192"))
+
+    focal_length = payload.get("FocalLengthIn35mmFormat") or payload.get("FocalLength")
+    focal_length_text = _format_decimal(focal_length)
+    f_number_text = _format_decimal(payload.get("FNumber"))
+    iso_speed = payload.get("ISO") or 0
+    date_taken = _format_exiftool_date(payload.get("DateTimeOriginal"))
+
+    exposure_time = payload.get("ExposureTime")
+    try:
+        exposure_value = float(exposure_time)
+    except (TypeError, ValueError):
+        exposure_value = 0
+
+    if focal_length_text and f_number_text and exposure_value:
+        if exposure_value < 1:
+            shutter = f"1/{int(round(1 / exposure_value))}s"
+        else:
+            shutter_value = int(exposure_value) if exposure_value.is_integer() else round(exposure_value, 2)
+            shutter = f"{shutter_value}s"
+        shooting_info = f"{focal_length_text}mm  \u0192/{f_number_text}  {shutter}  ISO{iso_speed}\n{date_taken}"
+    else:
+        shooting_info = "Invalid shooting info\n" + date_taken
+
+    camera_info = f"{lens_info}\n{camera_model or ''}"
+    if "xiaomi" in manufacturer.lower():
+        camera_info = f"{manufacturer}\n{camera_model or ''}"
+
+    return {
+        "manufacturer": manufacturer,
+        "camera_model": camera_model,
+        "camera_info": camera_info,
+        "shooting_info": shooting_info,
+    }
 
 
 def convert_to_int(value):

@@ -5,6 +5,7 @@ from exif.exif_data import (
     get_manufacturer,
     get_camera_model,
     get_exif_data,
+    get_exif_data_with_exiftool,
     get_exif_table,
     convert_to_int,
 )
@@ -14,6 +15,7 @@ __all__ = [
     "get_manufacturer",
     "get_camera_model",
     "get_exif_data",
+    "get_exif_data_with_exiftool",
     "get_exif_table",
     "convert_to_int",
 ]

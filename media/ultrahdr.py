@@ -212,7 +212,7 @@ def _update_container_item_length(xmp_text: str, semantic: str, new_length: int)
     Update (or insert) Item:Length for the <Container:Item ... Item:Semantic="..."> element.
     """
     # Match the tag itself.
-    pattern = re.compile(r'(<Container:Item\b[^>]*\bItem:Semantic="%s"[^>]*)(/?>)' % re.escape(semantic))
+    pattern = re.compile(r'(<Container:Item\b(?=[^>]*\bItem:Semantic="%s")[^>]*?)(\s*/?>)' % re.escape(semantic))
     m = pattern.search(xmp_text)
     if not m:
         return xmp_text
@@ -242,6 +242,32 @@ def update_primary_xmp_lengths(primary_xmp: bytes, primary_len: int, gainmap_len
     text2 = _update_container_item_length(text, "Primary", primary_len)
     text2 = _update_container_item_length(text2, "GainMap", gainmap_len)
     return text2.encode("utf-8")
+
+
+def build_primary_xmp_for_gainmap(gainmap_len: int) -> bytes:
+    """Build a minimal primary XMP directory for gainmap-only Ultra HDR files."""
+    gainmap_len = max(0, int(gainmap_len))
+    return f'''<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="AutoWatermark-Web">
+  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+    <rdf:Description rdf:about=""
+        xmlns:hdrgm="http://ns.adobe.com/hdr-gain-map/1.0/"
+        xmlns:Container="http://ns.google.com/photos/1.0/container/"
+        xmlns:Item="http://ns.google.com/photos/1.0/container/item/"
+        hdrgm:Version="1.0">
+      <Container:Directory>
+        <rdf:Seq>
+          <rdf:li rdf:parseType="Resource">
+            <Container:Item Item:Mime="image/jpeg" Item:Semantic="Primary"/>
+          </rdf:li>
+          <rdf:li rdf:parseType="Resource">
+            <Container:Item Item:Mime="image/jpeg" Item:Semantic="GainMap" Item:Length="{gainmap_len}" Item:Padding="0"/>
+          </rdf:li>
+        </rdf:Seq>
+      </Container:Directory>
+    </rdf:Description>
+  </rdf:RDF>
+</x:xmpmeta>'''.encode("utf-8")
+
 
 def looks_like_ultrahdr(primary_jpeg: bytes) -> bool:
     # Android spec: hdrgm:Version="1.0" in primary XMP is a signal; also GContainer GainMap semantic.

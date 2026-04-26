@@ -8,7 +8,7 @@ import piexif
 
 from constants import CommonConstants
 from errors import WatermarkError
-from exif import get_manufacturer
+from exif import get_exif_data_with_exiftool, get_manufacturer
 from process import process_image
 from services.download_token import build_signed_url
 from services.i18n import get_common_message
@@ -28,12 +28,16 @@ def detect_manufacturer(filepath: str):
     try:
         with Image.open(filepath) as image:
             exif_bytes = image.info.get("exif")
-            if not exif_bytes:
-                return None
-            exif_dict = piexif.load(exif_bytes)
-            return get_manufacturer(filepath, exif_dict)
+            if exif_bytes:
+                exif_dict = piexif.load(exif_bytes)
+                manufacturer = get_manufacturer(filepath, exif_dict)
+                if manufacturer:
+                    return manufacturer
     except Exception:
-        return None
+        pass
+
+    fallback_metadata = get_exif_data_with_exiftool(filepath)
+    return fallback_metadata.get("manufacturer") if fallback_metadata else None
 
 
 def normalize_image_quality(image_quality: str) -> int:
