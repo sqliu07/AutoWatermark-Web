@@ -2,6 +2,11 @@ from PIL import Image, ImageDraw, ImageFilter
 from constants import ImageConstants
 from imaging.image_ops import is_landscape, _darken_rgb_inplace
 
+# 磨砂玻璃效果常量
+SHADOW_OFFSET_Y_LANDSCAPE = 0.03
+SHADOW_OFFSET_Y_PORTRAIT = 0.05
+BLUR_DOWNSAMPLE_RADIUS = 8
+
 
 def create_frosted_glass_effect(origin_image):
     ori_w, ori_h = origin_image.size
@@ -15,7 +20,7 @@ def create_frosted_glass_effect(origin_image):
     corner_radius = int(min_dim * ImageConstants.WATERMARK_GLASS_CORNER_RADIUS_FACTOR)
     shadow_blur_radius = int(min_dim * ImageConstants.WATERMARK_GLASS_BLUR_RADIUS)
 
-    shadow_offset_y = int(min_dim * (0.03 if landscape else 0.05))
+    shadow_offset_y = int(min_dim * (SHADOW_OFFSET_Y_LANDSCAPE if landscape else SHADOW_OFFSET_Y_PORTRAIT))
     shadow_color = (0, 0, 0, ImageConstants.WATERMARK_GLASS_COLOR)
 
     canvas_w = int(ori_w * bg_scale * (0.95 if landscape else 1.0))
@@ -31,7 +36,7 @@ def create_frosted_glass_effect(origin_image):
         small_bg_source = origin_image
     small_bg = small_bg_source.resize((ds_w, ds_h), Image.Resampling.BOX)
 
-    blurred_bg = small_bg.filter(ImageFilter.GaussianBlur(8))
+    blurred_bg = small_bg.filter(ImageFilter.GaussianBlur(BLUR_DOWNSAMPLE_RADIUS))
     # 放大铺满
     final_bg = blurred_bg.resize(canvas_size, Image.Resampling.LANCZOS)
     del small_bg

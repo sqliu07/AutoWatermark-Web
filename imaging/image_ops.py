@@ -1,4 +1,5 @@
 from functools import lru_cache
+import piexif
 from PIL import Image, ImageDraw, ImageStat
 from constants import ImageConstants
 from logging_utils import get_logger
@@ -47,7 +48,7 @@ def reset_image_orientation(image):
     try:
         exif = image._getexif()
         if exif:
-            orientation = exif.get(274)
+            orientation = exif.get(piexif.ImageIFD.Orientation)
             if orientation == 3:
                 image = image.rotate(180, expand=True)
             elif orientation == 6:

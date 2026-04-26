@@ -1,6 +1,7 @@
 import os
 import time
 import uuid
+from dataclasses import dataclass
 from typing import Optional, Set
 
 from PIL import Image
@@ -10,8 +11,24 @@ from constants import CommonConstants
 from errors import WatermarkError
 from exif import get_exif_data_with_exiftool, get_manufacturer
 from process import process_image
+from process_result import ProcessResult
 from services.download_token import build_signed_url
 from services.i18n import get_common_message
+
+
+@dataclass
+class TaskPayload:
+    """后台任务参数封装。"""
+    task_id: str
+    state: object
+    filepath: str
+    lang: str
+    watermark_type: int
+    image_quality: int
+    burn_after_read: str
+    logo_preference: Optional[str]
+    style_config: object
+    logger: object
 
 
 def allowed_file(filename: str, allowed_extensions: Set[str]) -> bool:
@@ -101,19 +118,19 @@ def _submit_task_with_id(
         logo_preference=logo_preference,
     )
     _update_queue_metrics(state, task_id, logger)
-    state.executor.submit(
-        background_process,
-        task_id,
-        state,
-        filepath,
-        lang,
-        watermark_type,
-        image_quality,
-        burn_after_read,
-        logo_preference,
-        style_config,
-        logger,
+    payload = TaskPayload(
+        task_id=task_id,
+        state=state,
+        filepath=filepath,
+        lang=lang,
+        watermark_type=watermark_type,
+        image_quality=image_quality,
+        burn_after_read=burn_after_read,
+        logo_preference=logo_preference,
+        style_config=style_config,
+        logger=logger,
     )
+    state.executor.submit(background_process, payload)
 
 
 def submit_task(
@@ -170,18 +187,18 @@ def submit_existing_task(
     return task_id
 
 
-def background_process(
-    task_id: str,
-    state,
-    filepath: str,
-    lang: str,
-    watermark_type: int,
-    image_quality: int,
-    burn_after_read: str,
-    logo_preference: Optional[str],
-    style_config,
-    logger,
-) -> None:
+def background_process(payload: TaskPayload) -> None:
+    task_id = payload.task_id
+    state = payload.state
+    filepath = payload.filepath
+    lang = payload.lang
+    watermark_type = payload.watermark_type
+    image_quality = payload.image_quality
+    burn_after_read = payload.burn_after_read
+    logo_preference = payload.logo_preference
+    style_config = payload.style_config
+    logger = payload.logger
+
     start_time = time.time()
     try:
         state.update_task(task_id, status="processing", stage="processing", progress=0.01)
@@ -206,7 +223,7 @@ def background_process(
             style_config=style_config,
         )
 
-        is_motion = isinstance(result, dict) and result.get("is_motion", False)
+        is_motion = result.is_motion
 
         filename = os.path.basename(filepath)
         original_name, extension = os.path.splitext(filename)

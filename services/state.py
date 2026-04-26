@@ -60,6 +60,9 @@ class AppState:
 
     def _init_db(self) -> None:
         with self.db_lock:
+            self._conn.execute("PRAGMA journal_mode=WAL")
+            self._conn.execute("PRAGMA synchronous=NORMAL")
+            self._conn.execute("PRAGMA foreign_keys=ON")
             self._conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS tasks (
@@ -79,6 +82,12 @@ class AppState:
                     logo_preference TEXT
                 )
                 """
+            )
+            self._conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)"
+            )
+            self._conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_tasks_submitted_at ON tasks(submitted_at)"
             )
             self._conn.execute(
                 """
@@ -153,7 +162,7 @@ class AppState:
         with self.db_lock:
             self._conn.execute(
                 """
-                INSERT OR REPLACE INTO tasks(
+                INSERT INTO tasks(
                     task_id, status, submitted_at, updated_at, progress, stage,
                     result_json, error, filepath, lang, watermark_type,
                     image_quality, burn_after_read, logo_preference
@@ -186,21 +195,6 @@ class AppState:
         now = time.time()
         allowed_fields["updated_at"] = now
 
-        with self.tasks_lock:
-            task = self.tasks.get(task_id)
-
-        if task is None:
-            with self.db_lock:
-                row = self._conn.execute(
-                    "SELECT * FROM tasks WHERE task_id = ?",
-                    (task_id,),
-                ).fetchone()
-            task = self._row_to_task(row) if row is not None else {}
-
-        with self.tasks_lock:
-            task.update(allowed_fields)
-            self.tasks[task_id] = task
-
         sql_fields = []
         sql_values = []
         for key, value in allowed_fields.items():
@@ -218,6 +212,15 @@ class AppState:
                 tuple(sql_values),
             )
             self._conn.commit()
+            row = self._conn.execute(
+                "SELECT * FROM tasks WHERE task_id = ?",
+                (task_id,),
+            ).fetchone()
+
+        if row is not None:
+            task = self._row_to_task(row)
+            with self.tasks_lock:
+                self.tasks[task_id] = task
 
     def get_task(self, task_id: str) -> Optional[dict]:
         with self.tasks_lock:

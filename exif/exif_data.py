@@ -5,6 +5,7 @@ import re
 import shutil
 import subprocess
 from pathlib import Path
+from typing import Optional, Tuple
 
 from PIL import Image
 import piexif
@@ -14,18 +15,18 @@ from logging_utils import get_logger
 logger = get_logger("autowatermark.exif_utils")
 
 
-def _sanitize_make(value):
+def _sanitize_make(value) -> str:
     sanitized = ''.join(ch for ch in str(value or "") if re.match(r'[a-zA-Z ]', ch))
     return ' '.join(sanitized.split())
 
 
-def _sanitize_model(value):
+def _sanitize_model(value) -> Optional[str]:
     sanitized = ''.join(ch for ch in str(value or "") if re.match(r'[a-zA-Z0-9\- ]', ch))
     sanitized = ' '.join(sanitized.split())
     return sanitized or None
 
 
-def _format_decimal(value):
+def _format_decimal(value) -> Optional[str]:
     try:
         number = float(value)
     except (TypeError, ValueError):
@@ -37,7 +38,7 @@ def _format_decimal(value):
     return str(round(number, 2)).rstrip("0").rstrip(".")
 
 
-def _format_exiftool_date(value):
+def _format_exiftool_date(value) -> str:
     date_taken = str(value or "Unknown Date")
     if ' ' in date_taken:
         index = date_taken.index(' ')
@@ -68,7 +69,7 @@ def _find_exiftool():
     return None
 
 
-def get_exif_data_with_exiftool(image_path):
+def get_exif_data_with_exiftool(image_path: str) -> Optional[dict]:
     """Fallback metadata extraction for files that piexif cannot parse."""
     exiftool = _find_exiftool()
     if not exiftool:
@@ -151,7 +152,7 @@ def get_exif_data_with_exiftool(image_path):
     }
 
 
-def convert_to_int(value):
+def convert_to_int(value) -> float:
     if isinstance(value, tuple):
         if len(value) >= 2:
             numerator = value[0]
@@ -170,7 +171,7 @@ def convert_to_int(value):
     raise ValueError("Unsupported type")
 
 
-def _ensure_exif_dict(image_path, exif_dict):
+def _ensure_exif_dict(image_path: str, exif_dict: Optional[dict]) -> Optional[dict]:
     if exif_dict is not None:
         return exif_dict
 
@@ -184,7 +185,7 @@ def _ensure_exif_dict(image_path, exif_dict):
         return None
 
 
-def get_manufacturer(image_path, exif_dict=None):
+def get_manufacturer(image_path: str, exif_dict: Optional[dict] = None) -> Optional[str]:
     exif_dict = _ensure_exif_dict(image_path, exif_dict)
     if not exif_dict:
         return None
@@ -197,7 +198,7 @@ def get_manufacturer(image_path, exif_dict=None):
     except Exception:
         return None
 
-def get_camera_model(exif_dict):
+def get_camera_model(exif_dict: Optional[dict]) -> Optional[str]:
     if not exif_dict:
         return None
 
@@ -214,7 +215,7 @@ def get_camera_model(exif_dict):
         return None
 
 
-def get_exif_table(image_path, exif_dict=None):
+def get_exif_table(image_path: str, exif_dict: Optional[dict] = None) -> Tuple[Optional[float], Optional[float], Optional[float], Optional[int]]:
     exif_dict = _ensure_exif_dict(image_path, exif_dict)
     if not exif_dict:
         return None, None, None, None
@@ -223,7 +224,7 @@ def get_exif_table(image_path, exif_dict=None):
         exif_data = exif_dict.get('Exif', {})
 
         focal_length_35 = exif_data.get(piexif.ExifIFD.FocalLengthIn35mmFilm, (0, 1))
-        #Some photos don't have focal length in 35mm film
+        # Some photos don't have focal length in 35mm film
         if focal_length_35 == (0, 1):
             focal_length = exif_data.get(piexif.ExifIFD.FocalLength, (0, 1))
             focal_length_35 = convert_to_int(focal_length)
@@ -239,12 +240,14 @@ def get_exif_table(image_path, exif_dict=None):
         f_number_value = round(f_number_value, 2) if f_number_value else 0
 
         return focal_length_value, f_number_value, exposure_time_value, iso_speed
-    except KeyError:
+    except KeyError as e:
+        logger.debug("EXIF table missing key %s for %s", e, image_path)
         return None, None, None, None
     except Exception as e:
+        logger.warning("Failed to read EXIF table from %s: %s", image_path, e)
         return None, None, None, None
 
-def round_floats_in_string(s, decimal_places=2):
+def round_floats_in_string(s: str, decimal_places: int = 2) -> str:
     float_pattern = r'-?\d+\.\d+'
     def round_match(match):
         float_value = match.group(0)
@@ -255,7 +258,7 @@ def round_floats_in_string(s, decimal_places=2):
 
     return result
 
-def get_exif_data(image_path, exif_dict=None):
+def get_exif_data(image_path: str, exif_dict: Optional[dict] = None) -> Tuple[Optional[str], Optional[str]]:
     exif_dict = _ensure_exif_dict(image_path, exif_dict)
     if not exif_dict:
         return None, None
@@ -280,21 +283,7 @@ def get_exif_data(image_path, exif_dict=None):
         datetime_raw = exif_data.get(piexif.ExifIFD.DateTimeOriginal, b"Unknown Date")
         date_taken = datetime_raw.decode(errors='ignore') if isinstance(datetime_raw, (bytes, bytearray)) else str(datetime_raw)
         camera_model = camera_model_code
-
-        if ' ' in date_taken:
-            index = date_taken.index(' ')
-            substring = date_taken[:index]
-            if ":" in substring:
-                new_substring = substring.replace(':', '.')
-                date_taken = date_taken[:index].replace(substring, new_substring) + date_taken[index:]
-
-        if "T" in date_taken:
-            date_taken = date_taken.replace("T", " ")
-            index = date_taken.index(" ")
-            substring = date_taken[:index]
-            if ":" in substring:
-                new_substring = substring.replace(':', '.')
-                date_taken = date_taken[:index].replace(substring, new_substring) + date_taken[index:]
+        date_taken = _format_exiftool_date(date_taken)
 
         if str(lens_info) == "Unknown Lens":
             exif_ids = ["-LensModel", "-Lens", "-LensType"]
@@ -333,7 +322,9 @@ def get_exif_data(image_path, exif_dict=None):
             camera_info = f"{camera_make}\n{camera_model}"
 
         return camera_info, shooting_info
-    except KeyError:
+    except KeyError as e:
+        logger.debug("EXIF data missing key %s for %s", e, image_path)
         return None, None
     except Exception as e:
+        logger.warning("Failed to read EXIF data from %s: %s", image_path, e)
         return None, None

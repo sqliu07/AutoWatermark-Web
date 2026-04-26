@@ -1,21 +1,17 @@
 import os
 import tempfile
 import zipfile
-from datetime import datetime
 
 from flask import Blueprint, current_app, jsonify, redirect, request, send_file
 from werkzeug.utils import secure_filename
 
 from constants import AppConstants
 from extensions import limiter
+from routes._utils import is_browser_request
 from services.download_token import build_signed_url, verify_token
 from services.i18n import get_error_message, normalize_lang
 
 bp = Blueprint("download", __name__)
-
-
-def _is_browser_request() -> bool:
-    return "text/html" in request.headers.get("Accept", "")
 
 
 @bp.route("/download_zip", methods=["GET"])
@@ -38,10 +34,9 @@ def download_zip():
 
     upload_folder = os.path.realpath(current_app.config["UPLOAD_FOLDER"])
 
-    count = len(filenames)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    zip_filename = f"Packed_Watermark_Images_{count}_{timestamp}.zip"
-    zip_path = os.path.join(tempfile.gettempdir(), zip_filename)
+    fd, zip_path = tempfile.mkstemp(suffix=".zip", prefix="watermark_")
+    os.close(fd)
+    zip_filename = os.path.basename(zip_path)
 
     try:
         with zipfile.ZipFile(zip_path, "w") as zipf:
@@ -71,7 +66,7 @@ def download_temp_zip(filename):
     lang = normalize_lang(request.args.get("lang", "zh"))
     token = request.args.get("token", "")
     expires = request.args.get("expires", "")
-    is_browser = _is_browser_request()
+    is_browser = is_browser_request()
 
     safe_filename_str = secure_filename(filename)
     if not safe_filename_str:
