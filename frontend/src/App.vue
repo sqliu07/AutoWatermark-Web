@@ -1,6 +1,6 @@
 <template>
   <a-config-provider :locale="antLocale">
-    <div class="app-shell">
+    <div class="app-shell" :class="{ 'has-results': store.tasks.length > 0 }">
       <!-- 顶栏 -->
       <header class="app-header">
         <div class="header-left">
@@ -127,6 +127,7 @@ function chooseLogo(choice) {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  height: 100dvh;
   overflow: hidden;
 }
 
@@ -221,9 +222,16 @@ function chooseLogo(choice) {
 
 /* 移动端：上下堆叠 */
 @media (max-width: 768px) {
+  .app-shell {
+    height: auto;
+    min-height: 100vh;
+    min-height: 100dvh;
+    overflow-y: auto;
+  }
+
   .app-header {
     padding: 0 16px;
-    height: 48px;
+    height: 44px;
   }
 
   .brand-sub {
@@ -231,25 +239,43 @@ function chooseLogo(choice) {
   }
 
   .app-main {
+    display: block;
     grid-template-columns: 1fr;
-    grid-template-rows: auto 1fr;
-    overflow-y: auto;
+    overflow: visible;
   }
 
   .preview-area {
-    padding: 16px;
-    min-height: 200px;
+    align-items: stretch;
+    padding: 10px;
+    min-height: 0;
+    overflow: visible;
   }
 
   .settings-sidebar {
+    display: block;
     border-left: none;
     border-top: 1px solid var(--color-border-light);
-    padding: 16px;
+    max-height: none;
+    overflow: visible;
+    padding: 12px;
   }
 
   .app-footer {
-    height: 34px;
+    height: 30px;
     font-size: 11px;
+  }
+
+  .app-shell.has-results .app-footer {
+    display: none;
+  }
+
+  .app-shell.has-results .settings-sidebar {
+    display: block;
+  }
+
+  .app-shell.has-results .preview-area {
+    align-items: center;
+    padding: 10px;
   }
 }
 

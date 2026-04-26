@@ -87,6 +87,16 @@
           >
             {{ t('action.download') }}
           </a-button>
+          <a-button
+            v-if="store.succeededTasks.length > 1"
+            size="small"
+            @click="store.downloadZip()"
+          >
+            {{ t('action.downloadAll') }}
+          </a-button>
+          <a-button size="small" @click="store.reselectFiles()">
+            {{ t('upload.reselect') }}
+          </a-button>
         </div>
       </div>
     </template>
@@ -321,25 +331,70 @@ function openFullscreen(src) {
 }
 
 @media (max-width: 768px) {
+  .preview-container {
+    justify-content: center;
+    min-height: 0;
+    height: auto;
+  }
+
   .compare-view {
-    flex-direction: column;
-    gap: 12px;
+    flex-direction: row;
+    align-items: stretch;
+    gap: 10px;
+    width: 100%;
+    flex: 0 1 auto;
+    height: clamp(220px, 42dvh, 360px);
     max-height: none;
-    overflow-y: auto;
+    min-height: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-snap-type: x mandatory;
+    padding: 0 2px 6px;
   }
 
   .compare-arrow {
-    transform: rotate(90deg);
+    display: none;
+  }
+
+  .compare-card {
+    flex: 0 0 84%;
+    height: 100%;
+    justify-content: center;
+    scroll-snap-align: center;
+  }
+
+  .compare-label {
+    flex-shrink: 0;
   }
 
   .compare-img {
-    max-height: 40vh;
+    max-height: calc(100% - 24px);
   }
 
   .action-bar {
-    flex-direction: column;
+    flex-shrink: 0;
     gap: 8px;
-    text-align: center;
+    padding: 7px 10px;
+    max-width: 100%;
+    align-items: flex-start;
+  }
+
+  .action-filename {
+    min-width: 0;
+  }
+
+  .action-buttons {
+    gap: 6px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .single-preview {
+    max-height: calc(100% - 32px);
+  }
+
+  .progress-card {
+    padding: 28px 30px;
   }
 }
 

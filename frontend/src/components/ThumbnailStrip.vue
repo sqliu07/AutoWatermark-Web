@@ -90,13 +90,13 @@ function onClickThumb(task) {
 
 @media (max-width: 768px) {
   .thumbnail-strip {
-    height: 72px;
-    padding: 8px 12px;
+    height: 56px;
+    padding: 6px 10px;
   }
 
   .thumb-item {
-    width: 52px;
-    height: 52px;
+    width: 44px;
+    height: 44px;
   }
 }
 

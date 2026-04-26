@@ -48,8 +48,11 @@ function triggerInput() {
 }
 
 function onSelect(e) {
-  const files = Array.from(e.target.files || [])
+  const files = Array.from(e.target.files || []).filter(f =>
+    /\.(jpe?g|png)$/i.test(f.name) || ['image/jpeg', 'image/png'].includes(f.type)
+  )
   if (files.length) store.addFiles(files)
+  e.target.value = ''
 }
 
 function onDrop(e) {

@@ -58,6 +58,13 @@ export const useAppStore = defineStore('app', () => {
     currentPreview.value = null
   }
 
+  function reselectFiles() {
+    clearFiles()
+    requestAnimationFrame(() => {
+      document.querySelector('.upload-zone input[type="file"]')?.click()
+    })
+  }
+
   function setPreview(task) {
     currentPreview.value = task
   }
@@ -211,6 +218,6 @@ export const useAppStore = defineStore('app', () => {
     burnAfterRead, logoPreference, isProcessing, tasks,
     currentPreview, completedCount, totalCount, allDone,
     succeededTasks, stylesLoaded, loadStyles, addFiles,
-    clearFiles, setPreview, processAll, processPendingLogoTasks, downloadZip,
+    clearFiles, reselectFiles, setPreview, processAll, processPendingLogoTasks, downloadZip,
   }
 })
