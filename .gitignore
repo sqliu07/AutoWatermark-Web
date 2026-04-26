@@ -3,6 +3,7 @@ upload/
 venv/
 .venv/
 .venvtest/
+.env.local
 experiments/
 logs/
 test/
@@ -15,7 +16,11 @@ tests/fixtures/*.webp
 tests/fixtures/*.tif
 tests/fixtures/*.tiff
 tests/fixtures/*.bmp
-scripts/
+scripts/*
+!scripts/__init__.py
+!scripts/generate_film_frame.py
+!scripts/run_tests.sh
+!scripts/start.sh
 scripts/__pycache__/
 node_modules/
 scripts/out.jpg

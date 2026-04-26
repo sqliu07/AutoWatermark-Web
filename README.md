@@ -134,8 +134,14 @@ supports_ultrahdr = true
     ```
 
 3.  **运行应用**
+    * **一键启动（自动创建虚拟环境并持久化下载密钥）**:
+        ```bash
+        ./scripts/start.sh
+        ```
+        首次运行会在 `.env.local` 写入 `DOWNLOAD_TOKEN_SECRET`，后续启动自动复用。
     * **开发模式**:
         ```bash
+        export DOWNLOAD_TOKEN_SECRET=replace-with-strong-secret
         python3 app.py
         ```
     * **生产模式**:
