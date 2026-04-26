@@ -58,7 +58,11 @@ else
   export DOWNLOAD_TOKEN_SECRET
 fi
 
+export FLASK_RUN_HOST="${FLASK_RUN_HOST:-127.0.0.1}"
+export FLASK_RUN_PORT="${FLASK_RUN_PORT:-5000}"
+export FLASK_DEBUG="${FLASK_DEBUG:-0}"
+
 mkdir -p "${UPLOAD_FOLDER:-${ROOT_DIR}/upload}" "${ROOT_DIR}/logs"
 
-echo "Starting AutoWatermark Web at http://127.0.0.1:5000"
+echo "Starting AutoWatermark Web at http://${FLASK_RUN_HOST}:${FLASK_RUN_PORT}"
 exec "${PYTHON}" app.py
