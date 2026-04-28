@@ -17,19 +17,22 @@ def test_background_process_logs_unexpected_watermark_detail(monkeypatch, caplog
 
     logger = logging.getLogger("tests.background_process")
 
+    from services.tasks import TaskPayload
+    payload = TaskPayload(
+        task_id=task_id,
+        state=state,
+        filepath=str(tmp_path / "sample.jpg"),
+        lang="zh",
+        watermark_type=5,
+        image_quality=85,
+        burn_after_read="0",
+        logo_preference=None,
+        style_config={},
+        logger=logger,
+    )
+
     with caplog.at_level(logging.ERROR, logger=logger.name):
-        background_process(
-            task_id,
-            state,
-            str(tmp_path / "sample.jpg"),
-            "zh",
-            5,
-            85,
-            "0",
-            None,
-            {},
-            logger,
-        )
+        background_process(payload)
 
     task = state.get_task(task_id)
     assert task["status"] == "failed"

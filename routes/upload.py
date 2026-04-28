@@ -7,6 +7,7 @@ from werkzeug.utils import secure_filename
 
 from constants import AppConstants
 from extensions import limiter
+from routes._utils import is_browser_request
 from services.download_token import verify_token
 from services.i18n import get_error_message, normalize_lang
 from services.tasks import (
@@ -21,10 +22,6 @@ from services.tasks import (
 from services.watermark_styles import get_default_style_id, is_style_enabled
 
 bp = Blueprint("upload", __name__)
-
-
-def _is_browser_request() -> bool:
-    return "text/html" in request.headers.get("Accept", "")
 
 
 @bp.route("/upload", methods=["GET"])
@@ -168,7 +165,7 @@ def confirm_logo_entry_redirect():
 
 @bp.route("/status/<task_id>", methods=["GET"])
 def get_task_status(task_id):
-    if _is_browser_request():
+    if is_browser_request():
         return redirect("/")
 
     state = current_app.extensions["state"]
@@ -195,7 +192,7 @@ def upload_file_served(filename):
 
     filename = secure_filename(filename)
 
-    is_browser = _is_browser_request()
+    is_browser = is_browser_request()
 
     # 签名校验：无 token 或校验失败则拒绝
     if not verify_token(filename, token, expires):
@@ -218,6 +215,7 @@ def upload_file_served(filename):
 
 
 @bp.route("/upload/<filename>/video")
+@limiter.limit(AppConstants.UPLOAD_RATE_LIMIT)
 def upload_motion_video(filename):
     """从 Motion Photo 文件中提取视频部分，返回 video/mp4。"""
     lang = normalize_lang(request.args.get("lang", "zh"))

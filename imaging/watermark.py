@@ -13,11 +13,12 @@ logger = get_logger("autowatermark.watermark")
 
 def generate_watermark_image(origin_image, logo_path, camera_info, shooting_info,
                              font_path_thin, font_path_bold, watermark_type=1,
-                             return_metadata=False, **kwargs):
-    style_config = kwargs.get("style_config")
-    style = kwargs.get("style")
-    font_path_regular = kwargs.get("font_path_regular", font_path_bold)
-    font_path_symbol = kwargs.get("font_path_symbol", font_path_thin)
+                             return_metadata=False, style_config=None, style=None,
+                             font_path_regular=None, font_path_symbol=None):
+    if font_path_regular is None:
+        font_path_regular = font_path_bold
+    if font_path_symbol is None:
+        font_path_symbol = font_path_thin
     if style_config is None:
         style_config = load_cached_watermark_styles(CommonConstants.WATERMARK_STYLE_CONFIG_PATH)
     if style is None:

@@ -11,6 +11,7 @@ from imaging import generate_watermark_image
 from imaging.renderer_film_frame import FilmFrameRenderer
 from media.ultrahdr import inject_xmp, parse_gcontainer_items_from_xmp
 from services.watermark_styles import get_style, load_watermark_styles
+from process_result import ProcessResult
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -136,7 +137,7 @@ def test_process_image_film_frame_style_uses_logo(tmp_path, monkeypatch):
         style_config=style_config,
     )
 
-    assert result is True
+    assert result.success is True
     assert output_path.exists()
     assert logo_calls
 
@@ -179,7 +180,7 @@ def test_process_image_preserves_exif_when_orientation_is_reset(tmp_path, monkey
         style_config=style_config,
     )
 
-    assert result is True
+    assert result.success is True
     assert output_path.exists()
 
 
@@ -233,7 +234,7 @@ def test_process_image_uses_exiftool_xiaomi_model_fallback(tmp_path, monkeypatch
         style_config=style_config,
     )
 
-    assert result is True
+    assert result.success is True
     assert output_path.exists()
     assert captured["camera_info"] == ["Xiaomi", "REDMI K90 Pro Max"]
     assert captured["shooting_info"] == ["23mm  ƒ/1.7  1/3395s  ISO64", "Unknown Date"]
@@ -298,7 +299,7 @@ def test_process_image_synthesizes_primary_xmp_for_gainmap_only_ultrahdr(tmp_pat
         style_config=style_config,
     )
 
-    assert result is True
+    assert result.success is True
     assert output_path.exists()
     output_bytes = output_path.read_bytes()
     primary_xmp_start = output_bytes.index(b"<x:xmpmeta")

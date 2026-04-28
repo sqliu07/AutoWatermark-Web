@@ -2,6 +2,13 @@ from PIL import Image, ImageDraw, ImageFont
 from constants import ImageConstants
 from imaging.image_ops import image_resize
 
+# 文字渲染相关常量
+FONT_PADDING_RATIO = 0.2       # 文字画布宽度额外留白比例
+TEXT_LINE_GAP_RATIO = 0.5      # 两行文字间距占字号比例
+RIGHT_BLOCK_SPACING_RATIO = 0.2  # 右侧元素间距占底栏高度比例
+RIGHT_BLOCK_LINE_WIDTH_RATIO = 0.02  # 竖线宽度占底栏高度比例
+RIGHT_BLOCK_LINE_HEIGHT_RATIO = 0.45  # 竖线高度占底栏高度比例
+
 
 def text_to_image(text, font_path, font_size, color):
     """
@@ -17,7 +24,7 @@ def text_to_image(text, font_path, font_size, color):
 
     bbox = font.getbbox(text)
     # 稍微加宽一点画布以免斜体被切
-    text_width = bbox[2] - bbox[0] + int(font_size * 0.2)
+    text_width = bbox[2] - bbox[0] + int(font_size * FONT_PADDING_RATIO)
 
     # 画布高度留足空间
     image = Image.new("RGBA", (text_width, int(line_height * 1.2)), (255, 255, 255, 0))
@@ -70,7 +77,7 @@ def text_to_image_with_symbol_font(text, font_path, font_size, color, symbol_fon
         bbox = segment_font.getbbox(segment_text)
         total_width += (bbox[2] - bbox[0])
 
-    total_width += int(font_size * 0.2)
+    total_width += int(font_size * FONT_PADDING_RATIO)
     image = Image.new("RGBA", (max(1, total_width), int(line_height * 1.2)), (255, 255, 255, 0))
     draw = ImageDraw.Draw(image)
 
@@ -95,7 +102,7 @@ def create_text_block(line1_text, line2_text, font_bold, font_thin, font_size):
     img2 = text_to_image(line2_text, font_thin, font_size, 'black')
 
     # 上下两行间距：字号的 50%
-    gap = int(font_size * 0.5)
+    gap = int(font_size * TEXT_LINE_GAP_RATIO)
 
     total_h = img1.height + gap + img2.height
     max_w = max(img1.width, img2.width)
@@ -119,10 +126,10 @@ def create_right_block(logo_path, text_block_img, footer_height, with_line=True,
     logo = image_resize(logo, logo_target_height)
 
     # 元素水平间距：底栏高度的 20%
-    spacing = int(footer_height * 0.2)
+    spacing = int(footer_height * RIGHT_BLOCK_SPACING_RATIO)
 
-    line_width = max(1, int(footer_height * 0.02))
-    line_height = int(footer_height * 0.45)
+    line_width = max(1, int(footer_height * RIGHT_BLOCK_LINE_WIDTH_RATIO))
+    line_height = int(footer_height * RIGHT_BLOCK_LINE_HEIGHT_RATIO)
 
     if with_line:
         total_width = logo.width + spacing + line_width + spacing + text_block_img.width
