@@ -111,10 +111,9 @@ function onLangChange(val) {
 
 const showLogoModal = ref(false)
 
-watch(() => store.tasks, (tasks) => {
-  const needsLogo = tasks.find(t => t.status === 'needs_logo')
-  showLogoModal.value = !!needsLogo
-}, { deep: true })
+watch(() => store.tasks.some(t => t.status === 'needs_logo'), (val) => {
+  showLogoModal.value = val
+})
 
 function chooseLogo(choice) {
   showLogoModal.value = false

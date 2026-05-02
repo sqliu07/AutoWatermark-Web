@@ -1,9 +1,9 @@
 import axios from 'axios'
 
-const http = axios.create({ baseURL: '/' })
+const http = axios.create({ baseURL: '/api' })
 
 export async function getStyles() {
-  const { data } = await http.get('/api/styles')
+  const { data } = await http.get('/styles')
   return data
 }
 
@@ -41,8 +41,8 @@ export async function downloadZip(filenames) {
 }
 
 export function buildMotionVideoUrl(imageUrl) {
-  // imageUrl: "/upload/xxx.jpg?token=...&expires=..."
-  // 视频端点: "/upload/xxx.jpg/video?token=...&expires=..."
+  // imageUrl: "/api/upload/xxx.jpg?token=...&expires=..."
+  // 视频端点: "/api/upload/xxx.jpg/video?token=...&expires=..."
   const [path, query] = imageUrl.split('?')
   return `${path}/video${query ? '?' + query : ''}`
 }

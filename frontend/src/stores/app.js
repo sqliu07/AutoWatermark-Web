@@ -166,10 +166,16 @@ export const useAppStore = defineStore('app', () => {
   }
 
   async function pollTask(task) {
-    const interval = tasks.value.length > 1 ? 1000 : 200
-    while (true) {
+    const baseInterval = tasks.value.length > 1 ? 1000 : 200
+    const maxRetries = 3
+    const maxDuration = 300000 // 5 分钟超时
+    const startTime = Date.now()
+    let retries = 0
+
+    while (Date.now() - startTime < maxDuration) {
       try {
         const data = await api.getTaskStatus(task.id)
+        retries = 0 // 成功则重置重试计数
         task.progress = Math.max(task.progress, data.progress || 0)
         task.status = data.status
 
@@ -187,13 +193,22 @@ export const useAppStore = defineStore('app', () => {
           return
         }
       } catch {
-        task.status = 'failed'
-        task.progress = 1
-        task.error = 'Connection lost'
-        return
+        retries++
+        if (retries >= maxRetries) {
+          task.status = 'failed'
+          task.progress = 1
+          task.error = 'Connection lost'
+          return
+        }
       }
-      await new Promise(r => setTimeout(r, interval))
+      // 指数退避：baseInterval, baseInterval*2, baseInterval*4...
+      const delay = baseInterval * Math.pow(2, retries - 1)
+      await new Promise(r => setTimeout(r, delay))
     }
+    // 超时
+    task.status = 'failed'
+    task.progress = 1
+    task.error = 'Processing timeout'
   }
 
   async function downloadZip() {
