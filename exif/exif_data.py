@@ -152,7 +152,7 @@ def get_exif_data_with_exiftool(image_path: str) -> Optional[dict]:
     }
 
 
-def convert_to_int(value) -> float:
+def convert_to_number(value) -> float:
     if isinstance(value, tuple):
         if len(value) >= 2:
             numerator = value[0]
@@ -227,7 +227,7 @@ def get_exif_table(image_path: str, exif_dict: Optional[dict] = None) -> Tuple[O
         # Some photos don't have focal length in 35mm film
         if focal_length_35 == (0, 1):
             focal_length = exif_data.get(piexif.ExifIFD.FocalLength, (0, 1))
-            focal_length_35 = convert_to_int(focal_length)
+            focal_length_35 = convert_to_number(focal_length)
 
         f_number = exif_data.get(piexif.ExifIFD.FNumber, (0, 1))
         exposure_time = exif_data.get(piexif.ExifIFD.ExposureTime, (0, 1))

@@ -78,7 +78,7 @@ def start_background_cleaner(app, state, logger) -> threading.Thread:
 
             # 2) Stale zip files in temp dir
             temp_dir = tempfile.gettempdir()
-            zip_pattern = os.path.join(temp_dir, "Packed_Watermark_Images_*.zip")
+            zip_pattern = os.path.join(temp_dir, "watermark_*.zip")
             for zip_file in glob.glob(zip_pattern):
                 try:
                     if current_time - os.path.getmtime(zip_file) > AppConstants.ZIP_RETENTION_SECONDS:

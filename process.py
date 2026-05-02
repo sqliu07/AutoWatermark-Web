@@ -31,7 +31,7 @@ from media.ultrahdr import (
 from media.motion_photo import prepare_motion_photo
 from process_result import ProcessResult
 from logging_utils import get_logger
-from services.i18n import get_error_message as get_message
+from services.i18n import get_error_message
 from services.watermark_styles import get_style, load_cached_watermark_styles
 
 
@@ -61,20 +61,20 @@ class _ProcessingState:
     watermark_type: int
     image_quality: int
     logo_preference: str
-    motion_session: object = None
-    ultrahdr_parts: object = None
-    image: object = None       # PIL Image
+    motion_session: Optional[object] = None
+    ultrahdr_parts: Optional[object] = None
+    image: Optional[Image.Image] = None
     exif_bytes: bytes = b''
-    exif_dict: dict = None
-    fallback_metadata: dict = None
+    exif_dict: Optional[dict] = None
+    fallback_metadata: Optional[dict] = None
     using_fallback_metadata: bool = False
-    manufacturer: str = None
-    camera_model: str = None
-    logo_path: str = None
-    camera_info: str = None
-    shooting_info: str = None
-    new_image: object = None   # PIL Image
-    watermark_metadata: dict = None
+    manufacturer: Optional[str] = None
+    camera_model: Optional[str] = None
+    logo_path: Optional[str] = None
+    camera_info: Optional[str] = None
+    shooting_info: Optional[str] = None
+    new_image: Optional[Image.Image] = None
+    watermark_metadata: Optional[dict] = None
 
 
 def _detect_format(state: _ProcessingState) -> None:
@@ -89,6 +89,7 @@ def _detect_format(state: _ProcessingState) -> None:
         data_bytes = Path(state.working_image_path).read_bytes()
         state.ultrahdr_parts = split_ultrahdr(data_bytes)
     except Exception:
+        logger.debug("Ultra HDR detection failed for %s, treating as SDR", state.working_image_path, exc_info=True)
         state.ultrahdr_parts = None
 
     if state.ultrahdr_parts is not None and (
@@ -125,6 +126,7 @@ def _extract_metadata(state: _ProcessingState) -> None:
         try:
             state.exif_dict = piexif.load(state.exif_bytes)
         except Exception:
+            logger.debug("piexif.load failed for %s, falling back to exiftool", state.working_image_path, exc_info=True)
             state.exif_bytes = b''
     else:
         state.exif_bytes = b''
@@ -297,7 +299,6 @@ def process_image(
     lang: str = 'zh',
     watermark_type: int = 1,
     image_quality: int = 95,
-    notify: bool = False,
     preview: bool = False,
     logo_preference: str = "xiaomi",
     progress_callback: Optional[Callable[[float, Optional[str]], None]] = None,
@@ -311,8 +312,8 @@ def process_image(
         lang (str, optional): The language for error messages. Defaults to 'zh'.
         watermark_type (int, optional): The type of watermark to add. Defaults to 1.
         image_quality (int, optional): The quality of the output image. Defaults to 95.
-        notify (bool, optional): Whether to send a notification. Defaults to False.
         preview (bool, optional): Whether to return the image object for preview. Defaults to False.
+        logo_preference (str, optional): Logo preference for Xiaomi devices. Defaults to "xiaomi".
         progress_callback (callable, optional): Callback for progress updates.
         style_config (dict, optional): Loaded watermark style config.
 
@@ -388,11 +389,10 @@ def main():
         logger.error("Error: watermark_type and image_quality must be integers.")
         sys.exit(1)
 
-    notify = False # Or get from args if needed
     try:
-        process_image(image_path, lang, watermark_type, image_quality, notify)
+        process_image(image_path, lang, watermark_type, image_quality)
     except WatermarkError as err:
-        message = get_message(err.get_message_key(), lang) or err.get_detail() or err.get_message_key()
+        message = get_error_message(err.get_message_key(), lang) or err.get_detail() or err.get_message_key()
         logger.error(message)
         sys.exit(1)
     except Exception as exc:

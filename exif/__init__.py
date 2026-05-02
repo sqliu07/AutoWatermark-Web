@@ -7,7 +7,7 @@ from exif.exif_data import (
     get_exif_data,
     get_exif_data_with_exiftool,
     get_exif_table,
-    convert_to_int,
+    convert_to_number,
 )
 
 __all__ = [
@@ -17,5 +17,5 @@ __all__ = [
     "get_exif_data",
     "get_exif_data_with_exiftool",
     "get_exif_table",
-    "convert_to_int",
+    "convert_to_number",
 ]

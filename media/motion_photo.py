@@ -8,13 +8,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
+from logging_utils import get_logger
+
+_logger = get_logger("autowatermark.motion_photo")
+
 __all__ = [
-    "_RawMotionComponents",
     "MotionPhotoSession",
     "prepare_motion_photo",
-    "_split_motion_photo",
-    "_mp4_looks_valid",
-    "_find_mp4_start_by_ftyp",
     "find_motion_video_start",
 ]
 
@@ -140,8 +140,8 @@ class MotionPhotoSession:
                             content_box=content_box,
                         )
             except Exception:
-                # If anything fails, keep original gainmap as-is (HDR may still work but border can look odd)
-                pass
+                # gainmap 扩展失败时保留原始 gainmap（HDR 仍可用，但边框可能不匹配）
+                _logger.debug("Ultra HDR gainmap expansion failed, keeping original", exc_info=True)
 
             # Two-pass: primary length depends on injected XMP size
             xmp0 = _prepare_xmp_ultrahdr_motion(
@@ -214,9 +214,10 @@ def prepare_motion_photo(image_path: str | Path) -> Optional[MotionPhotoSession]
                 finally:
                     im.close()
             except Exception:
+                _logger.debug("Failed to read Ultra HDR primary image size", exc_info=True)
                 ultrahdr_primary_size = None
     except Exception:
-        pass
+        _logger.debug("Ultra HDR detection failed for motion photo, treating as standard", exc_info=True)
 
     still_path = Path(workspace.name) / f"{path.stem}_motion_still.jpg"
     still_path.write_bytes(still_bytes)
