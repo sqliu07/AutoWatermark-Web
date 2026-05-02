@@ -29,3 +29,5 @@ clear_his.sh
 AGENTS.md
 .codex
 .omx/
+docs/
+.playwright-mcp/
