@@ -256,7 +256,7 @@ def test_process_image_with_real_photo(tmp_path):
         image_quality=85,
         logo_preference="xiaomi",
     )
-    assert result is True
+    assert result.success is True
 
     output_path = temp_image.with_name(f"{temp_image.stem}_watermark{temp_image.suffix}")
     assert output_path.exists()
@@ -323,7 +323,7 @@ def test_process_motion_photo_with_real_photo(tmp_path):
         image_quality=85,
         logo_preference="xiaomi",
     )
-    assert result is True
+    assert result.success is True
 
     output_path = temp_image.with_name(f"{temp_image.stem}_watermark{temp_image.suffix}")
     assert output_path.exists()
@@ -353,7 +353,7 @@ def test_process_ultrahdr_photo_with_real_asset(tmp_path):
         image_quality=85,
         logo_preference="xiaomi",
     )
-    assert result is True
+    assert result.success is True
 
     output_path = temp_image.with_name(f"{temp_image.stem}_watermark{temp_image.suffix}")
     assert output_path.exists()
