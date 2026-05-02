@@ -1,28 +1,35 @@
 :root {
-  --color-bg: #f7f6f3;
+  --color-bg: #f5f5f7;
   --color-surface: #ffffff;
-  --color-surface-hover: #fafaf8;
-  --color-border: #e8e5df;
-  --color-border-light: #f0ede8;
-  --color-text: #1a1a1a;
-  --color-text-secondary: #6b6860;
-  --color-text-tertiary: #9e9a92;
-  --color-accent: #2c2c2c;
-  --color-accent-hover: #404040;
-  --color-success: #3d8c40;
-  --color-error: #c44040;
-  --color-highlight: #d4a34a;
+  --color-surface-hover: #f9f9fb;
+  --color-border: #d2d2d7;
+  --color-border-light: #e8e8ed;
+  --color-text: #1d1d1f;
+  --color-text-secondary: #6e6e73;
+  --color-text-tertiary: #86868b;
+  --color-accent: #0071e3;
+  --color-accent-hover: #0077ed;
+  --color-accent-bg: rgba(0, 113, 227, 0.08);
+  --color-success: #30d158;
+  --color-error: #ff453a;
+  --color-highlight: #ff9f0a;
 
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 16px;
+  --radius-sm: 12px;
+  --radius-md: 18px;
+  --radius-lg: 22px;
 
-  --shadow-sm: 0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.03);
-  --shadow-md: 0 4px 16px rgba(0,0,0,0.06), 0 1px 4px rgba(0,0,0,0.04);
-  --shadow-lg: 0 12px 40px rgba(0,0,0,0.08);
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.02);
+  --shadow-lg: 0 12px 40px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.02);
 
   --font-display: 'Plus Jakarta Sans', 'Noto Sans SC', sans-serif;
   --font-body: 'Plus Jakarta Sans', 'Noto Sans SC', sans-serif;
+
+  --ease-apple: cubic-bezier(0.25, 0.1, 0.25, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --duration-fast: 180ms;
+  --duration-normal: 280ms;
+  --duration-slow: 400ms;
 }
 
 * {
@@ -37,6 +44,45 @@ body {
   color: var(--color-text);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  font-size: 16px;
+  line-height: 1.47;
+  letter-spacing: -0.022em;
+}
+
+/* Ant Design 全局样式覆盖 */
+.ant-btn {
+  border-radius: var(--radius-sm) !important;
+  font-weight: 500 !important;
+  letter-spacing: -0.1px !important;
+  transition: all var(--duration-fast) var(--ease-apple) !important;
+}
+
+.ant-btn:hover {
+  transform: translateY(-0.5px);
+}
+
+.ant-segmented {
+  border-radius: 10px !important;
+  background: var(--color-bg) !important;
+}
+
+.ant-segmented-item-selected {
+  border-radius: 8px !important;
+  box-shadow: var(--shadow-sm) !important;
+}
+
+.ant-switch {
+  transition: all var(--duration-fast) var(--ease-apple) !important;
+}
+
+.ant-modal {
+  border-radius: var(--radius-lg) !important;
+  overflow: hidden;
+}
+
+.ant-modal-content {
+  border-radius: var(--radius-lg) !important;
+  box-shadow: var(--shadow-lg) !important;
 }
 
 ::-webkit-scrollbar {
@@ -53,7 +99,7 @@ body {
 
 .fade-enter-active,
 .fade-leave-active {
-  transition: opacity 0.25s ease;
+  transition: opacity var(--duration-normal) var(--ease-apple);
 }
 .fade-enter-from,
 .fade-leave-to {
@@ -61,10 +107,10 @@ body {
 }
 
 .slide-up-enter-active {
-  transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: all var(--duration-slow) var(--ease-spring);
 }
 .slide-up-leave-active {
-  transition: all 0.2s ease;
+  transition: all var(--duration-fast) var(--ease-apple);
 }
 .slide-up-enter-from {
   opacity: 0;

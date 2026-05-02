@@ -140,7 +140,7 @@
             :percent="progressPercent"
             :size="96"
             :stroke-width="6"
-            :stroke-color="{ '0%': '#2c2c2c', '100%': '#6b6860' }"
+            :stroke-color="{ '0%': '#0071e3', '100%': '#0077ed' }"
             :format="() => `${progressPercent}%`"
           />
 
@@ -411,7 +411,7 @@ function openFullscreen(src) {
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.6px;
+  letter-spacing: 0.5px;
   color: var(--color-text-tertiary);
 }
 
@@ -422,7 +422,7 @@ function openFullscreen(src) {
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow-sm);
   cursor: zoom-in;
-  transition: box-shadow 0.2s;
+  transition: box-shadow var(--duration-normal) var(--ease-apple);
 }
 
 .compare-img:hover {
@@ -437,11 +437,11 @@ function openFullscreen(src) {
 .motion-badge {
   display: inline-block;
   font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.5px;
-  padding: 1px 5px;
-  border-radius: 3px;
-  background: #e8453c;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: #ff453a;
   color: #fff;
   vertical-align: middle;
   margin-left: 6px;
@@ -460,10 +460,12 @@ function openFullscreen(src) {
   justify-content: space-between;
   width: 100%;
   max-width: 720px;
-  padding: 8px 16px;
-  background: var(--color-surface);
+  padding: 10px 16px;
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   border-radius: var(--radius-sm);
-  border: 1px solid var(--color-border-light);
+  border: 0.5px solid var(--color-border-light);
 }
 
 .action-filename {
@@ -473,6 +475,7 @@ function openFullscreen(src) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  letter-spacing: -0.2px;
 }
 
 .action-buttons {
@@ -497,6 +500,7 @@ function openFullscreen(src) {
   font-size: 13px;
   color: var(--color-text-secondary);
   font-weight: 500;
+  letter-spacing: -0.2px;
 }
 
 /* --- 错误视图 --- */
@@ -511,11 +515,13 @@ function openFullscreen(src) {
   font-size: 14px;
   font-weight: 600;
   color: var(--color-text);
+  letter-spacing: -0.2px;
 }
 
 .error-msg {
   font-size: 13px;
   color: var(--color-error);
+  letter-spacing: -0.1px;
 }
 
 /* --- 进度覆盖 --- */
@@ -526,8 +532,9 @@ function openFullscreen(src) {
   align-items: center;
   justify-content: center;
   overflow: auto;
-  background: rgba(247, 246, 243, 0.88);
-  backdrop-filter: blur(6px);
+  background: rgba(245, 245, 247, 0.85);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
   border-radius: var(--radius-md);
   z-index: 10;
 }
@@ -544,11 +551,11 @@ function openFullscreen(src) {
   min-width: 260px;
   max-width: 90%;
   overflow: visible;
-  animation: progress-enter 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: progress-enter var(--duration-slow) var(--ease-spring);
 }
 
 @keyframes progress-enter {
-  from { opacity: 0; transform: scale(0.95) translateY(8px); }
+  from { opacity: 0; transform: scale(0.92) translateY(12px); }
   to { opacity: 1; transform: scale(1) translateY(0); }
 }
 
@@ -570,6 +577,7 @@ function openFullscreen(src) {
   font-size: 14px;
   font-weight: 600;
   color: var(--color-text);
+  letter-spacing: -0.2px;
 }
 
 .progress-filename {
@@ -581,6 +589,7 @@ function openFullscreen(src) {
   text-overflow: ellipsis;
   white-space: nowrap;
   padding-bottom: 2px;
+  letter-spacing: -0.1px;
 }
 
 .progress-list {
@@ -596,7 +605,7 @@ function openFullscreen(src) {
   height: 8px;
   border-radius: 50%;
   background: var(--color-border);
-  transition: all 0.3s ease;
+  transition: all var(--duration-normal) var(--ease-apple);
 }
 
 .progress-dot.done {
@@ -609,12 +618,12 @@ function openFullscreen(src) {
 
 .progress-dot.active {
   background: var(--color-accent);
-  animation: dot-pulse 1s ease-in-out infinite;
+  animation: dot-pulse 1.2s var(--ease-apple) infinite;
 }
 
 @keyframes dot-pulse {
   0%, 100% { transform: scale(1); opacity: 1; }
-  50% { transform: scale(1.4); opacity: 0.7; }
+  50% { transform: scale(1.3); opacity: 0.7; }
 }
 
 /* --- 全屏预览 --- */
@@ -625,9 +634,16 @@ function openFullscreen(src) {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.75);
-  backdrop-filter: blur(8px);
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(20px) saturate(120%);
+  -webkit-backdrop-filter: blur(20px) saturate(120%);
   cursor: zoom-out;
+  animation: fullscreen-enter var(--duration-normal) var(--ease-apple);
+}
+
+@keyframes fullscreen-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .fullscreen-img {
@@ -636,14 +652,20 @@ function openFullscreen(src) {
   object-fit: contain;
   border-radius: var(--radius-sm);
   cursor: default;
+  animation: fullscreen-img-enter var(--duration-slow) var(--ease-spring);
+}
+
+@keyframes fullscreen-img-enter {
+  from { opacity: 0; transform: scale(0.94); }
+  to { opacity: 1; transform: scale(1); }
 }
 
 .fullscreen-close {
   position: absolute;
   top: 16px;
   right: 20px;
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   border: none;
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.15);
@@ -652,7 +674,7 @@ function openFullscreen(src) {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.15s;
+  transition: background var(--duration-fast) var(--ease-apple);
 }
 
 .fullscreen-close:hover {

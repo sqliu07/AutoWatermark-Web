@@ -108,22 +108,35 @@ const qualityOptions = computed(() => [
 }
 
 .section {
-  padding-bottom: 20px;
+  padding-bottom: 24px;
 }
 
 .section-title {
   font-size: 12px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.6px;
+  letter-spacing: 0.8px;
   color: var(--color-text-tertiary);
-  margin-bottom: 12px;
+  margin-bottom: 16px;
+  position: relative;
+  padding-left: 12px;
+}
+
+.section-title::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 2px;
+  bottom: 2px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--color-accent);
 }
 
 .section-divider {
-  height: 1px;
-  background: var(--color-border-light);
-  margin: 4px 0 20px;
+  height: 0.5px;
+  background: rgba(0, 0, 0, 0.06);
+  margin: 4px 0 24px;
 }
 
 .toggle-row {
@@ -137,34 +150,33 @@ const qualityOptions = computed(() => [
   font-size: 14px;
   font-weight: 500;
   color: var(--color-text);
+  letter-spacing: -0.2px;
 }
 
 .toggle-desc {
   font-size: 12px;
   color: var(--color-text-tertiary);
-  margin-top: 2px;
+  margin-top: 3px;
+  letter-spacing: -0.1px;
 }
 
 .actions {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
 .process-btn {
-  background: var(--color-accent) !important;
-  border-color: var(--color-accent) !important;
-  color: #fff !important;
   font-weight: 600;
-  letter-spacing: 0.3px;
+  letter-spacing: -0.2px;
+  transition: all var(--duration-fast) var(--ease-apple) !important;
 }
 .process-btn:hover:not(:disabled) {
-  background: var(--color-accent-hover) !important;
-  border-color: var(--color-accent-hover) !important;
+  transform: scale(1.01);
 }
 .process-btn:disabled {
-  background: var(--color-border) !important;
-  border-color: var(--color-border) !important;
+  background: var(--color-border-light) !important;
+  border-color: var(--color-border-light) !important;
   color: var(--color-text-tertiary) !important;
 }
 
@@ -178,8 +190,8 @@ const qualityOptions = computed(() => [
   align-items: center;
   justify-content: space-between;
   border-radius: var(--radius-sm);
-  border: 1px solid var(--color-border-light);
-  padding: 10px 12px;
+  border: 0.5px solid var(--color-border-light);
+  padding: 10px 14px;
   background: var(--color-surface-hover);
 }
 
@@ -187,11 +199,12 @@ const qualityOptions = computed(() => [
   font-size: 13px;
   font-weight: 600;
   color: var(--color-text);
+  letter-spacing: -0.2px;
 }
 
 .done-count {
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .done-ok .done-count {

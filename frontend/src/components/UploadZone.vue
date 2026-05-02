@@ -17,10 +17,10 @@
     />
 
     <div class="upload-icon">
-      <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
-        <rect x="4" y="8" width="40" height="32" rx="4" stroke="currentColor" stroke-width="2" />
-        <circle cx="16" cy="22" r="4" stroke="currentColor" stroke-width="2" />
-        <path d="M4 32 L16 24 L24 30 L34 20 L44 28" stroke="currentColor" stroke-width="2" fill="none" />
+      <svg width="56" height="56" viewBox="0 0 48 48" fill="none">
+        <rect x="4" y="8" width="40" height="32" rx="4" stroke="currentColor" stroke-width="1.5" />
+        <circle cx="16" cy="22" r="4" stroke="currentColor" stroke-width="1.5" />
+        <path d="M4 32 L16 24 L24 30 L34 20 L44 28" stroke="currentColor" stroke-width="1.5" fill="none" />
       </svg>
     </div>
 
@@ -70,20 +70,20 @@ function onDrop(e) {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 14px;
+  gap: 16px;
   width: 100%;
-  max-width: 520px;
-  padding: 64px 40px;
-  border: 2px dashed var(--color-border);
+  max-width: 540px;
+  padding: 72px 48px 48px;
+  border: 1.5px dashed var(--color-border);
   border-radius: var(--radius-lg);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all var(--duration-normal) var(--ease-apple);
   background: var(--color-surface);
 }
 
 @media (max-width: 768px) {
   .upload-zone {
-    padding: 32px 20px;
+    padding: 40px 24px 32px;
     max-width: 100%;
   }
 }
@@ -91,35 +91,38 @@ function onDrop(e) {
 .upload-zone:hover,
 .upload-zone.dragging {
   border-color: var(--color-accent);
-  background: var(--color-surface-hover);
-  box-shadow: var(--shadow-md);
+  border-style: solid;
+  background: var(--color-accent-bg);
+  box-shadow: 0 0 0 4px rgba(0, 113, 227, 0.06);
 }
 
 .upload-icon {
   color: var(--color-text-tertiary);
-  transition: color 0.2s;
+  transition: all var(--duration-normal) var(--ease-spring);
 }
 
 .upload-zone:hover .upload-icon,
 .upload-zone.dragging .upload-icon {
   color: var(--color-accent);
+  transform: scale(1.06);
 }
 
 .upload-text {
-  font-size: 15px;
-  color: var(--color-text-secondary);
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--color-text);
   text-align: center;
+  letter-spacing: -0.2px;
 }
 
 .upload-link {
   color: var(--color-accent);
   font-weight: 600;
-  text-decoration: underline;
-  text-underline-offset: 2px;
 }
 
 .upload-formats {
   font-size: 12px;
   color: var(--color-text-tertiary);
+  letter-spacing: -0.05px;
 }
 </style>

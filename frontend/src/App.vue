@@ -1,5 +1,5 @@
 <template>
-  <a-config-provider :locale="antLocale">
+  <a-config-provider :locale="antLocale" :theme="antTheme">
     <div class="app-shell" :class="{ 'has-results': store.tasks.length > 0 }">
       <!-- 顶栏 -->
       <header class="app-header">
@@ -104,6 +104,16 @@ const startYear = 2024
 const currentYear = new Date().getFullYear()
 const copyrightYears = currentYear === startYear ? `${startYear}` : `${startYear}-${currentYear}`
 const antLocale = computed(() => currentLang.value === 'zh' ? zhCN : enUS)
+const antTheme = computed(() => ({
+  token: {
+    colorPrimary: '#0071e3',
+    colorSuccess: '#30d158',
+    colorError: '#ff453a',
+    colorWarning: '#ff9f0a',
+    borderRadius: 12,
+    fontFamily: "'Plus Jakarta Sans', 'Noto Sans SC', sans-serif",
+  },
+}))
 
 function onLangChange(val) {
   setLanguage(val)
@@ -134,31 +144,38 @@ function chooseLogo(choice) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 28px;
+  padding: 0 40px;
   height: 56px;
-  background: var(--color-surface);
-  border-bottom: 1px solid var(--color-border-light);
+  background: rgba(255, 255, 255, 0.78);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border-bottom: 0.5px solid rgba(0, 0, 0, 0.06);
   flex-shrink: 0;
 }
 
 .header-left {
   display: flex;
   align-items: baseline;
-  gap: 12px;
+  gap: 10px;
 }
 
 .brand {
   font-family: var(--font-display);
   font-size: 18px;
   font-weight: 700;
-  letter-spacing: -0.3px;
+  letter-spacing: -0.5px;
   color: var(--color-text);
+  background: linear-gradient(135deg, var(--color-text) 0%, #424245 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 .brand-sub {
-  font-size: 13px;
+  font-size: 12px;
   color: var(--color-text-tertiary);
   font-weight: 400;
+  letter-spacing: -0.08px;
 }
 
 /* 桌面端：左右分栏 */
@@ -180,22 +197,25 @@ function chooseLogo(choice) {
 
 .settings-sidebar {
   background: var(--color-surface);
-  border-left: 1px solid var(--color-border-light);
+  border-left: 0.5px solid rgba(0, 0, 0, 0.06);
   overflow-y: auto;
-  padding: 24px 20px;
+  padding: 32px 24px;
 }
 
 .app-footer {
-  height: 38px;
+  height: 40px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  border-top: 1px solid var(--color-border-light);
-  background: var(--color-surface);
-  font-size: 12px;
+  border-top: 0.5px solid rgba(0, 0, 0, 0.06);
+  background: rgba(255, 255, 255, 0.78);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  font-size: 11px;
   color: var(--color-text-tertiary);
+  letter-spacing: -0.06px;
 }
 
 .footer-dot {
@@ -203,11 +223,12 @@ function chooseLogo(choice) {
 }
 
 .footer-link {
-  color: var(--color-text-secondary);
+  color: var(--color-text-tertiary);
   text-decoration: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  transition: color var(--duration-fast) var(--ease-apple);
 }
 
 .footer-link:hover {
@@ -230,7 +251,7 @@ function chooseLogo(choice) {
 
   .app-header {
     padding: 0 16px;
-    height: 44px;
+    height: 48px;
   }
 
   .brand-sub {
@@ -279,9 +300,10 @@ function chooseLogo(choice) {
 }
 
 .logo-desc {
-  margin-bottom: 16px;
+  margin-bottom: 20px;
   color: var(--color-text-secondary);
   font-size: 14px;
+  line-height: 1.5;
 }
 
 .logo-choices {

@@ -83,11 +83,13 @@ function onClickThumb(task) {
 
 <style scoped>
 .thumbnail-strip {
-  height: 88px;
-  background: var(--color-surface);
-  border-top: 1px solid var(--color-border-light);
+  height: 92px;
+  background: rgba(255, 255, 255, 0.78);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border-top: 0.5px solid rgba(0, 0, 0, 0.06);
   flex-shrink: 0;
-  padding: 10px 20px;
+  padding: 12px 32px;
 }
 
 @media (max-width: 768px) {
@@ -104,7 +106,7 @@ function onClickThumb(task) {
 
 .strip-scroll {
   display: flex;
-  gap: 8px;
+  gap: 10px;
   overflow-x: auto;
   height: 100%;
   align-items: center;
@@ -112,25 +114,26 @@ function onClickThumb(task) {
 
 .thumb-item {
   position: relative;
-  width: 64px;
-  height: 64px;
+  width: 68px;
+  height: 68px;
   border-radius: var(--radius-sm);
   overflow: hidden;
   cursor: pointer;
   flex-shrink: 0;
-  border: 2px solid transparent;
-  transition: all 0.15s ease;
+  border: 2.5px solid transparent;
+  transition: all var(--duration-fast) var(--ease-apple);
   background: var(--color-bg);
+  box-shadow: var(--shadow-sm);
 }
 
 .thumb-item:hover {
-  border-color: var(--color-border);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
 }
 
 .thumb-item.active {
   border-color: var(--color-accent);
-  box-shadow: 0 0 0 1px var(--color-accent);
+  box-shadow: 0 0 0 2.5px var(--color-accent), var(--shadow-md);
 }
 
 .thumb-item.succeeded {
@@ -153,7 +156,9 @@ function onClickThumb(task) {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(255,255,255,0.7);
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
 }
 
 .thumb-badge.failed {
@@ -178,14 +183,16 @@ function onClickThumb(task) {
   right: 2px;
   width: 22px;
   height: 22px;
-  border-radius: 4px;
-  background: rgba(255,255,255,0.9);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   color: var(--color-text);
   display: flex;
   align-items: center;
   justify-content: center;
   opacity: 0;
-  transition: opacity 0.15s;
+  transition: opacity var(--duration-fast) var(--ease-apple);
 }
 
 .thumb-item:hover .thumb-download {

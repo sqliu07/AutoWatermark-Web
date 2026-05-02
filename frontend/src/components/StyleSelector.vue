@@ -37,7 +37,7 @@ function styleName(style) {
 .style-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 10px;
+  gap: 12px;
 }
 
 @media (max-width: 768px) {
@@ -50,29 +50,43 @@ function styleName(style) {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
-  padding: 6px 6px 8px;
-  border: 2px solid var(--color-border-light);
+  gap: 8px;
+  padding: 8px 8px 10px;
+  border: 1.5px solid transparent;
   border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--duration-fast) var(--ease-apple);
   background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+  position: relative;
 }
 
 .style-card:hover {
-  border-color: var(--color-border);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
 }
 
 .style-card.active {
   border-color: var(--color-accent);
-  background: var(--color-surface-hover);
+  background: var(--color-accent-bg);
+  box-shadow: 0 0 0 2px var(--color-accent), var(--shadow-md);
+}
+
+.style-card.active::after {
+  content: '';
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-accent);
 }
 
 .style-preview {
   width: 100%;
   aspect-ratio: 4/3;
-  border-radius: 4px;
+  border-radius: 8px;
   overflow: hidden;
   background: var(--color-bg);
 }
@@ -81,13 +95,14 @@ function styleName(style) {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  opacity: 0.85;
-  transition: opacity 0.15s;
+  opacity: 0.88;
+  transition: all var(--duration-normal) var(--ease-apple);
 }
 
 .style-card:hover .style-img,
 .style-card.active .style-img {
   opacity: 1;
+  transform: scale(1.03);
 }
 
 .style-placeholder {
@@ -96,19 +111,20 @@ function styleName(style) {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 700;
   color: var(--color-text-tertiary);
 }
 
 .style-name {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--color-text-secondary);
-  letter-spacing: 0.3px;
+  letter-spacing: -0.2px;
 }
 
 .style-card.active .style-name {
-  color: var(--color-text);
+  color: var(--color-accent);
+  font-weight: 700;
 }
 </style>
