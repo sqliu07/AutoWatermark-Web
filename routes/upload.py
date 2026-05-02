@@ -11,6 +11,7 @@ from routes._utils import is_browser_request
 from services.download_token import verify_token
 from services.i18n import get_error_message, normalize_lang
 from services.tasks import (
+    TaskPayload,
     allowed_file,
     cleanup_old_tasks,
     create_task,
@@ -97,17 +98,18 @@ def upload_file():
                 return jsonify({"needs_logo_choice": True, "task_id": task_id}), 200
             logo_preference = normalized_preference
 
-        task_id = submit_task(
-            state,
-            filepath,
-            lang,
-            watermark_type_int,
-            image_quality_int,
-            burn_after_read,
-            logo_preference,
-            style_config,
-            current_app.logger,
-        )
+        task_id = submit_task(TaskPayload(
+            task_id="",
+            state=state,
+            filepath=filepath,
+            lang=lang,
+            watermark_type=watermark_type_int,
+            image_quality=image_quality_int,
+            burn_after_read=burn_after_read,
+            logo_preference=logo_preference,
+            style_config=style_config,
+            logger=current_app.logger,
+        ))
 
         return jsonify({"task_id": task_id}), 202
 
@@ -142,18 +144,18 @@ def confirm_logo_choice():
     if not isinstance(watermark_type, int) or not is_style_enabled(style_config, watermark_type):
         return jsonify(error=get_error_message("unexpected_error", task.get("lang", "zh"))), 400
 
-    submit_existing_task(
-        task_id,
-        state,
-        filepath,
-        task.get("lang", "zh"),
-        watermark_type,
-        int(task.get("image_quality") or 85),
-        str(task.get("burn_after_read") or "0"),
-        logo_preference,
-        style_config,
-        current_app.logger,
-    )
+    submit_existing_task(task_id, TaskPayload(
+        task_id=task_id,
+        state=state,
+        filepath=filepath,
+        lang=task.get("lang", "zh"),
+        watermark_type=watermark_type,
+        image_quality=int(task.get("image_quality") or 85),
+        burn_after_read=str(task.get("burn_after_read") or "0"),
+        logo_preference=logo_preference,
+        style_config=style_config,
+        logger=current_app.logger,
+    ))
 
     return jsonify({"task_id": task_id}), 202
 

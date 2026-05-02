@@ -13,7 +13,7 @@ from exif import get_exif_data_with_exiftool, get_manufacturer
 from process import process_image
 from process_result import ProcessResult
 from services.download_token import build_signed_url
-from services.i18n import get_common_message
+from services.i18n import get_error_message
 
 
 @dataclass
@@ -41,7 +41,7 @@ def cleanup_old_tasks(state) -> None:
     state.cleanup_old_tasks(current_time=time.time())
 
 
-def detect_manufacturer(filepath: str):
+def detect_manufacturer(filepath: str, logger=None):
     try:
         with Image.open(filepath) as image:
             exif_bytes = image.info.get("exif")
@@ -51,18 +51,15 @@ def detect_manufacturer(filepath: str):
                 if manufacturer:
                     return manufacturer
     except Exception:
-        pass
+        if logger:
+            logger.debug("piexif manufacturer detection failed for %s, trying exiftool", filepath, exc_info=True)
 
     fallback_metadata = get_exif_data_with_exiftool(filepath)
     return fallback_metadata.get("manufacturer") if fallback_metadata else None
 
 
 def normalize_image_quality(image_quality: str) -> int:
-    if image_quality == "high":
-        return CommonConstants.IMAGE_QUALITY_MAP.get("high")
-    if image_quality == "medium":
-        return CommonConstants.IMAGE_QUALITY_MAP.get("medium")
-    return CommonConstants.IMAGE_QUALITY_MAP.get("low")
+    return CommonConstants.IMAGE_QUALITY_MAP.get(image_quality, CommonConstants.IMAGE_QUALITY_MAP["low"])
 
 
 def _update_queue_metrics(state, task_id: str, logger) -> None:
@@ -94,96 +91,32 @@ def create_task(state, initial_data: Optional[dict] = None) -> str:
     return task_id
 
 
-def _submit_task_with_id(
-    task_id: str,
-    state,
-    filepath: str,
-    lang: str,
-    watermark_type: int,
-    image_quality: int,
-    burn_after_read: str,
-    logo_preference: Optional[str],
-    style_config,
-    logger,
-) -> None:
+def _submit_task_with_id(task_id: str, payload: TaskPayload) -> None:
+    payload.task_id = task_id
+    state = payload.state
     state.update_task(
         task_id,
         status="queued",
         stage="queued",
-        filepath=filepath,
-        lang=lang,
-        watermark_type=watermark_type,
-        image_quality=image_quality,
-        burn_after_read=burn_after_read,
-        logo_preference=logo_preference,
+        filepath=payload.filepath,
+        lang=payload.lang,
+        watermark_type=payload.watermark_type,
+        image_quality=payload.image_quality,
+        burn_after_read=payload.burn_after_read,
+        logo_preference=payload.logo_preference,
     )
-    _update_queue_metrics(state, task_id, logger)
-    payload = TaskPayload(
-        task_id=task_id,
-        state=state,
-        filepath=filepath,
-        lang=lang,
-        watermark_type=watermark_type,
-        image_quality=image_quality,
-        burn_after_read=burn_after_read,
-        logo_preference=logo_preference,
-        style_config=style_config,
-        logger=logger,
-    )
+    _update_queue_metrics(state, task_id, payload.logger)
     state.executor.submit(background_process, payload)
 
 
-def submit_task(
-    state,
-    filepath: str,
-    lang: str,
-    watermark_type: int,
-    image_quality: int,
-    burn_after_read: str,
-    logo_preference: Optional[str],
-    style_config,
-    logger,
-) -> str:
-    task_id = create_task(state)
-    _submit_task_with_id(
-        task_id,
-        state,
-        filepath,
-        lang,
-        watermark_type,
-        image_quality,
-        burn_after_read,
-        logo_preference,
-        style_config,
-        logger,
-    )
+def submit_task(payload: TaskPayload) -> str:
+    task_id = create_task(payload.state)
+    _submit_task_with_id(task_id, payload)
     return task_id
 
 
-def submit_existing_task(
-    task_id: str,
-    state,
-    filepath: str,
-    lang: str,
-    watermark_type: int,
-    image_quality: int,
-    burn_after_read: str,
-    logo_preference: Optional[str],
-    style_config,
-    logger,
-) -> str:
-    _submit_task_with_id(
-        task_id,
-        state,
-        filepath,
-        lang,
-        watermark_type,
-        image_quality,
-        burn_after_read,
-        logo_preference,
-        style_config,
-        logger,
-    )
+def submit_existing_task(task_id: str, payload: TaskPayload) -> str:
+    _submit_task_with_id(task_id, payload)
     return task_id
 
 
@@ -254,7 +187,7 @@ def background_process(payload: TaskPayload) -> None:
     except WatermarkError as err:
         message_key = err.get_message_key()
         detail = err.get_detail()
-        message = get_common_message(message_key, lang) or detail or get_common_message("unexpected_error", lang)
+        message = get_error_message(message_key, lang) or detail or get_error_message("unexpected_error", lang)
         if message_key == "unsupported_manufacturer" and detail:
             message = f"{message} ({detail})"
         elif message_key == "unexpected_error":
@@ -287,7 +220,7 @@ def background_process(payload: TaskPayload) -> None:
         state.update_task(
             task_id,
             status="failed",
-            error=get_common_message("unexpected_error", lang),
+            error=get_error_message("unexpected_error", lang),
             progress=1.0,
             stage="failed",
         )
