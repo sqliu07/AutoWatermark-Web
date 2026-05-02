@@ -163,7 +163,7 @@ def background_process(payload: TaskPayload) -> None:
         processed_filename = f"{original_name}_watermark{extension}"
 
         signed_url = build_signed_url(
-            f"/upload/{processed_filename}",
+            f"/api/upload/{processed_filename}",
             processed_filename,
             lang=lang,
             burn=burn_after_read,

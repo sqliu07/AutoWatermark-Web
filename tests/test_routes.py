@@ -49,48 +49,48 @@ def test_unknown_path_api_keeps_json_404(client):
 
 
 def test_upload_missing_file(client):
-    response = client.post("/upload")
+    response = client.post("/api/upload")
     assert response.status_code == 400
     payload = response.get_json()
     assert payload["error"] == "未上传文件！"
 
 
 def test_upload_get_redirects_home(client):
-    response = client.get("/upload")
+    response = client.get("/api/upload")
     assert response.status_code == 302
     assert response.headers["Location"].endswith("/")
 
 
 def test_confirm_logo_get_redirects_home(client):
-    response = client.get("/upload/confirm_logo")
+    response = client.get("/api/upload/confirm_logo")
     assert response.status_code == 302
     assert response.headers["Location"].endswith("/")
 
 
 def test_upload_invalid_extension(client):
     data = {"file": (io.BytesIO(b"hello"), "sample.txt")}
-    response = client.post("/upload", data=data, content_type="multipart/form-data")
+    response = client.post("/api/upload", data=data, content_type="multipart/form-data")
     assert response.status_code == 400
     payload = response.get_json()
     assert payload["error"] == "无效的文件类型！请上传PNG、JPG或JPEG文件。"
 
 
 def test_status_unknown(client):
-    response = client.get("/status/does-not-exist")
+    response = client.get("/api/status/does-not-exist")
     assert response.status_code == 404
     payload = response.get_json()
     assert payload["status"] == "unknown"
 
 
 def test_download_zip_no_files(client):
-    response = client.post("/download_zip", json={})
+    response = client.post("/api/download_zip", json={})
     assert response.status_code == 400
     payload = response.get_json()
     assert payload["error"]  # 错误消息已 i18n，只验证非空
 
 
 def test_download_zip_get_redirects_home(client):
-    response = client.get("/download_zip")
+    response = client.get("/api/download_zip")
     assert response.status_code == 302
     assert response.headers["Location"].endswith("/")
 
@@ -100,7 +100,7 @@ def test_upload_invalid_watermark_type(client):
         "file": (io.BytesIO(b"not-an-image"), "sample.jpg"),
         "watermark_type": "abc",
     }
-    response = client.post("/upload", data=data, content_type="multipart/form-data")
+    response = client.post("/api/upload", data=data, content_type="multipart/form-data")
     assert response.status_code == 400
     payload = response.get_json()
     assert payload["error"] == "处理水印时发生未知错误。"
@@ -111,7 +111,7 @@ def test_upload_unknown_watermark_type(client):
         "file": (io.BytesIO(b"not-an-image"), "sample.jpg"),
         "watermark_type": "9999",
     }
-    response = client.post("/upload", data=data, content_type="multipart/form-data")
+    response = client.post("/api/upload", data=data, content_type="multipart/form-data")
     assert response.status_code == 400
     payload = response.get_json()
     assert payload["error"] == "处理水印时发生未知错误。"
@@ -122,7 +122,7 @@ def test_upload_xiaomi_requires_logo_choice(client, monkeypatch):
     data = {
         "file": (io.BytesIO(b"fake"), "sample.jpg"),
     }
-    response = client.post("/upload", data=data, content_type="multipart/form-data")
+    response = client.post("/api/upload", data=data, content_type="multipart/form-data")
     assert response.status_code == 200
     payload = response.get_json()
     assert payload["needs_logo_choice"] is True
@@ -139,7 +139,7 @@ def test_upload_success_returns_task_id(client, monkeypatch):
         "file": (io.BytesIO(b"fake"), "sample.jpg"),
         "watermark_type": "1",
     }
-    response = client.post("/upload", data=data, content_type="multipart/form-data")
+    response = client.post("/api/upload", data=data, content_type="multipart/form-data")
     assert response.status_code == 202
     payload = response.get_json()
     assert payload["task_id"] == "task-123"
@@ -157,7 +157,7 @@ def test_confirm_logo_choice_submits_existing_task(client, monkeypatch):
     monkeypatch.setattr(upload_routes, "submit_existing_task", fake_submit_existing_task)
 
     upload_response = client.post(
-        "/upload",
+        "/api/upload",
         data={"file": (io.BytesIO(b"fake"), "sample.jpg")},
         content_type="multipart/form-data",
     )
@@ -165,7 +165,7 @@ def test_confirm_logo_choice_submits_existing_task(client, monkeypatch):
     task_id = upload_response.get_json()["task_id"]
 
     confirm_response = client.post(
-        "/upload/confirm_logo",
+        "/api/upload/confirm_logo",
         json={"task_id": task_id, "logo_preference": "leica"},
     )
     assert confirm_response.status_code == 202
@@ -183,7 +183,7 @@ def test_upload_burn_after_read_updates_queue(client):
         f.write(b"burn")
 
     token, expires = generate_token(filename)
-    response = client.get(f"/upload/{filename}?burn=1&token={token}&expires={expires}")
+    response = client.get(f"/api/upload/{filename}?burn=1&token={token}&expires={expires}")
     assert response.status_code == 200
 
     state = app.extensions["state"]
@@ -198,18 +198,18 @@ def test_download_zip_with_valid_file(client):
     with open(file_path, "wb") as f:
         f.write(b"zip")
 
-    response = client.post("/download_zip", json={"filenames": [filename]})
+    response = client.post("/api/download_zip", json={"filenames": [filename]})
     assert response.status_code == 200
     payload = response.get_json()
     zip_url = payload["zip_url"]
     zip_name = zip_url.split("/")[-1]
 
-    download_response = client.get(f"/download_temp_zip/{zip_name}")
+    download_response = client.get(f"/api/download_temp_zip/{zip_name}")
     assert download_response.status_code == 200
 
 
 def test_download_temp_zip_browser_invalid_token_redirects_home(client):
-    response = client.get("/download_temp_zip/demo.zip", headers={"Accept": "text/html"})
+    response = client.get("/api/download_temp_zip/demo.zip", headers={"Accept": "text/html"})
     assert response.status_code == 302
     assert response.headers["Location"].endswith("/")
 
@@ -234,7 +234,7 @@ def test_upload_motion_video_streams_mp4(client):
         f.write(fake_jpeg + fake_mp4)
 
     token, expires = generate_token(filename)
-    response = client.get(f"/upload/{filename}/video?token={token}&expires={expires}")
+    response = client.get(f"/api/upload/{filename}/video?token={token}&expires={expires}")
     assert response.status_code == 200
     assert response.mimetype == "video/mp4"
     assert response.data == fake_mp4

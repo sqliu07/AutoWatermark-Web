@@ -57,7 +57,7 @@ def download_zip():
         return jsonify(error=get_error_message("zip_create_failed", lang)), 500
 
     # 生成带签名的 ZIP 下载 URL
-    zip_url = build_signed_url(f"/download_temp_zip/{zip_filename}", zip_filename)
+    zip_url = build_signed_url(f"/api/download_temp_zip/{zip_filename}", zip_filename)
     return jsonify(zip_url=zip_url)
 
 

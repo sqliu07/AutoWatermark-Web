@@ -136,8 +136,8 @@ def create_app(config_overrides=None):
         return send_from_directory(os.path.join(dist_dir, "assets"), filename)
 
     app.register_blueprint(index_bp)
-    app.register_blueprint(upload_bp)
-    app.register_blueprint(download_bp)
+    app.register_blueprint(upload_bp, url_prefix="/api")
+    app.register_blueprint(download_bp, url_prefix="/api")
 
     if app.config.get("START_BACKGROUND_CLEANER", True):
         start_background_cleaner(app, app.extensions["state"], logger)
