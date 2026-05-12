@@ -271,6 +271,7 @@ def test_process_image_synthesizes_primary_xmp_for_gainmap_only_ultrahdr(tmp_pat
     gainmap_buffer = BytesIO()
     Image.new("L", (2, 2), 128).save(gainmap_buffer, format="JPEG")
     gainmap_jpeg = inject_xmp(gainmap_buffer.getvalue(), gainmap_xmp)
+    image_path.write_bytes(primary_jpeg + gainmap_jpeg)
 
     style_config = load_watermark_styles(str(PROJECT_ROOT / "config" / "watermark_styles.toml"))
 

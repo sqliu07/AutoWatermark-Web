@@ -86,6 +86,12 @@ def _detect_format(state: _ProcessingState) -> None:
         state.motion_session = None
 
     try:
+        # 先读前 8KB 检查 Ultra HDR 特征，避免对大文件做全量读取
+        with open(state.working_image_path, "rb") as f:
+            header = f.read(8192)
+        if b"http://ns.adobe.com/xap/1.0/\x00" not in header and b"urn:apple:photo:2024:aux:hdrgainmap" not in header and b"hdrgm:Version" not in header:
+            state.ultrahdr_parts = None
+            return
         data_bytes = Path(state.working_image_path).read_bytes()
         state.ultrahdr_parts = split_ultrahdr(data_bytes)
     except Exception:
@@ -109,10 +115,14 @@ def _detect_format(state: _ProcessingState) -> None:
 
 def _load_image(state: _ProcessingState) -> None:
     """从文件或 Ultra HDR 主图打开图像，重置方向，检查像素上限。"""
-    if state.ultrahdr_parts is not None:
-        state.image = Image.open(BytesIO(state.ultrahdr_parts.primary_jpeg))
-    else:
-        state.image = Image.open(state.working_image_path)
+    Image.MAX_IMAGE_PIXELS = ImageConstants.MAX_IMAGE_PIXELS
+    try:
+        if state.ultrahdr_parts is not None:
+            state.image = Image.open(BytesIO(state.ultrahdr_parts.primary_jpeg))
+        else:
+            state.image = Image.open(state.working_image_path)
+    except Image.DecompressionBombError as e:
+        raise ImageTooLargeError(detail=str(e)) from e
     state.image = reset_image_orientation(state.image)
     _enforce_image_pixel_limit(state.image)
 
@@ -137,7 +147,7 @@ def _extract_metadata(state: _ProcessingState) -> None:
             raise MissingExifDataError()
 
     state.using_fallback_metadata = state.exif_dict is None
-    state.manufacturer = get_manufacturer(state.working_image_path, state.exif_dict)
+    state.manufacturer = state.manufacturer or get_manufacturer(state.working_image_path, state.exif_dict)
     if not state.manufacturer:
         state.fallback_metadata = state.fallback_metadata or get_exif_data_with_exiftool(state.working_image_path)
         state.manufacturer = state.fallback_metadata.get("manufacturer") if state.fallback_metadata else None
@@ -303,6 +313,7 @@ def process_image(
     logo_preference: str = "xiaomi",
     progress_callback: Optional[Callable[[float, Optional[str]], None]] = None,
     style_config: Optional[dict] = None,
+    preliminary_manufacturer: Optional[str] = None,
 ) -> ProcessResult:
     """
     Adds a watermark to the given image.
@@ -340,6 +351,7 @@ def process_image(
             watermark_type=watermark_type,
             image_quality=image_quality,
             logo_preference=logo_preference,
+            manufacturer=preliminary_manufacturer,
         )
 
         progress_step = 0

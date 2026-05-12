@@ -17,3 +17,13 @@ def register_error_handlers(app):
             return redirect("/")
         lang = normalize_lang(request.args.get("lang", "zh"))
         return jsonify(error=get_error_message("file_not_found", lang)), 404
+
+    @app.errorhandler(500)
+    def internal_error(error):
+        lang = normalize_lang(request.args.get("lang", "zh"))
+        return jsonify(error=get_error_message("unexpected_error", lang)), 500
+
+    @app.errorhandler(Exception)
+    def unhandled_error(error):
+        lang = normalize_lang(request.args.get("lang", "zh"))
+        return jsonify(error=get_error_message("unexpected_error", lang)), 500

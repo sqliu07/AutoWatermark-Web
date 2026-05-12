@@ -3,7 +3,7 @@ import os
 from typing import Optional
 
 
-_LOG_DIR = "logs"
+_LOG_DIR = os.environ.get("LOG_DIR", "logs")
 _LOG_FILE = os.path.join(_LOG_DIR, "app.log")
 
 

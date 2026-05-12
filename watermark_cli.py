@@ -154,6 +154,7 @@ def _process_single(
     logo: str,
     lang: str,
     style_config: dict,
+    multi_style: bool = False,
 ) -> tuple[bool, str]:
     """处理单张图片的单个样式，返回 (成功, 输出路径)。"""
     quality_map = CommonConstants.IMAGE_QUALITY_MAP
@@ -186,7 +187,7 @@ def _process_single(
         return False, "输出文件未生成"
 
     # 确定最终文件名
-    if len(style_config.get("_requested_style_ids", [])) > 1:
+    if multi_style:
         out_name = f"{name}_watermark_s{style_id}{ext}"
     else:
         out_name = f"{name}_watermark{ext}"
@@ -221,7 +222,7 @@ def main() -> None:
 
     # 解析样式 ID
     style_ids = _parse_style_ids(args.style, style_config)
-    style_config["_requested_style_ids"] = style_ids
+    multi_style = len(style_ids) > 1
 
     # 解析图片
     images = _resolve_images(args.images)
@@ -252,6 +253,7 @@ def main() -> None:
             start = time.time()
             ok, info = _process_single(
                 image_path, sid, output_dir, args.quality, args.logo, args.lang, style_config,
+                multi_style=multi_style,
             )
             elapsed = time.time() - start
 

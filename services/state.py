@@ -132,9 +132,26 @@ class AppState:
                 (now,),
             ).fetchall()
 
+        interrupted = 0
         with self.tasks_lock:
             for row in rows:
-                self.tasks[row["task_id"]] = self._row_to_task(row)
+                task = self._row_to_task(row)
+                if task["status"] in ("queued", "processing"):
+                    task["status"] = "failed"
+                    task["error"] = "服务重启导致任务中断"
+                    task["stage"] = "failed"
+                    task["progress"] = 1.0
+                    interrupted += 1
+                self.tasks[row["task_id"]] = task
+
+        if interrupted:
+            with self.db_lock:
+                self._conn.execute(
+                    "UPDATE tasks SET status = 'failed', error = ?, stage = 'failed', progress = 1.0, updated_at = ? WHERE status IN ('queued', 'processing')",
+                    ("服务重启导致任务中断", now),
+                )
+                self._conn.commit()
+
         with self.burn_queue_lock:
             for row in burn_rows:
                 self.burn_queue[row["file_path"]] = row["expire_at"]

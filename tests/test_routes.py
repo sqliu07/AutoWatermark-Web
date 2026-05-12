@@ -191,6 +191,7 @@ def test_upload_burn_after_read_updates_queue(client):
 
 
 def test_download_zip_with_valid_file(client):
+    from services.download_token import build_signed_url
     app = client.application
     upload_dir = app.config["UPLOAD_FOLDER"]
     filename = "zip.jpg"
@@ -198,7 +199,18 @@ def test_download_zip_with_valid_file(client):
     with open(file_path, "wb") as f:
         f.write(b"zip")
 
-    response = client.post("/api/download_zip", json={"filenames": [filename]})
+    signed = build_signed_url(f"/api/upload/{filename}", filename)
+    import urllib.parse
+    parsed = urllib.parse.urlparse(signed)
+    qs = urllib.parse.parse_qs(parsed.query)
+    token = qs.get("token", [""])[0]
+    expires = qs.get("expires", [""])[0]
+
+    response = client.post("/api/download_zip", json={
+        "filenames": [filename],
+        "token": token,
+        "expires": expires,
+    })
     assert response.status_code == 200
     payload = response.get_json()
     zip_url = payload["zip_url"]

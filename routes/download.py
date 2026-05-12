@@ -25,12 +25,17 @@ def download_zip():
     lang = normalize_lang(request.args.get("lang", "zh"))
     data = request.json or {}
     filenames = data.get("filenames", [])
+    token = data.get("token", "")
+    expires = data.get("expires", "")
 
     if not filenames:
         return jsonify(error=get_error_message("zip_no_files", lang)), 400
 
     if len(filenames) > AppConstants.ZIP_MAX_FILES:
         return jsonify(error=get_error_message("zip_too_many_files", lang)), 400
+
+    if not verify_token(filenames[0], token, expires):
+        return jsonify(error=get_error_message("link_expired", lang)), 403
 
     upload_folder = os.path.realpath(current_app.config["UPLOAD_FOLDER"])
 
