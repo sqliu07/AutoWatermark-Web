@@ -212,17 +212,24 @@ export const useAppStore = defineStore('app', () => {
   }
 
   async function downloadZip() {
-    const filenames = succeededTasks.value
+    const items = succeededTasks.value
       .map(t => {
         const url = t.result?.processed_image
         if (!url) return null
-        const match = url.match(/\/upload\/([^?]+)/)
-        return match ? match[1] : null
+        // URL 格式: /api/upload/filename.jpg?token=...&expires=...
+        const match = url.match(/\/upload\/([^?]+)(?:\?(.*))?/)
+        if (!match) return null
+        const filename = match[1]
+        const queryString = match[2] || ''
+        const params = new URLSearchParams(queryString)
+        const token = params.get('token') || ''
+        const expires = params.get('expires') || ''
+        return { filename, token, expires }
       })
       .filter(Boolean)
 
-    if (filenames.length === 0) return
-    const data = await api.downloadZip(filenames)
+    if (items.length === 0) return
+    const data = await api.downloadZip(items)
     if (data.zip_url) {
       window.open(data.zip_url, '_blank')
     }

@@ -3,7 +3,8 @@ import os
 from typing import Optional
 
 
-_LOG_DIR = os.environ.get("LOG_DIR", "logs")
+_DEFAULT_LOG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
+_LOG_DIR = os.environ.get("LOG_DIR", _DEFAULT_LOG_DIR)
 _LOG_FILE = os.path.join(_LOG_DIR, "app.log")
 
 

@@ -207,9 +207,7 @@ def test_download_zip_with_valid_file(client):
     expires = qs.get("expires", [""])[0]
 
     response = client.post("/api/download_zip", json={
-        "filenames": [filename],
-        "token": token,
-        "expires": expires,
+        "items": [{"filename": filename, "token": token, "expires": expires}],
     })
     assert response.status_code == 200
     payload = response.get_json()

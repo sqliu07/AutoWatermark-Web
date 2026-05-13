@@ -86,10 +86,16 @@ def _detect_format(state: _ProcessingState) -> None:
         state.motion_session = None
 
     try:
-        # 先读前 8KB 检查 Ultra HDR 特征，避免对大文件做全量读取
+        # 先读前 64KB 检查 Ultra HDR 专有特征，避免对大文件做全量读取
+        UHDR_MARKERS = (
+            b"hdrgm:Version",
+            b"urn:apple:photo:2024:aux:hdrgainmap",
+            b'Item:Semantic="GainMap"',
+            b"http://ns.adobe.com/hdr-gain-map/1.0/",
+        )
         with open(state.working_image_path, "rb") as f:
-            header = f.read(8192)
-        if b"http://ns.adobe.com/xap/1.0/\x00" not in header and b"urn:apple:photo:2024:aux:hdrgainmap" not in header and b"hdrgm:Version" not in header:
+            header = f.read(65536)
+        if not any(m in header for m in UHDR_MARKERS):
             state.ultrahdr_parts = None
             return
         data_bytes = Path(state.working_image_path).read_bytes()
@@ -147,7 +153,10 @@ def _extract_metadata(state: _ProcessingState) -> None:
             raise MissingExifDataError()
 
     state.using_fallback_metadata = state.exif_dict is None
-    state.manufacturer = state.manufacturer or get_manufacturer(state.working_image_path, state.exif_dict)
+    if state.manufacturer:
+        logger.debug("Using preliminary manufacturer: %s", state.manufacturer)
+    else:
+        state.manufacturer = get_manufacturer(state.working_image_path, state.exif_dict)
     if not state.manufacturer:
         state.fallback_metadata = state.fallback_metadata or get_exif_data_with_exiftool(state.working_image_path)
         state.manufacturer = state.fallback_metadata.get("manufacturer") if state.fallback_metadata else None
