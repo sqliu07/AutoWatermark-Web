@@ -67,6 +67,22 @@ def test_confirm_logo_get_redirects_home(client):
     assert response.headers["Location"].endswith("/")
 
 
+def test_upload_image_too_large_intercepted_at_upload(client, monkeypatch):
+    """大于像素上限的图像在上传阶段就应被拦截，而不是等到异步处理时报未知错误。"""
+    from PIL import Image as PILImage
+    monkeypatch.setattr(ImageConstants, "MAX_IMAGE_PIXELS", 1)
+
+    buf = io.BytesIO()
+    PILImage.new("RGB", (2, 2), color=(255, 255, 255)).save(buf, format="JPEG")
+    buf.seek(0)
+
+    data = {"file": (buf, "large.jpg")}
+    response = client.post("/api/upload", data=data, content_type="multipart/form-data")
+    assert response.status_code == 400
+    payload = response.get_json()
+    assert "像素" in payload["error"]
+
+
 def test_upload_invalid_extension(client):
     data = {"file": (io.BytesIO(b"hello"), "sample.txt")}
     response = client.post("/api/upload", data=data, content_type="multipart/form-data")

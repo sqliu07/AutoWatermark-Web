@@ -35,6 +35,9 @@ def normalize_lang(lang: Optional[str]) -> str:
     return "zh"
 
 
-def get_error_message(key: str, lang: str = "zh") -> Optional[str]:
+def get_error_message(key: str, lang: str = "zh", **kwargs) -> Optional[str]:
     _ensure_loaded()
-    return _error_messages.get(key, {}).get(lang)
+    msg = _error_messages.get(key, {}).get(lang)
+    if msg and kwargs:
+        return msg.format(**kwargs)
+    return msg

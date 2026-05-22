@@ -2,10 +2,13 @@ import os
 import time
 from datetime import datetime
 
+import struct
+
 from flask import Blueprint, Response, current_app, jsonify, redirect, render_template, request, send_file, stream_with_context
 from werkzeug.utils import secure_filename
 
-from constants import AppConstants
+from constants import AppConstants, ImageConstants, format_pixel_limit
+from errors import ImageTooLargeError
 from extensions import limiter
 from routes._utils import is_browser_request
 from services.download_token import verify_token
@@ -21,6 +24,52 @@ from services.tasks import (
     submit_task,
 )
 from services.watermark_styles import get_default_style_id, is_style_enabled
+
+def _read_image_dimensions(filepath: str) -> tuple[int, int] | None:
+    """从 JPEG / PNG 文件头解析像素尺寸，不依赖 PIL 全局状态。"""
+    try:
+        with open(filepath, "rb") as f:
+            header = f.read(32)
+            if len(header) < 8:
+                return None
+
+            if header[:3] == b"\xff\xd8\xff":
+                # JPEG: 扫描 SOF0 / SOF1 / SOF2 标记段获取尺寸
+                f.seek(2)
+                while True:
+                    chunk = f.read(4)
+                    if len(chunk) < 4:
+                        break
+                    ff, marker_lo, seg_len = struct.unpack(">BBH", chunk)
+                    if ff != 0xFF:
+                        break
+                    if marker_lo < 0xC0 or marker_lo > 0xCF or marker_lo in (0xC4, 0xC8, 0xCC):
+                        f.seek(seg_len - 2, 1)
+                        continue
+                    seg_data = f.read(seg_len - 2)
+                    if len(seg_data) >= 5:
+                        return (struct.unpack(">H", seg_data[3:5])[0], struct.unpack(">H", seg_data[1:3])[0])
+                    break
+
+            elif header[:8] == b"\x89PNG\r\n\x1a\n":
+                # PNG: IHDR 块在偏移 16 bytes，宽高各 4 字节
+                width, height = struct.unpack(">II", header[16:24])
+                return width, height
+
+    except Exception:
+        pass
+    return None
+
+
+def _check_image_pixel_limit(filepath: str) -> None:
+    """在上传阶段检查图像像素是否超出限制。"""
+    dims = _read_image_dimensions(filepath)
+    if dims is None:
+        return  # 无法解析的文件不拦截，留给处理阶段报错
+    width, height = dims
+    if width * height > ImageConstants.MAX_IMAGE_PIXELS:
+        raise ImageTooLargeError(detail=f"{width}x{height}")
+
 
 bp = Blueprint("upload", __name__)
 
@@ -81,6 +130,12 @@ def upload_file():
         filepath = os.path.join(current_app.config["UPLOAD_FOLDER"], filename_with_timestamp)
 
         file.save(filepath)
+
+        try:
+            _check_image_pixel_limit(filepath)
+        except ImageTooLargeError:
+            os.remove(filepath)
+            return jsonify(error=get_error_message("image_too_large", lang, limit=format_pixel_limit(ImageConstants.MAX_IMAGE_PIXELS))), 400
 
         manufacturer = detect_manufacturer(filepath)
         if manufacturer and "xiaomi" in manufacturer.lower():

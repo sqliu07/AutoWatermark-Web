@@ -2,6 +2,19 @@ import axios from 'axios'
 
 const http = axios.create({ baseURL: '/api' })
 
+http.interceptors.response.use(
+  res => res,
+  err => {
+    const data = err.response?.data
+    if (data?.error) {
+      const e = new Error(data.error)
+      e.code = err.response.status
+      throw e
+    }
+    throw err
+  },
+)
+
 export async function getStyles() {
   const { data } = await http.get('/styles')
   return data

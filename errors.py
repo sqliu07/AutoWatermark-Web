@@ -12,6 +12,9 @@ class WatermarkError(Exception):
     def get_detail(self):
         return self.detail
 
+    def get_message_kwargs(self) -> dict:
+        return {}
+
 
 class MissingExifDataError(WatermarkError):
     def __init__(self, detail=None):
@@ -37,3 +40,7 @@ class UnexpectedProcessingError(WatermarkError):
 class ImageTooLargeError(WatermarkError):
     def __init__(self, detail=None):
         super().__init__("image_too_large", detail=detail)
+
+    def get_message_kwargs(self) -> dict:
+        from constants import ImageConstants, format_pixel_limit
+        return {"limit": format_pixel_limit(ImageConstants.MAX_IMAGE_PIXELS)}

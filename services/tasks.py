@@ -189,7 +189,7 @@ def background_process(payload: TaskPayload) -> None:
     except WatermarkError as err:
         message_key = err.get_message_key()
         detail = err.get_detail()
-        message = get_error_message(message_key, lang) or detail or get_error_message("unexpected_error", lang)
+        message = get_error_message(message_key, lang, **err.get_message_kwargs()) or detail or get_error_message("unexpected_error", lang)
         if message_key == "unsupported_manufacturer" and detail:
             message = f"{message} ({detail})"
         elif message_key == "unexpected_error":
