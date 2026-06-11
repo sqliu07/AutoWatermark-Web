@@ -35,8 +35,8 @@ export async function confirmLogoChoice(taskId, logoPreference) {
   return data
 }
 
-export async function downloadZip(filenames) {
-  const { data } = await http.post('/download_zip', { filenames })
+export async function downloadZip(items) {
+  const { data } = await http.post('/download_zip', { items })
   return data
 }
 

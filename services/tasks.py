@@ -29,6 +29,7 @@ class TaskPayload:
     logo_preference: Optional[str]
     style_config: object
     logger: object
+    preliminary_manufacturer: Optional[str] = None
 
 
 def allowed_file(filename: str, allowed_extensions: Set[str]) -> bool:
@@ -154,6 +155,7 @@ def background_process(payload: TaskPayload) -> None:
             logo_preference=logo_preference,
             progress_callback=update_progress,
             style_config=style_config,
+            preliminary_manufacturer=payload.preliminary_manufacturer,
         )
 
         is_motion = result.is_motion

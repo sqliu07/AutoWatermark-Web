@@ -16,12 +16,12 @@ logger = get_logger("autowatermark.exif_utils")
 
 
 def _sanitize_make(value) -> str:
-    sanitized = ''.join(ch for ch in str(value or "") if re.match(r'[a-zA-Z ]', ch))
+    sanitized = re.sub(r'[^a-zA-Z ]', '', str(value or ""))
     return ' '.join(sanitized.split())
 
 
 def _sanitize_model(value) -> Optional[str]:
-    sanitized = ''.join(ch for ch in str(value or "") if re.match(r'[a-zA-Z0-9\- ]', ch))
+    sanitized = re.sub(r'[^a-zA-Z0-9\- ]', '', str(value or ""))
     sanitized = ' '.join(sanitized.split())
     return sanitized or None
 
@@ -40,20 +40,12 @@ def _format_decimal(value) -> Optional[str]:
 
 def _format_exiftool_date(value) -> str:
     date_taken = str(value or "Unknown Date")
-    if ' ' in date_taken:
-        index = date_taken.index(' ')
-        substring = date_taken[:index]
-        if ":" in substring:
-            new_substring = substring.replace(':', '.')
-            date_taken = date_taken[:index].replace(substring, new_substring) + date_taken[index:]
-
-    if "T" in date_taken:
-        date_taken = date_taken.replace("T", " ")
-        index = date_taken.index(" ")
-        substring = date_taken[:index]
-        if ":" in substring:
-            new_substring = substring.replace(':', '.')
-            date_taken = date_taken[:index].replace(substring, new_substring) + date_taken[index:]
+    date_taken = date_taken.replace("T", " ")
+    if " " in date_taken:
+        idx = date_taken.index(" ")
+        date_part = date_taken[:idx]
+        if ":" in date_part:
+            date_taken = date_part.replace(":", ".") + date_taken[idx:]
     return date_taken
 
 
@@ -193,7 +185,7 @@ def get_manufacturer(image_path: str, exif_dict: Optional[dict] = None) -> Optio
     try:
         manufacturer_bytes = exif_dict.get('0th', {}).get(piexif.ImageIFD.Make, b"")
         manufacturer = manufacturer_bytes.decode(errors='ignore').strip()
-        sanitized = ''.join(ch for ch in manufacturer if re.match(r'[a-zA-Z ]', ch))
+        sanitized = re.sub(r'[^a-zA-Z ]', '', manufacturer)
         return ' '.join(sanitized.split())
     except Exception:
         return None
@@ -208,7 +200,7 @@ def get_camera_model(exif_dict: Optional[dict]) -> Optional[str]:
             model = model_bytes.decode(errors='ignore')
         else:
             model = str(model_bytes)
-        sanitized = ''.join(ch for ch in model if re.match(r'[a-zA-Z0-9\- ]', ch))
+        sanitized = re.sub(r'[^a-zA-Z0-9\- ]', '', model)
         sanitized = ' '.join(sanitized.split())
         return sanitized or None
     except Exception:
@@ -275,8 +267,8 @@ def get_exif_data(image_path: str, exif_dict: Optional[dict] = None) -> Tuple[Op
         camera_make = camera_make_raw.decode(errors='ignore') if isinstance(camera_make_raw, (bytes, bytearray)) else str(camera_make_raw)
         camera_model_code = camera_model_raw.decode(errors='ignore') if isinstance(camera_model_raw, (bytes, bytearray)) else str(camera_model_raw)
 
-        camera_make = ''.join(ch for ch in camera_make if re.match(r'[a-zA-Z ]', ch))
-        camera_model_code = ''.join(ch for ch in camera_model_code if re.match(r'[a-zA-Z0-9\- ]', ch))
+        camera_make = re.sub(r'[^a-zA-Z ]', '', camera_make)
+        camera_model_code = re.sub(r'[^a-zA-Z0-9\- ]', '', camera_model_code)
 
         focal_length_value, f_number_value, exposure_time_value, iso_speed = get_exif_table(image_path, exif_dict)
 

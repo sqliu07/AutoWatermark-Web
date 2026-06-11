@@ -1,4 +1,6 @@
+import atexit
 import os
+import signal
 import tempfile
 
 from flask import Flask, send_from_directory
@@ -110,6 +112,19 @@ def create_app(config_overrides=None):
     app.extensions["watermark_styles"] = watermark_styles
     app.extensions["state"] = AppState(app.config["STATE_DB_PATH"])
 
+    state = app.extensions["state"]
+    atexit.register(state.shutdown)
+    signal.signal(signal.SIGTERM, lambda signum, frame: state.shutdown())
+
+    # 多 worker 下 memory:// storage 无法跨进程共享限速状态
+    gunicorn_workers = int(os.environ.get("GUNICORN_WORKERS", "1"))
+    if gunicorn_workers > 1:
+        logger.warning(
+            "GUNICORN_WORKERS=%d > 1: rate limiter uses memory:// storage, "
+            "limits will not be shared across workers",
+            gunicorn_workers,
+        )
+
     register_error_handlers(app)
 
     @app.after_request
@@ -120,7 +135,7 @@ def create_app(config_overrides=None):
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline'; "
+            "script-src 'self'; "
             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
             "font-src 'self' https://fonts.gstatic.com; "
             "img-src 'self' blob: data:; "

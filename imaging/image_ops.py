@@ -4,8 +4,6 @@ from PIL import Image, ImageDraw, ImageStat
 from constants import ImageConstants
 from logging_utils import get_logger
 
-Image.MAX_IMAGE_PIXELS = ImageConstants.MAX_IMAGE_PIXELS
-
 logger = get_logger("autowatermark.image_ops")
 
 

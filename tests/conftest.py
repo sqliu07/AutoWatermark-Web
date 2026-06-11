@@ -77,6 +77,8 @@ from app_factory import create_app
 
 @pytest.fixture
 def app(tmp_path):
+    from services.watermark_styles import load_cached_watermark_styles
+    load_cached_watermark_styles.cache_clear()
     upload_dir = tmp_path / "uploads"
     app = create_app(
         {

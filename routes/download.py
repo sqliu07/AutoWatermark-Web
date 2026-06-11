@@ -24,13 +24,25 @@ def download_zip_entry_redirect():
 def download_zip():
     lang = normalize_lang(request.args.get("lang", "zh"))
     data = request.json or {}
-    filenames = data.get("filenames", [])
+    items = data.get("items", [])
+
+    if not items:
+        return jsonify(error=get_error_message("zip_no_files", lang)), 400
+
+    if len(items) > AppConstants.ZIP_MAX_FILES:
+        return jsonify(error=get_error_message("zip_too_many_files", lang)), 400
+
+    filenames = []
+    for item in items:
+        fn = item.get("filename", "")
+        if not fn:
+            continue
+        if not verify_token(fn, item.get("token", ""), item.get("expires", "")):
+            return jsonify(error=get_error_message("link_expired", lang)), 403
+        filenames.append(fn)
 
     if not filenames:
         return jsonify(error=get_error_message("zip_no_files", lang)), 400
-
-    if len(filenames) > AppConstants.ZIP_MAX_FILES:
-        return jsonify(error=get_error_message("zip_too_many_files", lang)), 400
 
     upload_folder = os.path.realpath(current_app.config["UPLOAD_FOLDER"])
 

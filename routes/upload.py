@@ -72,8 +72,12 @@ def upload_file():
         timestamp = datetime.fromtimestamp(int(time.time())).strftime("%Y-%m-%d_%H-%M-%S")
 
         filename = secure_filename(file.filename)
-        extension = filename.rsplit(".", 1)[1]
-        filename_with_timestamp = f"{filename.rsplit('.', 1)[0]}_{timestamp}.{extension}"
+        if not filename or "." not in filename:
+            extension = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else "jpg"
+            filename_with_timestamp = f"upload_{timestamp}.{extension}"
+        else:
+            extension = filename.rsplit(".", 1)[1]
+            filename_with_timestamp = f"{filename.rsplit('.', 1)[0]}_{timestamp}.{extension}"
         filepath = os.path.join(current_app.config["UPLOAD_FOLDER"], filename_with_timestamp)
 
         file.save(filepath)
@@ -109,6 +113,7 @@ def upload_file():
             logo_preference=logo_preference,
             style_config=style_config,
             logger=current_app.logger,
+            preliminary_manufacturer=manufacturer,
         ))
 
         return jsonify({"task_id": task_id}), 202
@@ -213,7 +218,10 @@ def upload_file_served(filename):
         state = current_app.extensions["state"]
         state.schedule_burn(file_path, time.time() + AppConstants.BURN_TTL_SECONDS)
 
-    return send_file(file_path)
+    response = send_file(file_path)
+    if str(burn_after_read).strip() == "1":
+        response.headers["Cache-Control"] = "no-store, private"
+    return response
 
 
 @bp.route("/upload/<filename>/video")

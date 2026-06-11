@@ -14,8 +14,7 @@ FROM python:3.10-slim
 ENV TZ=Asia/Shanghai \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    # 在容器 UI 中可直接看到并修改这些关键变量
-    DOWNLOAD_TOKEN_SECRET=__CHANGE_ME__ \
+    # 必须设置 DOWNLOAD_TOKEN_SECRET 否则启动失败
     GUNICORN_WORKERS=1 \
     GUNICORN_BIND=0.0.0.0:5000 \
     UPLOAD_FOLDER=/app/upload
