@@ -8,7 +8,7 @@ from flask import Blueprint, Response, current_app, jsonify, redirect, render_te
 from werkzeug.utils import secure_filename
 
 from constants import AppConstants, ImageConstants, format_pixel_limit
-from errors import ImageTooLargeError
+from errors import WatermarkError, WatermarkErrorCode
 from extensions import limiter
 from routes._utils import is_browser_request
 from services.download_token import verify_token
@@ -68,7 +68,7 @@ def _check_image_pixel_limit(filepath: str) -> None:
         return  # 无法解析的文件不拦截，留给处理阶段报错
     width, height = dims
     if width * height > ImageConstants.MAX_IMAGE_PIXELS:
-        raise ImageTooLargeError(detail=f"{width}x{height}")
+        raise WatermarkError(WatermarkErrorCode.IMAGE_TOO_LARGE, detail=f"{width}x{height}")
 
 
 bp = Blueprint("upload", __name__)
@@ -133,9 +133,9 @@ def upload_file():
 
         try:
             _check_image_pixel_limit(filepath)
-        except ImageTooLargeError:
+        except WatermarkError:
             os.remove(filepath)
-            return jsonify(error=get_error_message("image_too_large", lang, limit=format_pixel_limit(ImageConstants.MAX_IMAGE_PIXELS))), 400
+            return jsonify(error=get_error_message("image_too_large", lang, limit=format_pixel_limit(ImageConstants.MAX_IMAGE_PIXELS, lang))), 400
 
         manufacturer = detect_manufacturer(filepath)
         if manufacturer and "xiaomi" in manufacturer.lower():

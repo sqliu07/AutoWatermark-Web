@@ -1,6 +1,6 @@
 import logging
 
-from errors import UnexpectedProcessingError
+from errors import WatermarkError, WatermarkErrorCode
 from services.state import AppState
 from services.tasks import background_process
 
@@ -11,7 +11,7 @@ def test_background_process_logs_unexpected_watermark_detail(monkeypatch, caplog
     state.create_task(task_id, {"status": "queued", "submitted_at": 0, "progress": 0.0, "stage": "queued"})
 
     def fake_process_image(*args, **kwargs):
-        raise UnexpectedProcessingError(detail="render caption failed")
+        raise WatermarkError(WatermarkErrorCode.UNEXPECTED_ERROR, detail="render caption failed")
 
     monkeypatch.setattr("services.tasks.process_image", fake_process_image)
 

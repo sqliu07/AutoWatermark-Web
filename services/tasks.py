@@ -8,7 +8,7 @@ from PIL import Image
 import piexif
 
 from constants import CommonConstants
-from errors import WatermarkError
+from errors import WatermarkError, WatermarkErrorCode
 from exif import get_exif_data_with_exiftool, get_manufacturer
 from process import process_image
 from process_result import ProcessResult
@@ -187,16 +187,16 @@ def background_process(payload: TaskPayload) -> None:
             state.metrics["succeeded_tasks"] += 1
 
     except WatermarkError as err:
-        message_key = err.get_message_key()
-        detail = err.get_detail()
-        message = get_error_message(message_key, lang, **err.get_message_kwargs()) or detail or get_error_message("unexpected_error", lang)
-        if message_key == "unsupported_manufacturer" and detail:
+        message_key = err.message_key
+        detail = err.detail
+        message = get_error_message(message_key, lang, **err.get_message_kwargs(lang)) or detail or get_error_message("unexpected_error", lang)
+        if err.error_code == WatermarkErrorCode.UNSUPPORTED_MANUFACTURER and detail:
             message = f"{message} ({detail})"
-        elif message_key == "unexpected_error":
+        elif err.error_code == WatermarkErrorCode.UNEXPECTED_ERROR:
             pass  # 不向客户端暴露内部错误详情，detail 仅记录到日志
 
         state.update_task(task_id, status="failed", error=message, progress=1.0, stage="failed")
-        if message_key == "unexpected_error":
+        if err.error_code == WatermarkErrorCode.UNEXPECTED_ERROR:
             logger.exception(
                 "Task %s failed: %s | detail=%s | file=%s | style=%s",
                 task_id,

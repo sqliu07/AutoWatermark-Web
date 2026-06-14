@@ -8,7 +8,7 @@ from PIL import Image
 
 import routes.upload as upload_routes
 from constants import ImageConstants
-from errors import ImageTooLargeError, MissingExifDataError, UnsupportedManufacturerError
+from errors import WatermarkError, WatermarkErrorCode
 from exif import find_logo, get_manufacturer
 from media.motion_photo import prepare_motion_photo
 from process import process_image
@@ -294,13 +294,14 @@ def test_process_image_missing_exif(tmp_path):
     temp_image = tmp_path / NO_EXIF_IMAGE.name
     temp_image.write_bytes(NO_EXIF_IMAGE.read_bytes())
 
-    with pytest.raises(MissingExifDataError):
+    with pytest.raises(WatermarkError) as exc_info:
         process_image(
             str(temp_image),
             watermark_type=1,
             image_quality=85,
             logo_preference="xiaomi",
         )
+    assert exc_info.value.error_code == WatermarkErrorCode.MISSING_EXIF_DATA
 
 
 def test_process_image_unsupported_manufacturer(tmp_path):
@@ -315,13 +316,14 @@ def test_process_image_unsupported_manufacturer(tmp_path):
     if find_logo(manufacturer):
         pytest.skip("Asset brand is supported; choose a photo without a matching logo")
 
-    with pytest.raises(UnsupportedManufacturerError):
+    with pytest.raises(WatermarkError) as exc_info:
         process_image(
             str(temp_image),
             watermark_type=1,
             image_quality=85,
             logo_preference="xiaomi",
         )
+    assert exc_info.value.error_code == WatermarkErrorCode.UNSUPPORTED_MANUFACTURER
 
 
 def test_process_motion_photo_with_real_photo(tmp_path):
@@ -390,10 +392,11 @@ def test_process_image_too_large(monkeypatch, tmp_path):
     temp_image = tmp_path / "tiny.jpg"
     Image.new("RGB", (2, 2), color=(255, 255, 255)).save(temp_image, format="JPEG")
 
-    with pytest.raises(ImageTooLargeError):
+    with pytest.raises(WatermarkError) as exc_info:
         process_image(
             str(temp_image),
             watermark_type=1,
             image_quality=85,
             logo_preference="xiaomi",
         )
+    assert exc_info.value.error_code == WatermarkErrorCode.IMAGE_TOO_LARGE

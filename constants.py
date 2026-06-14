@@ -57,7 +57,11 @@ class AppConstants:
 
 
 
-def format_pixel_limit(limit: int) -> str:
+def format_pixel_limit(limit: int, lang: str = "zh") -> str:
+    if lang == "en":
+        if limit >= 1_000_000 and limit % 1_000_000 == 0:
+            return f"{limit // 1_000_000} million"
+        return f"{limit:,}"
     if limit >= 100_000_000 and limit % 100_000_000 == 0:
         return f"{limit // 100_000_000}亿"
     if limit >= 10_000 and limit % 10_000 == 0:

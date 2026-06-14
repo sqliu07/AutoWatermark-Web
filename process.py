@@ -12,14 +12,7 @@ from io import BytesIO
 from exif import find_logo, get_manufacturer, get_exif_data, get_exif_data_with_exiftool, get_camera_model
 from imaging import reset_image_orientation, generate_watermark_image
 from constants import CommonConstants, ImageConstants
-from errors import (
-    WatermarkError,
-    MissingExifDataError,
-    UnsupportedManufacturerError,
-    ExifProcessingError,
-    UnexpectedProcessingError,
-    ImageTooLargeError,
-)
+from errors import WatermarkError, WatermarkErrorCode
 
 from media.ultrahdr import (
     split_ultrahdr,
@@ -43,7 +36,7 @@ def _enforce_image_pixel_limit(image: Image.Image) -> None:
     logger.info("Image size: %dx%d=%d, max allowed pixels: %s", image.width, image.height, image_size, str(max_pixels) if max_pixels else "unlimited")
     if max_pixels and image_size > max_pixels:
         detail = f"{image.width}x{image.height}"
-        raise ImageTooLargeError(detail=detail)
+        raise WatermarkError(WatermarkErrorCode.IMAGE_TOO_LARGE, detail=detail)
 
 def _report_progress(progress_callback: Optional[Callable], progress: float, stage: Optional[str] = None) -> None:
     if progress_callback:
@@ -128,7 +121,7 @@ def _load_image(state: _ProcessingState) -> None:
         else:
             state.image = Image.open(state.working_image_path)
     except Image.DecompressionBombError as e:
-        raise ImageTooLargeError(detail=str(e)) from e
+        raise WatermarkError(WatermarkErrorCode.IMAGE_TOO_LARGE, detail=str(e)) from e
     state.image = reset_image_orientation(state.image)
     _enforce_image_pixel_limit(state.image)
 
@@ -150,7 +143,7 @@ def _extract_metadata(state: _ProcessingState) -> None:
     if state.exif_dict is None:
         state.fallback_metadata = get_exif_data_with_exiftool(state.working_image_path)
         if not state.fallback_metadata:
-            raise MissingExifDataError()
+            raise WatermarkError(WatermarkErrorCode.MISSING_EXIF_DATA)
 
     state.using_fallback_metadata = state.exif_dict is None
     if state.manufacturer:
@@ -161,7 +154,7 @@ def _extract_metadata(state: _ProcessingState) -> None:
         state.fallback_metadata = state.fallback_metadata or get_exif_data_with_exiftool(state.working_image_path)
         state.manufacturer = state.fallback_metadata.get("manufacturer") if state.fallback_metadata else None
         if not state.manufacturer:
-            raise MissingExifDataError()
+            raise WatermarkError(WatermarkErrorCode.MISSING_EXIF_DATA)
         state.using_fallback_metadata = True
 
     state.camera_model = get_camera_model(state.exif_dict) if state.exif_dict is not None else None
@@ -175,7 +168,7 @@ def _extract_metadata(state: _ProcessingState) -> None:
             state.fallback_metadata.get("shooting_info"),
         )
     if result is None or result == (None, None):
-        raise ExifProcessingError()
+        raise WatermarkError(WatermarkErrorCode.EXIF_PROCESSING_ERROR)
 
     state.camera_info, state.shooting_info = result
 
@@ -191,7 +184,7 @@ def _resolve_logo(state: _ProcessingState) -> None:
         state.logo_path = find_logo(state.manufacturer)
     if state.logo_path is None:
         detail = state.manufacturer if not state.camera_model else f"{state.manufacturer} {state.camera_model}"
-        raise UnsupportedManufacturerError(state.manufacturer, detail=detail)
+        raise WatermarkError(WatermarkErrorCode.UNSUPPORTED_MANUFACTURER, detail=detail)
 
 
 def _render_watermark(state: _ProcessingState) -> None:
@@ -275,7 +268,7 @@ def _save_output(state: _ProcessingState, preview: bool, advance_progress: Calla
 
             # 3) 更新主图 XMP 长度并注入
             if state.ultrahdr_parts.primary_xmp is None:
-                raise UnexpectedProcessingError(detail="Primary XMP missing; cannot rebuild Ultra HDR container.")
+                raise WatermarkError(WatermarkErrorCode.UNEXPECTED_ERROR, detail="Primary XMP missing; cannot rebuild Ultra HDR container.")
 
             tmp_primary = inject_xmp(new_primary_jpeg, state.ultrahdr_parts.primary_xmp)
             updated_xmp = update_primary_xmp_lengths(
@@ -346,7 +339,7 @@ def process_image(
             style_config = load_cached_watermark_styles(CommonConstants.WATERMARK_STYLE_CONFIG_PATH)
         style = get_style(style_config, watermark_type)
         if not style or not style["enabled"]:
-            raise UnexpectedProcessingError(detail=f"Invalid watermark style: {watermark_type}")
+            raise WatermarkError(WatermarkErrorCode.UNEXPECTED_ERROR, detail=f"Invalid watermark style: {watermark_type}")
 
         original_name, extension = os.path.splitext(image_path)
         output_path = f"{original_name}_watermark{extension}"
@@ -391,7 +384,7 @@ def process_image(
     except WatermarkError:
         raise
     except Exception as exc:
-        raise UnexpectedProcessingError(detail=str(exc)) from exc
+        raise WatermarkError(WatermarkErrorCode.UNEXPECTED_ERROR, detail=str(exc)) from exc
     finally:
         _cleanup(state)
 
@@ -413,7 +406,11 @@ def main():
     try:
         process_image(image_path, lang, watermark_type, image_quality)
     except WatermarkError as err:
-        message = get_error_message(err.get_message_key(), lang) or err.get_detail() or err.get_message_key()
+        message = (
+            get_error_message(err.message_key, lang, **err.get_message_kwargs(lang))
+            or err.detail
+            or err.message_key
+        )
         logger.error(message)
         sys.exit(1)
     except Exception as exc:
