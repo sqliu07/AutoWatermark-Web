@@ -247,36 +247,26 @@ def get_task_status(task_id):
 
 @bp.route("/upload/<filename>")
 def upload_file_served(filename):
+    """预览端点：inline 展示，不触发焚烧。"""
     lang = normalize_lang(request.args.get("lang", "zh"))
-    burn_after_read = request.args.get("burn", "0")
     token = request.args.get("token", "")
     expires = request.args.get("expires", "")
 
     filename = secure_filename(filename)
-
     is_browser = is_browser_request()
 
-    # 签名校验：无 token 或校验失败则拒绝
-    if not verify_token(filename, token, expires):
+    if not verify_token(filename, token, expires, action="preview"):
         if is_browser:
             return render_template("image_deleted.html"), 404
         return jsonify(error=get_error_message("link_expired", lang)), 403
 
     file_path = os.path.join(current_app.config["UPLOAD_FOLDER"], filename)
-
     if not os.path.exists(file_path):
         if is_browser:
             return render_template("image_deleted.html"), 404
         return jsonify(error=get_error_message("file_not_found", lang)), 404
 
-    if str(burn_after_read).strip() == "1":
-        state = current_app.extensions["state"]
-        state.schedule_burn(file_path, time.time() + AppConstants.BURN_TTL_SECONDS)
-
-    response = send_file(file_path)
-    if str(burn_after_read).strip() == "1":
-        response.headers["Cache-Control"] = "no-store, private"
-    return response
+    return send_file(file_path)
 
 
 @bp.route("/upload/<filename>/video")
@@ -288,7 +278,7 @@ def upload_motion_video(filename):
     expires = request.args.get("expires", "")
 
     filename = secure_filename(filename)
-    if not verify_token(filename, token, expires):
+    if not verify_token(filename, token, expires, action="motion_video"):
         return jsonify(error=get_error_message("link_expired", lang)), 403
 
     file_path = os.path.join(current_app.config["UPLOAD_FOLDER"], filename)

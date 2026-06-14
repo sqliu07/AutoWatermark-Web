@@ -10,6 +10,7 @@ from extensions import limiter
 from handlers import register_error_handlers
 from logging_utils import get_logger
 from routes.download import bp as download_bp
+from routes.download_file import bp as download_file_bp
 from routes.index import bp as index_bp
 from routes.upload import bp as upload_bp
 from services.cleanup import start_background_cleaner
@@ -152,6 +153,7 @@ def create_app(config_overrides=None):
 
     app.register_blueprint(index_bp)
     app.register_blueprint(upload_bp, url_prefix="/api")
+    app.register_blueprint(download_file_bp, url_prefix="/api")
     app.register_blueprint(download_bp, url_prefix="/api")
 
     if app.config.get("START_BACKGROUND_CLEANER", True):

@@ -47,6 +47,14 @@ export const useAppStore = defineStore('app', () => {
   const succeededTasks = computed(() =>
     tasks.value.filter(t => t.status === 'succeeded')
   )
+  const canDownloadZip = computed(() =>
+    succeededTasks.value.length > 1 && succeededTasks.value.every(t => {
+      const url = t.result?.download_url
+      if (!url) return false
+      const queryString = url.split('?')[1] || ''
+      return (new URLSearchParams(queryString).get('burn') || '0') === '0'
+    })
+  )
 
   function addFiles(newFiles) {
     files.value = [...files.value, ...newFiles]
@@ -212,19 +220,24 @@ export const useAppStore = defineStore('app', () => {
   }
 
   async function downloadZip() {
+    if (!canDownloadZip.value) {
+      throw new Error('Burn-after-read files cannot be downloaded as ZIP')
+    }
     const items = succeededTasks.value
       .map(t => {
-        const url = t.result?.processed_image
+        const url = t.result?.download_url
         if (!url) return null
-        // URL 格式: /api/upload/filename.jpg?token=...&expires=...
-        const match = url.match(/\/upload\/([^?]+)(?:\?(.*))?/)
+        // URL 格式: /api/download/filename.jpg?token=...&expires=...&burn=1
+        const match = url.match(/\/download\/([^?]+)(?:\?(.*))?/)
         if (!match) return null
         const filename = match[1]
         const queryString = match[2] || ''
         const params = new URLSearchParams(queryString)
         const token = params.get('token') || ''
         const expires = params.get('expires') || ''
-        return { filename, token, expires }
+        const burn = params.get('burn') || '0'
+        const action = params.get('action') || 'download'
+        return { filename, token, expires, burn, action }
       })
       .filter(Boolean)
 
@@ -239,7 +252,7 @@ export const useAppStore = defineStore('app', () => {
     files, watermarkStyles, selectedStyle, imageQuality,
     burnAfterRead, logoPreference, isProcessing, tasks,
     currentPreview, completedCount, totalCount, allDone,
-    succeededTasks, stylesLoaded, loadStyles, addFiles,
+    succeededTasks, canDownloadZip, stylesLoaded, loadStyles, addFiles,
     clearFiles, reselectFiles, setPreview, processAll, processPendingLogoTasks, downloadZip,
   }
 })

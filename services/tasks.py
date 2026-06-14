@@ -164,16 +164,27 @@ def background_process(payload: TaskPayload) -> None:
         original_name, extension = os.path.splitext(filename)
         processed_filename = f"{original_name}_watermark{extension}"
 
-        signed_url = build_signed_url(
+        preview_url = build_signed_url(
             f"/api/upload/{processed_filename}",
             processed_filename,
-            lang=lang,
+            action="preview",
+        )
+
+        download_url = build_signed_url(
+            f"/api/download/{processed_filename}",
+            processed_filename,
+            action="download",
             burn=burn_after_read,
         )
 
-        task_result = {"processed_image": signed_url}
+        task_result = {"preview_url": preview_url, "download_url": download_url}
         if is_motion:
             task_result["is_motion"] = True
+            task_result["motion_video_url"] = build_signed_url(
+                f"/api/upload/{processed_filename}/video",
+                processed_filename,
+                action="motion_video",
+            )
 
         state.update_task(
             task_id,

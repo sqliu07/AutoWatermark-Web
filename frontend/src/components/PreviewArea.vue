@@ -60,10 +60,10 @@
           />
           <img
             v-else
-            :src="previewTask.result.processed_image"
+            :src="previewTask.result.preview_url"
             class="compare-img"
             :alt="previewTask.originalName"
-            @click="openFullscreen(previewTask.result.processed_image)"
+            @click="openFullscreen(previewTask.result.preview_url)"
           />
         </div>
       </div>
@@ -74,21 +74,21 @@
         <div class="action-buttons">
           <a-button
             size="small"
-            @click="openFullscreen(previewTask.result.processed_image)"
+            @click="openFullscreen(previewTask.result.preview_url)"
           >
             {{ t('action.preview') }}
           </a-button>
           <a-button
             type="primary"
             size="small"
-            :href="previewTask.result.processed_image"
+            :href="previewTask.result.download_url"
             :download="previewTask.originalName"
             tag="a"
           >
             {{ t('action.download') }}
           </a-button>
           <a-button
-            v-if="store.succeededTasks.length > 1"
+            v-if="store.canDownloadZip"
             size="small"
             @click="store.downloadZip()"
           >
@@ -188,7 +188,6 @@
 import { ref, computed, watch, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '../stores/app'
-import { buildMotionVideoUrl } from '../api'
 
 const { t } = useI18n()
 const store = useAppStore()
@@ -250,7 +249,7 @@ const isMotion = computed(() => previewTask.value?.result?.is_motion === true)
 // 水印图视频（从后端端点获取）
 const motionVideoUrl = computed(() => {
   if (!isMotion.value) return null
-  return buildMotionVideoUrl(previewTask.value.result.processed_image)
+  return previewTask.value.result.motion_video_url || null
 })
 const motionPlaying = ref(false)
 

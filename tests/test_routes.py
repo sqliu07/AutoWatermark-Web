@@ -198,12 +198,76 @@ def test_upload_burn_after_read_updates_queue(client):
     with open(file_path, "wb") as f:
         f.write(b"burn")
 
-    token, expires = generate_token(filename)
-    response = client.get(f"/api/upload/{filename}?burn=1&token={token}&expires={expires}")
+    token, expires = generate_token(filename, action="download", burn="1")
+    response = client.get(f"/api/download/{filename}?burn=1&token={token}&expires={expires}&action=download")
     assert response.status_code == 200
 
-    state = app.extensions["state"]
-    assert file_path in state.burn_queue
+    # 下载后立即删除（Linux 下 send_file 持有 fd，数据不丢失）
+    assert not os.path.exists(file_path)
+
+    replay = client.get(f"/api/download/{filename}?burn=1&token={token}&expires={expires}&action=download")
+    assert replay.status_code == 404
+
+
+def test_preview_token_cannot_download_file(client):
+    app = client.application
+    upload_dir = app.config["UPLOAD_FOLDER"]
+    filename = "preview-only.jpg"
+    file_path = os.path.join(upload_dir, filename)
+    with open(file_path, "wb") as f:
+        f.write(b"preview")
+
+    token, expires = generate_token(filename, action="preview")
+    response = client.get(f"/api/download/{filename}?burn=0&token={token}&expires={expires}&action=preview")
+
+    assert response.status_code == 403
+    assert os.path.exists(file_path)
+
+
+def test_download_token_cannot_be_reused_for_preview(client):
+    app = client.application
+    upload_dir = app.config["UPLOAD_FOLDER"]
+    filename = "download-only.jpg"
+    file_path = os.path.join(upload_dir, filename)
+    with open(file_path, "wb") as f:
+        f.write(b"download")
+
+    token, expires = generate_token(filename, action="download", burn="0")
+    response = client.get(f"/api/upload/{filename}?token={token}&expires={expires}&action=download&burn=0")
+
+    assert response.status_code == 403
+
+
+def test_download_token_binds_burn_flag(client):
+    app = client.application
+    upload_dir = app.config["UPLOAD_FOLDER"]
+    filename = "burn-bound.jpg"
+    file_path = os.path.join(upload_dir, filename)
+    with open(file_path, "wb") as f:
+        f.write(b"burn")
+
+    token, expires = generate_token(filename, action="download", burn="0")
+    response = client.get(f"/api/download/{filename}?burn=1&token={token}&expires={expires}&action=download")
+
+    assert response.status_code == 403
+    assert os.path.exists(file_path)
+
+
+def test_task_signed_urls_are_accepted_by_matching_routes(client):
+    app = client.application
+    upload_dir = app.config["UPLOAD_FOLDER"]
+    filename = "task-output.jpg"
+    file_path = os.path.join(upload_dir, filename)
+    with open(file_path, "wb") as f:
+        f.write(b"task-output")
+
+    from services.download_token import build_signed_url
+
+    preview_url = build_signed_url(f"/api/upload/{filename}", filename, action="preview")
+    download_url = build_signed_url(f"/api/download/{filename}", filename, action="download", burn="0")
+
+    assert client.get(preview_url).status_code == 200
+    assert client.get(download_url).status_code == 200
 
 
 def test_download_zip_with_valid_file(client):
@@ -215,7 +279,7 @@ def test_download_zip_with_valid_file(client):
     with open(file_path, "wb") as f:
         f.write(b"zip")
 
-    signed = build_signed_url(f"/api/upload/{filename}", filename)
+    signed = build_signed_url(f"/api/download/{filename}", filename, action="download", burn="0")
     import urllib.parse
     parsed = urllib.parse.urlparse(signed)
     qs = urllib.parse.parse_qs(parsed.query)
@@ -223,21 +287,47 @@ def test_download_zip_with_valid_file(client):
     expires = qs.get("expires", [""])[0]
 
     response = client.post("/api/download_zip", json={
-        "items": [{"filename": filename, "token": token, "expires": expires}],
+        "items": [{"filename": filename, "token": token, "expires": expires, "burn": "0"}],
     })
     assert response.status_code == 200
     payload = response.get_json()
     zip_url = payload["zip_url"]
-    zip_name = zip_url.split("/")[-1]
 
-    download_response = client.get(f"/api/download_temp_zip/{zip_name}")
+    download_response = client.get(zip_url)
     assert download_response.status_code == 200
+
+
+def test_download_zip_rejects_burn_after_read_items(client):
+    app = client.application
+    upload_dir = app.config["UPLOAD_FOLDER"]
+    filename = "zip-burn.jpg"
+    file_path = os.path.join(upload_dir, filename)
+    with open(file_path, "wb") as f:
+        f.write(b"zip-burn")
+
+    from services.download_token import build_signed_url
+    import urllib.parse
+
+    signed = build_signed_url(f"/api/download/{filename}", filename, action="download", burn="1")
+    parsed = urllib.parse.urlparse(signed)
+    qs = urllib.parse.parse_qs(parsed.query)
+
+    response = client.post("/api/download_zip", json={
+        "items": [{
+            "filename": filename,
+            "token": qs.get("token", [""])[0],
+            "expires": qs.get("expires", [""])[0],
+            "burn": "1",
+        }],
+    })
+
+    assert response.status_code == 403
+    assert os.path.exists(file_path)
 
 
 def test_download_temp_zip_browser_invalid_token_redirects_home(client):
     response = client.get("/api/download_temp_zip/demo.zip", headers={"Accept": "text/html"})
-    assert response.status_code == 302
-    assert response.headers["Location"].endswith("/")
+    assert response.status_code == 404
 
 
 def test_upload_motion_video_streams_mp4(client):
@@ -259,8 +349,8 @@ def test_upload_motion_video_streams_mp4(client):
     with open(file_path, "wb") as f:
         f.write(fake_jpeg + fake_mp4)
 
-    token, expires = generate_token(filename)
-    response = client.get(f"/api/upload/{filename}/video?token={token}&expires={expires}")
+    token, expires = generate_token(filename, action="motion_video")
+    response = client.get(f"/api/upload/{filename}/video?token={token}&expires={expires}&action=motion_video")
     assert response.status_code == 200
     assert response.mimetype == "video/mp4"
     assert response.data == fake_mp4
