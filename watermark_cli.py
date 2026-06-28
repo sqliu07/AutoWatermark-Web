@@ -170,7 +170,7 @@ def _process_single(
             style_config=style_config,
         )
     except WatermarkError as err:
-        msg = get_error_message(err.get_message_key(), lang) or str(err)
+        msg = get_error_message(err.message_key, lang, **err.get_message_kwargs(lang)) or str(err)
         return False, msg
     except Exception as exc:
         return False, str(exc)

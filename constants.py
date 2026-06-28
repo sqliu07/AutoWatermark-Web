@@ -57,8 +57,20 @@ class AppConstants:
 
 
 
+def format_pixel_limit(limit: int, lang: str = "zh") -> str:
+    if lang == "en":
+        if limit >= 1_000_000 and limit % 1_000_000 == 0:
+            return f"{limit // 1_000_000} million"
+        return f"{limit:,}"
+    if limit >= 100_000_000 and limit % 100_000_000 == 0:
+        return f"{limit // 100_000_000}亿"
+    if limit >= 10_000 and limit % 10_000 == 0:
+        return f"{limit // 10_000}万"
+    return str(limit)
+
+
 class ImageConstants:
-    MAX_IMAGE_PIXELS = 100_000_000
+    MAX_IMAGE_PIXELS = 200_000_000
 
     # split_lr 布局中右侧 Logo 高度占底栏的比例
     LOGO_HEIGHT_RATIO = 0.5

@@ -44,6 +44,12 @@ export default {
     watermarked: '水印图',
     motionHint: '悬停播放动态照片',
   },
+  options: {
+    preserve_hdr: '保留HDR效果',
+    preserve_motion: '保留动态照片',
+    detected: '检测到特殊格式',
+    confirm: '确认并处理',
+  },
   lang: {
     zh: '中文',
     en: 'English',

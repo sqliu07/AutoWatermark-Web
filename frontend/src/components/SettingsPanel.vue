@@ -52,7 +52,7 @@
       </a-button>
 
       <a-button
-        v-if="store.succeededTasks.length > 1"
+        v-if="store.canDownloadZip"
         block
         @click="store.downloadZip()"
       >

@@ -44,6 +44,12 @@ export default {
     watermarked: 'Watermarked',
     motionHint: 'Hover to play motion photo',
   },
+  options: {
+    preserve_hdr: 'Preserve HDR',
+    preserve_motion: 'Preserve Motion Photo',
+    detected: 'Special Format Detected',
+    confirm: 'Confirm & Process',
+  },
   lang: {
     zh: '中文',
     en: 'English',

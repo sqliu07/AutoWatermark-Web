@@ -2,6 +2,19 @@ import axios from 'axios'
 
 const http = axios.create({ baseURL: '/api' })
 
+http.interceptors.response.use(
+  res => res,
+  err => {
+    const data = err.response?.data
+    if (data?.error) {
+      const e = new Error(data.error)
+      e.code = err.response.status
+      throw e
+    }
+    throw err
+  },
+)
+
 export async function getStyles() {
   const { data } = await http.get('/styles')
   return data
@@ -31,6 +44,15 @@ export async function confirmLogoChoice(taskId, logoPreference) {
   const { data } = await http.post('/upload/confirm_logo', {
     task_id: taskId,
     logo_preference: logoPreference,
+  })
+  return data
+}
+
+export async function confirmOptions(taskId, options) {
+  const { data } = await http.post('/upload/confirm_options', {
+    task_id: taskId,
+    preserve_hdr: options.preserve_hdr,
+    preserve_motion: options.preserve_motion,
   })
   return data
 }

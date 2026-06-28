@@ -2,7 +2,7 @@ import os
 import tempfile
 import zipfile
 
-from flask import Blueprint, current_app, jsonify, redirect, request, send_file
+from flask import Blueprint, current_app, jsonify, redirect, render_template, request, send_file
 from werkzeug.utils import secure_filename
 
 from constants import AppConstants
@@ -37,7 +37,10 @@ def download_zip():
         fn = item.get("filename", "")
         if not fn:
             continue
-        if not verify_token(fn, item.get("token", ""), item.get("expires", "")):
+        burn = str(item.get("burn", "0")).strip()
+        if burn != "0":
+            return jsonify(error=get_error_message("link_expired", lang)), 403
+        if not verify_token(fn, item.get("token", ""), item.get("expires", ""), action="download", burn=burn):
             return jsonify(error=get_error_message("link_expired", lang)), 403
         filenames.append(fn)
 
@@ -69,7 +72,7 @@ def download_zip():
         return jsonify(error=get_error_message("zip_create_failed", lang)), 500
 
     # 生成带签名的 ZIP 下载 URL
-    zip_url = build_signed_url(f"/api/download_temp_zip/{zip_filename}", zip_filename)
+    zip_url = build_signed_url(f"/api/download_temp_zip/{zip_filename}", zip_filename, action="zip")
     return jsonify(zip_url=zip_url)
 
 
@@ -83,17 +86,17 @@ def download_temp_zip(filename):
     safe_filename_str = secure_filename(filename)
     if not safe_filename_str:
         if is_browser:
-            return redirect("/")
+            return render_template("image_deleted.html"), 404
         return jsonify(error=get_error_message("file_not_found", lang)), 400
 
-    if not verify_token(safe_filename_str, token, expires):
+    if not verify_token(safe_filename_str, token, expires, action="zip"):
         if is_browser:
-            return redirect("/")
+            return render_template("image_deleted.html"), 404
         return jsonify(error=get_error_message("link_expired", lang)), 403
 
     file_path = os.path.join(tempfile.gettempdir(), safe_filename_str)
     if not os.path.isfile(file_path):
         if is_browser:
-            return redirect("/")
+            return render_template("image_deleted.html"), 404
         return jsonify(error=get_error_message("file_not_found", lang)), 404
     return send_file(file_path, as_attachment=True, download_name=safe_filename_str)

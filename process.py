@@ -12,16 +12,10 @@ from io import BytesIO
 from exif import find_logo, get_manufacturer, get_exif_data, get_exif_data_with_exiftool, get_camera_model
 from imaging import reset_image_orientation, generate_watermark_image
 from constants import CommonConstants, ImageConstants
-from errors import (
-    WatermarkError,
-    MissingExifDataError,
-    UnsupportedManufacturerError,
-    ExifProcessingError,
-    UnexpectedProcessingError,
-    ImageTooLargeError,
-)
+from errors import WatermarkError, WatermarkErrorCode
 
 from media.ultrahdr import (
+    UltraHDRParts,
     split_ultrahdr,
     inject_xmp,
     update_primary_xmp_lengths,
@@ -43,7 +37,7 @@ def _enforce_image_pixel_limit(image: Image.Image) -> None:
     logger.info("Image size: %dx%d=%d, max allowed pixels: %s", image.width, image.height, image_size, str(max_pixels) if max_pixels else "unlimited")
     if max_pixels and image_size > max_pixels:
         detail = f"{image.width}x{image.height}"
-        raise ImageTooLargeError(detail=detail)
+        raise WatermarkError(WatermarkErrorCode.IMAGE_TOO_LARGE, detail=detail)
 
 def _report_progress(progress_callback: Optional[Callable], progress: float, stage: Optional[str] = None) -> None:
     if progress_callback:
@@ -77,11 +71,52 @@ class _ProcessingState:
     watermark_metadata: Optional[dict] = None
 
 
+def detect_image_features(image_path: str) -> dict:
+    """快速检测图片是否为 HDR 或 Motion Photo（仅读取文件头，不加载图像）。"""
+    result = {"is_hdr": False, "is_motion": False}
+
+    # 检测 Motion Photo
+    try:
+        motion_session = prepare_motion_photo(image_path)
+        if motion_session:
+            result["is_motion"] = bool(motion_session.has_motion)
+            motion_session.cleanup()
+    except Exception:
+        pass
+
+    # 检测 Ultra HDR（读取前 64KB 检查标记）
+    UHDR_MARKERS = (
+        b"hdrgm:Version",
+        b"urn:apple:photo:2024:aux:hdrgainmap",
+        b'Item:Semantic="GainMap"',
+        b"http://ns.adobe.com/hdr-gain-map/1.0/",
+    )
+    try:
+        with open(image_path, "rb") as f:
+            header = f.read(65536)
+        if any(m in header for m in UHDR_MARKERS):
+            result["is_hdr"] = True
+    except Exception:
+        pass
+
+    return result
+
+
 def _detect_format(state: _ProcessingState) -> None:
     """检测 motion photo 和 Ultra HDR 格式，更新 working_image_path。"""
     state.motion_session = prepare_motion_photo(state.image_path)
     if state.motion_session and state.motion_session.has_motion:
         state.working_image_path = str(state.motion_session.still_path)
+        if state.motion_session.ultrahdr_gainmap_jpeg:
+            primary_jpeg = Path(state.motion_session.still_path).read_bytes()
+            state.ultrahdr_parts = UltraHDRParts(
+                primary_jpeg=primary_jpeg,
+                gainmap_jpeg=state.motion_session.ultrahdr_gainmap_jpeg,
+                primary_xmp=build_primary_xmp_for_gainmap(len(state.motion_session.ultrahdr_gainmap_jpeg)),
+                gainmap_xmp=state.motion_session.ultrahdr_gainmap_xmp,
+                primary_len=len(primary_jpeg),
+            )
+            return
     else:
         state.motion_session = None
 
@@ -128,7 +163,7 @@ def _load_image(state: _ProcessingState) -> None:
         else:
             state.image = Image.open(state.working_image_path)
     except Image.DecompressionBombError as e:
-        raise ImageTooLargeError(detail=str(e)) from e
+        raise WatermarkError(WatermarkErrorCode.IMAGE_TOO_LARGE, detail=str(e)) from e
     state.image = reset_image_orientation(state.image)
     _enforce_image_pixel_limit(state.image)
 
@@ -150,7 +185,7 @@ def _extract_metadata(state: _ProcessingState) -> None:
     if state.exif_dict is None:
         state.fallback_metadata = get_exif_data_with_exiftool(state.working_image_path)
         if not state.fallback_metadata:
-            raise MissingExifDataError()
+            raise WatermarkError(WatermarkErrorCode.MISSING_EXIF_DATA)
 
     state.using_fallback_metadata = state.exif_dict is None
     if state.manufacturer:
@@ -161,7 +196,7 @@ def _extract_metadata(state: _ProcessingState) -> None:
         state.fallback_metadata = state.fallback_metadata or get_exif_data_with_exiftool(state.working_image_path)
         state.manufacturer = state.fallback_metadata.get("manufacturer") if state.fallback_metadata else None
         if not state.manufacturer:
-            raise MissingExifDataError()
+            raise WatermarkError(WatermarkErrorCode.MISSING_EXIF_DATA)
         state.using_fallback_metadata = True
 
     state.camera_model = get_camera_model(state.exif_dict) if state.exif_dict is not None else None
@@ -175,7 +210,7 @@ def _extract_metadata(state: _ProcessingState) -> None:
             state.fallback_metadata.get("shooting_info"),
         )
     if result is None or result == (None, None):
-        raise ExifProcessingError()
+        raise WatermarkError(WatermarkErrorCode.EXIF_PROCESSING_ERROR)
 
     state.camera_info, state.shooting_info = result
 
@@ -191,7 +226,7 @@ def _resolve_logo(state: _ProcessingState) -> None:
         state.logo_path = find_logo(state.manufacturer)
     if state.logo_path is None:
         detail = state.manufacturer if not state.camera_model else f"{state.manufacturer} {state.camera_model}"
-        raise UnsupportedManufacturerError(state.manufacturer, detail=detail)
+        raise WatermarkError(WatermarkErrorCode.UNSUPPORTED_MANUFACTURER, detail=detail)
 
 
 def _render_watermark(state: _ProcessingState) -> None:
@@ -228,29 +263,43 @@ def _render_watermark(state: _ProcessingState) -> None:
         state.watermark_metadata = None
 
 
-def _save_output(state: _ProcessingState, preview: bool, advance_progress: Callable) -> ProcessResult:
+def _save_output(state: _ProcessingState, preview: bool, advance_progress: Callable,
+                 preserve_motion: bool = True, preserve_hdr: bool = True) -> ProcessResult:
     """保存输出图像（预览 / motion photo / Ultra HDR / 标准 JPEG）。"""
     if preview:
         return ProcessResult(preview_image=state.new_image)
 
     advance_progress("saving")
     is_motion = False
-    if state.motion_session and state.watermark_metadata and state.style["supports_motion"]:
+    source_is_hdr = state.ultrahdr_parts is not None
+    output_is_hdr = False
+
+    # 决定是否保留动态照片
+    should_preserve_motion = (
+        preserve_motion
+        and state.motion_session
+        and state.watermark_metadata
+        and state.style["supports_motion"]
+    )
+    should_preserve_hdr = (
+        preserve_hdr
+        and source_is_hdr
+        and state.style["supports_ultrahdr"]
+    )
+
+    if should_preserve_motion:
         is_motion = True
+        output_is_hdr = bool(should_preserve_hdr and state.motion_session.ultrahdr_gainmap_jpeg)
+        if not output_is_hdr:
+            state.motion_session.ultrahdr_gainmap_jpeg = None
+            state.motion_session.ultrahdr_gainmap_xmp = None
+            state.motion_session.ultrahdr_primary_size = None
         temp_output = Path(state.motion_session.still_path.parent) / "watermarked_motion_frame.jpg"
         state.new_image.save(temp_output, exif=state.exif_bytes, quality=state.image_quality)
         state.motion_session.finalize(temp_output, Path(state.output_path), state.watermark_metadata)
     else:
-        if state.ultrahdr_parts is not None:
-            if not state.style["supports_ultrahdr"]:
-                logger.warning(
-                    "watermark style %s does not support Ultra HDR preservation; fallback to SDR output.",
-                    state.watermark_type,
-                )
-                state.new_image.save(state.output_path, exif=state.exif_bytes, quality=state.image_quality)
-                advance_progress("saved")
-                return ProcessResult()
-
+        if should_preserve_hdr:
+            output_is_hdr = True
             # 1) 编码新的主图 JPEG（暂不含 XMP）
             buf = BytesIO()
             save_kwargs = dict(format="JPEG", quality=state.image_quality, exif=state.exif_bytes)
@@ -275,7 +324,7 @@ def _save_output(state: _ProcessingState, preview: bool, advance_progress: Calla
 
             # 3) 更新主图 XMP 长度并注入
             if state.ultrahdr_parts.primary_xmp is None:
-                raise UnexpectedProcessingError(detail="Primary XMP missing; cannot rebuild Ultra HDR container.")
+                raise WatermarkError(WatermarkErrorCode.UNEXPECTED_ERROR, detail="Primary XMP missing; cannot rebuild Ultra HDR container.")
 
             tmp_primary = inject_xmp(new_primary_jpeg, state.ultrahdr_parts.primary_xmp)
             updated_xmp = update_primary_xmp_lengths(
@@ -287,12 +336,18 @@ def _save_output(state: _ProcessingState, preview: bool, advance_progress: Calla
 
             Path(state.output_path).write_bytes(final_primary + gainmap_jpeg)
             advance_progress("saved")
-            return ProcessResult()
+            return ProcessResult(is_hdr=output_is_hdr)
+        else:
+            if source_is_hdr and not state.style["supports_ultrahdr"]:
+                logger.warning(
+                    "watermark style %s does not support Ultra HDR preservation; fallback to SDR output.",
+                    state.watermark_type,
+                )
 
         state.new_image.save(state.output_path, exif=state.exif_bytes, quality=state.image_quality)
         advance_progress("saved")
-        return ProcessResult()
-    return ProcessResult(is_motion=is_motion)
+        return ProcessResult(is_hdr=output_is_hdr)
+    return ProcessResult(is_motion=is_motion, is_hdr=output_is_hdr)
 
 
 def _cleanup(state: Optional[_ProcessingState]) -> None:
@@ -323,6 +378,8 @@ def process_image(
     progress_callback: Optional[Callable[[float, Optional[str]], None]] = None,
     style_config: Optional[dict] = None,
     preliminary_manufacturer: Optional[str] = None,
+    preserve_motion: bool = True,
+    preserve_hdr: bool = True,
 ) -> ProcessResult:
     """
     Adds a watermark to the given image.
@@ -336,9 +393,11 @@ def process_image(
         logo_preference (str, optional): Logo preference for Xiaomi devices. Defaults to "xiaomi".
         progress_callback (callable, optional): Callback for progress updates.
         style_config (dict, optional): Loaded watermark style config.
+        preserve_motion (bool, optional): Whether to preserve motion photo. Defaults to True.
+        preserve_hdr (bool, optional): Whether to preserve Ultra HDR. Defaults to True.
 
     Returns:
-        ProcessResult: 处理结果，包含 success、is_motion、preview_image 字段。
+        ProcessResult: 处理结果，包含 success、is_motion、is_hdr、preview_image 字段。
     """
     state = None
     try:
@@ -346,7 +405,7 @@ def process_image(
             style_config = load_cached_watermark_styles(CommonConstants.WATERMARK_STYLE_CONFIG_PATH)
         style = get_style(style_config, watermark_type)
         if not style or not style["enabled"]:
-            raise UnexpectedProcessingError(detail=f"Invalid watermark style: {watermark_type}")
+            raise WatermarkError(WatermarkErrorCode.UNEXPECTED_ERROR, detail=f"Invalid watermark style: {watermark_type}")
 
         original_name, extension = os.path.splitext(image_path)
         output_path = f"{original_name}_watermark{extension}"
@@ -386,12 +445,12 @@ def process_image(
         _render_watermark(state)
         advance_progress("rendered")
 
-        return _save_output(state, preview, advance_progress)
+        return _save_output(state, preview, advance_progress, preserve_motion, preserve_hdr)
 
     except WatermarkError:
         raise
     except Exception as exc:
-        raise UnexpectedProcessingError(detail=str(exc)) from exc
+        raise WatermarkError(WatermarkErrorCode.UNEXPECTED_ERROR, detail=str(exc)) from exc
     finally:
         _cleanup(state)
 
@@ -413,7 +472,11 @@ def main():
     try:
         process_image(image_path, lang, watermark_type, image_quality)
     except WatermarkError as err:
-        message = get_error_message(err.get_message_key(), lang) or err.get_detail() or err.get_message_key()
+        message = (
+            get_error_message(err.message_key, lang, **err.get_message_kwargs(lang))
+            or err.detail
+            or err.message_key
+        )
         logger.error(message)
         sys.exit(1)
     except Exception as exc:

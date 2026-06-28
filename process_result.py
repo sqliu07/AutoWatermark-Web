@@ -9,4 +9,5 @@ class ProcessResult:
     """处理结果。"""
     success: bool = True
     is_motion: bool = False
+    is_hdr: bool = False
     preview_image: Optional[Image.Image] = None

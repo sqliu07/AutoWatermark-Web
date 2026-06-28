@@ -16,8 +16,8 @@
     "zh": "处理水印时发生未知错误。"
   },
   "image_too_large": {
-    "en": "Image size exceeds 100 million pixels, too large to process!",
-    "zh": "图片超过一亿像素，尺寸过大，无法处理！"
+    "en": "Image size exceeds {limit} pixels, too large to process!",
+    "zh": "图片超过{limit}像素，尺寸过大，无法处理！"
   },
   "invalid_file_type": {
     "en": "Invalid file type! Please upload a PNG, JPG or JPEG file.",

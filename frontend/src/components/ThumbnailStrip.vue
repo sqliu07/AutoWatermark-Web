@@ -26,9 +26,9 @@
 
         <!-- 下载按钮 -->
         <a
-          v-if="task.status === 'succeeded' && task.result?.processed_image"
+          v-if="task.status === 'succeeded' && task.result?.download_url"
           class="thumb-download"
-          :href="task.result.processed_image"
+          :href="task.result.download_url"
           :download="task.originalName"
           @click.stop
         >
@@ -53,8 +53,8 @@ const blobUrlMap = new WeakMap() // file 对象 → blob URL，避免重复创�
 function rebuildThumbUrls() {
   thumbUrls.value = store.tasks.map(task => {
     // 已有处理结果，用服务端 URL
-    if (task.status === 'succeeded' && task.result?.processed_image) {
-      return task.result.processed_image
+    if (task.status === 'succeeded' && task.result?.preview_url) {
+      return task.result.preview_url
     }
     // 本地文件预览：复用已创建的 blob URL
     if (task.file) {
@@ -70,7 +70,7 @@ function rebuildThumbUrls() {
 // 仅在任务列表引用变化时重建（新增/清空），不监听每个属性变化
 watch(() => store.tasks.length, rebuildThumbUrls, { immediate: true })
 // 监听结果变化（处理完成后切换到服务端 URL）
-watch(() => store.tasks.map(t => t.result?.processed_image).join(','), rebuildThumbUrls)
+watch(() => store.tasks.map(t => t.result?.preview_url).join(','), rebuildThumbUrls)
 
 onUnmounted(() => {
   // WeakMap 无法遍历，blob URL 由浏览器在页面卸载时自动释放

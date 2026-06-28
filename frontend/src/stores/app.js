@@ -47,6 +47,17 @@ export const useAppStore = defineStore('app', () => {
   const succeededTasks = computed(() =>
     tasks.value.filter(t => t.status === 'succeeded')
   )
+  const canDownloadZip = computed(() =>
+    succeededTasks.value.length > 1 && succeededTasks.value.every(t => {
+      const url = t.result?.download_url
+      if (!url) return false
+      const queryString = url.split('?')[1] || ''
+      return (new URLSearchParams(queryString).get('burn') || '0') === '0'
+    })
+  )
+  const hasPendingOptions = computed(() =>
+    tasks.value.some(t => t.status === 'needs_options')
+  )
 
   function addFiles(newFiles) {
     files.value = [...files.value, ...newFiles]
@@ -107,6 +118,20 @@ export const useAppStore = defineStore('app', () => {
           return
         }
 
+        if (res.needs_options) {
+          task.id = res.task_id
+          task.status = 'needs_options'
+          task.features = res.features || {}
+          task.preserveOptions = {
+            preserve_hdr: res.preserve_hdr !== false,
+            preserve_motion: res.preserve_motion !== false,
+          }
+          if (!currentPreview.value || currentPreview.value.status !== 'needs_options') {
+            currentPreview.value = task
+          }
+          return
+        }
+
         task.id = res.task_id
         task.status = 'processing'
         await pollTask(task)
@@ -142,7 +167,19 @@ export const useAppStore = defineStore('app', () => {
 
     async function processOne(task) {
       try {
-        await api.confirmLogoChoice(task.id, choice)
+        const res = await api.confirmLogoChoice(task.id, choice)
+        if (res.needs_options) {
+          task.status = 'needs_options'
+          task.features = res.features || {}
+          task.preserveOptions = {
+            preserve_hdr: res.preserve_hdr !== false,
+            preserve_motion: res.preserve_motion !== false,
+          }
+          if (!currentPreview.value || currentPreview.value.status !== 'needs_options') {
+            currentPreview.value = task
+          }
+          return
+        }
         task.status = 'processing'
         await pollTask(task)
       } catch (e) {
@@ -163,6 +200,27 @@ export const useAppStore = defineStore('app', () => {
     await Promise.all(executing)
 
     isProcessing.value = false
+  }
+
+  async function processPendingOptionsTask(task, options) {
+    if (!task || task.status !== 'needs_options' || !task.id) return
+    isProcessing.value = true
+
+    try {
+      await api.confirmOptions(task.id, options)
+      task.status = 'processing'
+      await pollTask(task)
+      const nextPending = tasks.value.find(t => t.status === 'needs_options')
+      if (nextPending) {
+        currentPreview.value = nextPending
+      }
+    } catch (e) {
+      task.status = 'failed'
+      task.progress = 1
+      task.error = e.message || 'Confirm options failed'
+    } finally {
+      isProcessing.value = false
+    }
   }
 
   async function pollTask(task) {
@@ -212,19 +270,24 @@ export const useAppStore = defineStore('app', () => {
   }
 
   async function downloadZip() {
+    if (!canDownloadZip.value) {
+      throw new Error('Burn-after-read files cannot be downloaded as ZIP')
+    }
     const items = succeededTasks.value
       .map(t => {
-        const url = t.result?.processed_image
+        const url = t.result?.download_url
         if (!url) return null
-        // URL 格式: /api/upload/filename.jpg?token=...&expires=...
-        const match = url.match(/\/upload\/([^?]+)(?:\?(.*))?/)
+        // URL 格式: /api/download/filename.jpg?token=...&expires=...&burn=1
+        const match = url.match(/\/download\/([^?]+)(?:\?(.*))?/)
         if (!match) return null
         const filename = match[1]
         const queryString = match[2] || ''
         const params = new URLSearchParams(queryString)
         const token = params.get('token') || ''
         const expires = params.get('expires') || ''
-        return { filename, token, expires }
+        const burn = params.get('burn') || '0'
+        const action = params.get('action') || 'download'
+        return { filename, token, expires, burn, action }
       })
       .filter(Boolean)
 
@@ -237,9 +300,9 @@ export const useAppStore = defineStore('app', () => {
 
   return {
     files, watermarkStyles, selectedStyle, imageQuality,
-    burnAfterRead, logoPreference, isProcessing, tasks,
-    currentPreview, completedCount, totalCount, allDone,
-    succeededTasks, stylesLoaded, loadStyles, addFiles,
-    clearFiles, reselectFiles, setPreview, processAll, processPendingLogoTasks, downloadZip,
+    burnAfterRead, logoPreference, isProcessing, tasks, currentPreview, completedCount, totalCount, allDone,
+    succeededTasks, canDownloadZip, stylesLoaded, loadStyles, addFiles,
+    clearFiles, reselectFiles, setPreview, processAll, processPendingLogoTasks,
+    processPendingOptionsTask, downloadZip, hasPendingOptions,
   }
 })

@@ -1,10 +1,27 @@
 import glob
 import os
+import re
 import tempfile
 import threading
 import time
 
 from constants import AppConstants
+
+_WATERMARK_SUFFIX = "_watermark"
+_WATERMARK_PATTERN = re.compile(r"(.+)_watermark(\.[^.]+)$")
+
+
+def _derive_paired_path(file_path: str) -> str | None:
+    """根据 _watermark 命名规则推导配对文件路径。"""
+    dirname = os.path.dirname(file_path)
+    basename = os.path.basename(file_path)
+    m = _WATERMARK_PATTERN.match(basename)
+    if m:
+        # foo_watermark.jpg → foo.jpg
+        return os.path.join(dirname, m.group(1) + m.group(2))
+    # foo.jpg → foo_watermark.jpg
+    root, ext = os.path.splitext(basename)
+    return os.path.join(dirname, f"{root}{_WATERMARK_SUFFIX}{ext}")
 
 
 def cleanup_file_and_original(file_path: str, logger) -> None:
@@ -31,6 +48,23 @@ def _protected_upload_files(app) -> set[str]:
     return protected
 
 
+def _is_stale_upload_file(file_path: str, current_time: float, protected: set[str]) -> bool:
+    return (
+        file_path not in protected
+        and os.path.isfile(file_path)
+        and (current_time - os.path.getmtime(file_path) > AppConstants.UPLOAD_RETENTION_SECONDS)
+    )
+
+
+def _delete_stale_upload(file_path: str, logger) -> bool:
+    try:
+        os.remove(file_path)
+        logger.info("[Auto-Clean] Deleted stale file: %s", os.path.basename(file_path))
+        return True
+    except OSError:
+        return False
+
+
 def _cleanup_stale_uploads(app, current_time: float, logger) -> int:
     upload_dir = app.config["UPLOAD_FOLDER"]
     if not os.path.isdir(upload_dir):
@@ -45,13 +79,13 @@ def _cleanup_stale_uploads(app, current_time: float, logger) -> int:
             continue
 
         try:
-            if (
-                os.path.isfile(file_path)
-                and (current_time - os.path.getmtime(file_path) > AppConstants.UPLOAD_RETENTION_SECONDS)
-            ):
-                os.remove(file_path)
-                logger.info("[Auto-Clean] Deleted stale file: %s", filename)
-                cleaned_stale += 1
+            if _is_stale_upload_file(file_path, current_time, protected):
+                paired = _derive_paired_path(file_path)
+                if _delete_stale_upload(file_path, logger):
+                    cleaned_stale += 1
+                if paired and _is_stale_upload_file(paired, current_time, protected):
+                    if _delete_stale_upload(paired, logger):
+                        cleaned_stale += 1
         except OSError:
             pass
 

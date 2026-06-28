@@ -60,10 +60,10 @@
           />
           <img
             v-else
-            :src="previewTask.result.processed_image"
+            :src="previewTask.result.preview_url"
             class="compare-img"
             :alt="previewTask.originalName"
-            @click="openFullscreen(previewTask.result.processed_image)"
+            @click="openFullscreen(previewTask.result.preview_url)"
           />
         </div>
       </div>
@@ -74,21 +74,21 @@
         <div class="action-buttons">
           <a-button
             size="small"
-            @click="openFullscreen(previewTask.result.processed_image)"
+            @click="openFullscreen(previewTask.result.preview_url)"
           >
             {{ t('action.preview') }}
           </a-button>
           <a-button
             type="primary"
             size="small"
-            :href="previewTask.result.processed_image"
+            :href="previewTask.result.download_url"
             :download="previewTask.originalName"
             tag="a"
           >
             {{ t('action.download') }}
           </a-button>
           <a-button
-            v-if="store.succeededTasks.length > 1"
+            v-if="store.canDownloadZip"
             size="small"
             @click="store.downloadZip()"
           >
@@ -99,6 +99,7 @@
           </a-button>
         </div>
       </div>
+
     </template>
 
     <!-- 处理失败 -->
@@ -112,6 +113,47 @@
         </div>
         <p class="error-name">{{ previewTask.originalName }}</p>
         <p class="error-msg">{{ previewTask.error }}</p>
+      </div>
+    </template>
+
+    <!-- 等待用户选择 HDR/Motion 选项 -->
+    <template v-else-if="previewTask?.status === 'needs_options'">
+      <div class="options-view">
+        <div class="options-icon">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="10" stroke="var(--color-accent)" stroke-width="1.5"/>
+            <path d="M12 8v4M12 16h.01" stroke="var(--color-accent)" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <p class="options-title">{{ t('options.detected') }}</p>
+        <p class="options-filename">{{ previewTask.originalName }}</p>
+
+        <div class="options-toggle-group">
+          <div v-if="previewTask.features?.is_hdr" class="option-toggle-item">
+            <a-switch
+              size="small"
+              :checked="pendingPreserveHdr"
+              @change="pendingPreserveHdr = $event"
+            />
+            <span class="option-toggle-label">{{ t('options.preserve_hdr') }}</span>
+          </div>
+          <div v-if="previewTask.features?.is_motion" class="option-toggle-item">
+            <a-switch
+              size="small"
+              :checked="pendingPreserveMotion"
+              @change="pendingPreserveMotion = $event"
+            />
+            <span class="option-toggle-label">{{ t('options.preserve_motion') }}</span>
+          </div>
+        </div>
+
+        <a-button
+          type="primary"
+          size="large"
+          @click="confirmOptions"
+        >
+          {{ t('options.confirm') }}
+        </a-button>
       </div>
     </template>
 
@@ -188,7 +230,6 @@
 import { ref, computed, watch, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '../stores/app'
-import { buildMotionVideoUrl } from '../api'
 
 const { t } = useI18n()
 const store = useAppStore()
@@ -247,10 +288,44 @@ const currentProcessingName = computed(() => {
 // Motion Photo 播放
 const isMotion = computed(() => previewTask.value?.result?.is_motion === true)
 
+// 等待用户选择的选项（needs_options 状态）
+const pendingOptions = ref({})
+const currentPendingKey = computed(() => previewTask.value?.id || '__none__')
+const currentPendingOptions = computed(() => {
+  const key = currentPendingKey.value
+  if (!pendingOptions.value[key]) {
+    pendingOptions.value[key] = {
+      preserve_hdr: previewTask.value?.preserveOptions?.preserve_hdr !== false,
+      preserve_motion: previewTask.value?.preserveOptions?.preserve_motion !== false,
+    }
+  }
+  return pendingOptions.value[key]
+})
+const pendingPreserveHdr = computed({
+  get: () => currentPendingOptions.value.preserve_hdr,
+  set: value => {
+    currentPendingOptions.value.preserve_hdr = value
+  },
+})
+const pendingPreserveMotion = computed({
+  get: () => currentPendingOptions.value.preserve_motion,
+  set: value => {
+    currentPendingOptions.value.preserve_motion = value
+  },
+})
+
+// 确认选项并继续处理
+async function confirmOptions() {
+  await store.processPendingOptionsTask(previewTask.value, {
+    preserve_hdr: currentPendingOptions.value.preserve_hdr,
+    preserve_motion: currentPendingOptions.value.preserve_motion,
+  })
+}
+
 // 水印图视频（从后端端点获取）
 const motionVideoUrl = computed(() => {
   if (!isMotion.value) return null
-  return buildMotionVideoUrl(previewTask.value.result.processed_image)
+  return previewTask.value.result.motion_video_url || null
 })
 const motionPlaying = ref(false)
 
@@ -522,6 +597,59 @@ function openFullscreen(src) {
   font-size: 13px;
   color: var(--color-error);
   letter-spacing: -0.1px;
+}
+
+/* --- 选项视图 --- */
+.options-view {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 20px;
+}
+
+.options-icon {
+  margin-bottom: 4px;
+}
+
+.options-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text);
+  letter-spacing: -0.2px;
+  margin: 0;
+}
+
+.options-filename {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  margin: 0;
+}
+
+.options-toggle-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  max-width: 280px;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-radius: var(--radius-sm);
+  border: 0.5px solid var(--color-border-light);
+}
+
+.option-toggle-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.option-toggle-label {
+  font-size: 13px;
+  color: var(--color-text);
+  user-select: none;
 }
 
 /* --- 进度覆盖 --- */
