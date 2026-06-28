@@ -48,6 +48,15 @@ export async function confirmLogoChoice(taskId, logoPreference) {
   return data
 }
 
+export async function confirmOptions(taskId, options) {
+  const { data } = await http.post('/upload/confirm_options', {
+    task_id: taskId,
+    preserve_hdr: options.preserve_hdr,
+    preserve_motion: options.preserve_motion,
+  })
+  return data
+}
+
 export async function downloadZip(items) {
   const { data } = await http.post('/download_zip', { items })
   return data

@@ -55,6 +55,9 @@ export const useAppStore = defineStore('app', () => {
       return (new URLSearchParams(queryString).get('burn') || '0') === '0'
     })
   )
+  const hasPendingOptions = computed(() =>
+    tasks.value.some(t => t.status === 'needs_options')
+  )
 
   function addFiles(newFiles) {
     files.value = [...files.value, ...newFiles]
@@ -115,6 +118,20 @@ export const useAppStore = defineStore('app', () => {
           return
         }
 
+        if (res.needs_options) {
+          task.id = res.task_id
+          task.status = 'needs_options'
+          task.features = res.features || {}
+          task.preserveOptions = {
+            preserve_hdr: res.preserve_hdr !== false,
+            preserve_motion: res.preserve_motion !== false,
+          }
+          if (!currentPreview.value || currentPreview.value.status !== 'needs_options') {
+            currentPreview.value = task
+          }
+          return
+        }
+
         task.id = res.task_id
         task.status = 'processing'
         await pollTask(task)
@@ -150,7 +167,19 @@ export const useAppStore = defineStore('app', () => {
 
     async function processOne(task) {
       try {
-        await api.confirmLogoChoice(task.id, choice)
+        const res = await api.confirmLogoChoice(task.id, choice)
+        if (res.needs_options) {
+          task.status = 'needs_options'
+          task.features = res.features || {}
+          task.preserveOptions = {
+            preserve_hdr: res.preserve_hdr !== false,
+            preserve_motion: res.preserve_motion !== false,
+          }
+          if (!currentPreview.value || currentPreview.value.status !== 'needs_options') {
+            currentPreview.value = task
+          }
+          return
+        }
         task.status = 'processing'
         await pollTask(task)
       } catch (e) {
@@ -171,6 +200,27 @@ export const useAppStore = defineStore('app', () => {
     await Promise.all(executing)
 
     isProcessing.value = false
+  }
+
+  async function processPendingOptionsTask(task, options) {
+    if (!task || task.status !== 'needs_options' || !task.id) return
+    isProcessing.value = true
+
+    try {
+      await api.confirmOptions(task.id, options)
+      task.status = 'processing'
+      await pollTask(task)
+      const nextPending = tasks.value.find(t => t.status === 'needs_options')
+      if (nextPending) {
+        currentPreview.value = nextPending
+      }
+    } catch (e) {
+      task.status = 'failed'
+      task.progress = 1
+      task.error = e.message || 'Confirm options failed'
+    } finally {
+      isProcessing.value = false
+    }
   }
 
   async function pollTask(task) {
@@ -250,9 +300,9 @@ export const useAppStore = defineStore('app', () => {
 
   return {
     files, watermarkStyles, selectedStyle, imageQuality,
-    burnAfterRead, logoPreference, isProcessing, tasks,
-    currentPreview, completedCount, totalCount, allDone,
+    burnAfterRead, logoPreference, isProcessing, tasks, currentPreview, completedCount, totalCount, allDone,
     succeededTasks, canDownloadZip, stylesLoaded, loadStyles, addFiles,
-    clearFiles, reselectFiles, setPreview, processAll, processPendingLogoTasks, downloadZip,
+    clearFiles, reselectFiles, setPreview, processAll, processPendingLogoTasks,
+    processPendingOptionsTask, downloadZip, hasPendingOptions,
   }
 })

@@ -30,6 +30,8 @@ class TaskPayload:
     style_config: object
     logger: object
     preliminary_manufacturer: Optional[str] = None
+    preserve_motion: bool = True
+    preserve_hdr: bool = True
 
 
 def allowed_file(filename: str, allowed_extensions: Set[str]) -> bool:
@@ -105,6 +107,9 @@ def _submit_task_with_id(task_id: str, payload: TaskPayload) -> None:
         image_quality=payload.image_quality,
         burn_after_read=payload.burn_after_read,
         logo_preference=payload.logo_preference,
+        preliminary_manufacturer=payload.preliminary_manufacturer,
+        preserve_motion=payload.preserve_motion,
+        preserve_hdr=payload.preserve_hdr,
     )
     _update_queue_metrics(state, task_id, payload.logger)
     state.executor.submit(background_process, payload)
@@ -156,9 +161,12 @@ def background_process(payload: TaskPayload) -> None:
             progress_callback=update_progress,
             style_config=style_config,
             preliminary_manufacturer=payload.preliminary_manufacturer,
+            preserve_motion=payload.preserve_motion,
+            preserve_hdr=payload.preserve_hdr,
         )
 
         is_motion = result.is_motion
+        is_hdr = result.is_hdr
 
         filename = os.path.basename(filepath)
         original_name, extension = os.path.splitext(filename)
@@ -185,6 +193,8 @@ def background_process(payload: TaskPayload) -> None:
                 processed_filename,
                 action="motion_video",
             )
+        if is_hdr:
+            task_result["is_hdr"] = True
 
         state.update_task(
             task_id,

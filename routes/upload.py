@@ -24,6 +24,43 @@ from services.tasks import (
     submit_task,
 )
 from services.watermark_styles import get_default_style_id, is_style_enabled
+from process import detect_image_features
+
+
+def _requested_bool(name: str) -> bool | None:
+    value = request.form.get(name)
+    if value is None:
+        return None
+    return str(value).lower() in {"1", "true", "yes", "on"}
+
+
+def _json_bool(payload: dict, name: str, default: bool = True) -> bool:
+    value = payload.get(name, default)
+    if isinstance(value, bool):
+        return value
+    return str(value).lower() in {"1", "true", "yes", "on"}
+
+
+def _has_media_options(features: dict | None) -> bool:
+    return bool(features and (features.get("is_hdr") or features.get("is_motion")))
+
+
+def _option_selection_missing(features: dict, preserve_motion: bool | None, preserve_hdr: bool | None) -> bool:
+    return (
+        (features.get("is_motion") and preserve_motion is None)
+        or (features.get("is_hdr") and preserve_hdr is None)
+    )
+
+
+def _options_payload(task_id: str, features: dict, preserve_motion: bool | None, preserve_hdr: bool | None) -> dict:
+    return {
+        "needs_options": True,
+        "task_id": task_id,
+        "features": features,
+        "preserve_motion": True if preserve_motion is None else bool(preserve_motion),
+        "preserve_hdr": True if preserve_hdr is None else bool(preserve_hdr),
+    }
+
 
 def _read_image_dimensions(filepath: str) -> tuple[int, int] | None:
     """从 JPEG / PNG 文件头解析像素尺寸，不依赖 PIL 全局状态。"""
@@ -104,6 +141,8 @@ def upload_file():
     burn_after_read = request.form.get("burn_after_read", "0")
     image_quality = request.form.get("image_quality", "high")
     logo_preference = request.form.get("logo_preference")
+    preserve_motion = _requested_bool("preserve_motion")
+    preserve_hdr = _requested_bool("preserve_hdr")
 
     image_quality_int = normalize_image_quality(image_quality)
 
@@ -138,6 +177,7 @@ def upload_file():
             return jsonify(error=get_error_message("image_too_large", lang, limit=format_pixel_limit(ImageConstants.MAX_IMAGE_PIXELS, lang))), 400
 
         manufacturer = detect_manufacturer(filepath)
+        features = detect_image_features(filepath)
         if manufacturer and "xiaomi" in manufacturer.lower():
             normalized_preference = (logo_preference or "").lower()
             if normalized_preference not in {"xiaomi", "leica"}:
@@ -152,10 +192,35 @@ def upload_file():
                         "watermark_type": watermark_type_int,
                         "image_quality": image_quality_int,
                         "burn_after_read": burn_after_read,
+                        "features": features,
+                        "preliminary_manufacturer": manufacturer,
+                        "preserve_motion": preserve_motion,
+                        "preserve_hdr": preserve_hdr,
                     },
                 )
                 return jsonify({"needs_logo_choice": True, "task_id": task_id}), 200
             logo_preference = normalized_preference
+
+        if _has_media_options(features) and _option_selection_missing(features, preserve_motion, preserve_hdr):
+            task_id = create_task(
+                state,
+                {
+                    "status": "needs_options",
+                    "stage": "awaiting_options",
+                    "progress": 0.0,
+                    "filepath": filepath,
+                    "lang": lang,
+                    "watermark_type": watermark_type_int,
+                    "image_quality": image_quality_int,
+                    "burn_after_read": burn_after_read,
+                    "logo_preference": logo_preference,
+                    "features": features,
+                    "preliminary_manufacturer": manufacturer,
+                    "preserve_motion": True if preserve_motion is None else preserve_motion,
+                    "preserve_hdr": True if preserve_hdr is None else preserve_hdr,
+                },
+            )
+            return jsonify(_options_payload(task_id, features, preserve_motion, preserve_hdr)), 200
 
         task_id = submit_task(TaskPayload(
             task_id="",
@@ -169,6 +234,8 @@ def upload_file():
             style_config=style_config,
             logger=current_app.logger,
             preliminary_manufacturer=manufacturer,
+            preserve_motion=True if preserve_motion is None else preserve_motion,
+            preserve_hdr=True if preserve_hdr is None else preserve_hdr,
         ))
 
         return jsonify({"task_id": task_id}), 202
@@ -204,6 +271,20 @@ def confirm_logo_choice():
     if not isinstance(watermark_type, int) or not is_style_enabled(style_config, watermark_type):
         return jsonify(error=get_error_message("unexpected_error", task.get("lang", "zh"))), 400
 
+    features = task.get("features") or {}
+    preserve_motion = task.get("preserve_motion")
+    preserve_hdr = task.get("preserve_hdr")
+    preliminary_manufacturer = task.get("preliminary_manufacturer")
+    if _has_media_options(features) and _option_selection_missing(features, preserve_motion, preserve_hdr):
+        state.update_task(
+            task_id,
+            status="needs_options",
+            stage="awaiting_options",
+            progress=0.0,
+            logo_preference=logo_preference,
+        )
+        return jsonify(_options_payload(task_id, features, preserve_motion, preserve_hdr)), 200
+
     submit_existing_task(task_id, TaskPayload(
         task_id=task_id,
         state=state,
@@ -215,6 +296,9 @@ def confirm_logo_choice():
         logo_preference=logo_preference,
         style_config=style_config,
         logger=current_app.logger,
+        preliminary_manufacturer=preliminary_manufacturer,
+        preserve_motion=True if preserve_motion is None else bool(preserve_motion),
+        preserve_hdr=True if preserve_hdr is None else bool(preserve_hdr),
     ))
 
     return jsonify({"task_id": task_id}), 202
@@ -223,6 +307,67 @@ def confirm_logo_choice():
 @bp.route("/upload/confirm_logo", methods=["GET"])
 def confirm_logo_entry_redirect():
     return redirect("/")
+
+
+@bp.route("/upload/confirm_options", methods=["POST"])
+@limiter.limit(AppConstants.UPLOAD_RATE_LIMIT)
+def confirm_options():
+    """确认 HDR/Motion Photo 选项后继续处理。"""
+    state = current_app.extensions["state"]
+    style_config = current_app.extensions.get("watermark_styles", {})
+    payload = request.get_json(silent=True) or {}
+    task_id = str(payload.get("task_id", "")).strip()
+    preserve_motion = payload.get("preserve_motion")
+    preserve_hdr = payload.get("preserve_hdr")
+
+    if not task_id:
+        return jsonify(error="task_id is required"), 400
+
+    task = state.get_task(task_id)
+    if not task:
+        return jsonify({"status": "unknown"}), 404
+    if task.get("status") != "needs_options":
+        return jsonify(error="task is not waiting for options"), 409
+
+    preserve_motion = _json_bool(
+        payload,
+        "preserve_motion",
+        True if task.get("preserve_motion") is None else bool(task.get("preserve_motion")),
+    )
+    preserve_hdr = _json_bool(
+        payload,
+        "preserve_hdr",
+        True if task.get("preserve_hdr") is None else bool(task.get("preserve_hdr")),
+    )
+
+    filepath = task.get("filepath")
+    if not filepath or not os.path.exists(filepath):
+        return jsonify(error=get_error_message("file_not_found", task.get("lang", "zh"))), 404
+
+    watermark_type = task.get("watermark_type")
+    if not isinstance(watermark_type, int) or not is_style_enabled(style_config, watermark_type):
+        return jsonify(error=get_error_message("unexpected_error", task.get("lang", "zh"))), 400
+
+    manufacturer = task.get("preliminary_manufacturer") or detect_manufacturer(filepath)
+    logo_preference = task.get("logo_preference")
+
+    submit_existing_task(task_id, TaskPayload(
+        task_id=task_id,
+        state=state,
+        filepath=filepath,
+        lang=task.get("lang", "zh"),
+        watermark_type=watermark_type,
+        image_quality=int(task.get("image_quality") or 85),
+        burn_after_read=str(task.get("burn_after_read") or "0"),
+        logo_preference=logo_preference,
+        style_config=style_config,
+        logger=current_app.logger,
+        preliminary_manufacturer=manufacturer,
+        preserve_motion=preserve_motion,
+        preserve_hdr=preserve_hdr,
+    ))
+
+    return jsonify({"task_id": task_id}), 202
 
 
 @bp.route("/status/<task_id>", methods=["GET"])

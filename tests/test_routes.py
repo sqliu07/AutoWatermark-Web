@@ -161,6 +161,28 @@ def test_upload_success_returns_task_id(client, monkeypatch):
     assert payload["task_id"] == "task-123"
 
 
+def test_upload_detected_media_features_waits_for_options(client, monkeypatch):
+    monkeypatch.setattr(upload_routes, "detect_manufacturer", lambda _: None)
+    monkeypatch.setattr(upload_routes, "detect_image_features", lambda _: {"is_hdr": True, "is_motion": False})
+
+    data = {
+        "file": (io.BytesIO(b"fake"), "sample.jpg"),
+        "watermark_type": "1",
+    }
+    response = client.post("/api/upload", data=data, content_type="multipart/form-data")
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["needs_options"] is True
+    assert payload["features"] == {"is_hdr": True, "is_motion": False}
+    assert payload["preserve_hdr"] is True
+    assert payload["preserve_motion"] is True
+
+    task = client.application.extensions["state"].get_task(payload["task_id"])
+    assert task["status"] == "needs_options"
+    assert task["stage"] == "awaiting_options"
+
+
 def test_confirm_logo_choice_submits_existing_task(client, monkeypatch):
     monkeypatch.setattr(upload_routes, "detect_manufacturer", lambda _: "xiaomi")
 
@@ -188,6 +210,165 @@ def test_confirm_logo_choice_submits_existing_task(client, monkeypatch):
     payload = confirm_response.get_json()
     assert payload["task_id"] == task_id
     assert submitted["task_id"] == task_id
+
+
+def test_confirm_logo_choice_can_continue_to_media_options(client, monkeypatch):
+    monkeypatch.setattr(upload_routes, "detect_manufacturer", lambda _: "xiaomi")
+    monkeypatch.setattr(upload_routes, "detect_image_features", lambda _: {"is_hdr": False, "is_motion": True})
+
+    upload_response = client.post(
+        "/api/upload",
+        data={"file": (io.BytesIO(b"fake"), "sample.jpg")},
+        content_type="multipart/form-data",
+    )
+    assert upload_response.status_code == 200
+    task_id = upload_response.get_json()["task_id"]
+
+    confirm_response = client.post(
+        "/api/upload/confirm_logo",
+        json={"task_id": task_id, "logo_preference": "leica"},
+    )
+
+    assert confirm_response.status_code == 200
+    payload = confirm_response.get_json()
+    assert payload["needs_options"] is True
+    assert payload["features"] == {"is_hdr": False, "is_motion": True}
+    assert payload["preserve_motion"] is True
+    task = client.application.extensions["state"].get_task(task_id)
+    assert task["status"] == "needs_options"
+    assert task["logo_preference"] == "leica"
+    assert task["preliminary_manufacturer"] == "xiaomi"
+
+
+def test_xiaomi_logo_to_options_preserves_preliminary_manufacturer(client, monkeypatch):
+    monkeypatch.setattr(upload_routes, "detect_manufacturer", lambda _: "xiaomi")
+    monkeypatch.setattr(upload_routes, "detect_image_features", lambda _: {"is_hdr": True, "is_motion": True})
+
+    upload_response = client.post(
+        "/api/upload",
+        data={"file": (io.BytesIO(b"fake"), "sample.jpg")},
+        content_type="multipart/form-data",
+    )
+    task_id = upload_response.get_json()["task_id"]
+
+    logo_response = client.post(
+        "/api/upload/confirm_logo",
+        json={"task_id": task_id, "logo_preference": "leica"},
+    )
+    assert logo_response.status_code == 200
+
+    def fail_detect(_filepath):
+        raise AssertionError("confirm_options should reuse preliminary_manufacturer")
+
+    monkeypatch.setattr(upload_routes, "detect_manufacturer", fail_detect)
+
+    submitted = {}
+
+    def fake_submit_existing_task(submitted_task_id, payload):
+        submitted["task_id"] = submitted_task_id
+        submitted["payload"] = payload
+        return submitted_task_id
+
+    monkeypatch.setattr(upload_routes, "submit_existing_task", fake_submit_existing_task)
+
+    options_response = client.post(
+        "/api/upload/confirm_options",
+        json={"task_id": task_id, "preserve_hdr": False, "preserve_motion": True},
+    )
+
+    assert options_response.status_code == 202
+    assert submitted["task_id"] == task_id
+    assert submitted["payload"].preliminary_manufacturer == "xiaomi"
+    assert submitted["payload"].preserve_hdr is False
+    assert submitted["payload"].preserve_motion is True
+
+
+def test_confirm_options_submits_preserve_choices(client, monkeypatch, tmp_path):
+    state = client.application.extensions["state"]
+    upload_dir = client.application.config["UPLOAD_FOLDER"]
+    filepath = os.path.join(upload_dir, "sample.jpg")
+    with open(filepath, "wb") as f:
+        f.write(b"fake")
+
+    task_id = "needs-options"
+    state.create_task(
+        task_id,
+        {
+            "status": "needs_options",
+            "stage": "awaiting_options",
+            "progress": 0.0,
+            "filepath": filepath,
+            "lang": "zh",
+            "watermark_type": 1,
+            "image_quality": 85,
+            "burn_after_read": "0",
+            "logo_preference": "xiaomi",
+            "features": {"is_hdr": True, "is_motion": True},
+            "preliminary_manufacturer": "Canon",
+        },
+    )
+
+    submitted = {}
+
+    def fake_submit_existing_task(submitted_task_id, payload):
+        submitted["task_id"] = submitted_task_id
+        submitted["payload"] = payload
+        return submitted_task_id
+
+    monkeypatch.setattr(upload_routes, "submit_existing_task", fake_submit_existing_task)
+
+    response = client.post(
+        "/api/upload/confirm_options",
+        json={"task_id": task_id, "preserve_hdr": False, "preserve_motion": True},
+    )
+
+    assert response.status_code == 202
+    assert submitted["task_id"] == task_id
+    assert submitted["payload"].preserve_hdr is False
+    assert submitted["payload"].preserve_motion is True
+
+
+def test_confirm_options_uses_persisted_preserve_defaults(client, monkeypatch):
+    state = client.application.extensions["state"]
+    upload_dir = client.application.config["UPLOAD_FOLDER"]
+    filepath = os.path.join(upload_dir, "sample.jpg")
+    with open(filepath, "wb") as f:
+        f.write(b"fake")
+
+    task_id = "persisted-preserve-options"
+    state.create_task(
+        task_id,
+        {
+            "status": "needs_options",
+            "stage": "awaiting_options",
+            "progress": 0.0,
+            "filepath": filepath,
+            "lang": "zh",
+            "watermark_type": 1,
+            "image_quality": 85,
+            "burn_after_read": "0",
+            "logo_preference": "leica",
+            "features": {"is_hdr": True, "is_motion": True},
+            "preliminary_manufacturer": "xiaomi",
+            "preserve_hdr": False,
+            "preserve_motion": True,
+        },
+    )
+
+    submitted = {}
+
+    def fake_submit_existing_task(submitted_task_id, payload):
+        submitted["task_id"] = submitted_task_id
+        submitted["payload"] = payload
+        return submitted_task_id
+
+    monkeypatch.setattr(upload_routes, "submit_existing_task", fake_submit_existing_task)
+
+    response = client.post("/api/upload/confirm_options", json={"task_id": task_id})
+
+    assert response.status_code == 202
+    assert submitted["payload"].preserve_hdr is False
+    assert submitted["payload"].preserve_motion is True
 
 
 def test_upload_burn_after_read_updates_queue(client):

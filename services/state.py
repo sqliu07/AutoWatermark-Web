@@ -24,6 +24,17 @@ _TASK_COLUMNS = {
     "image_quality",
     "burn_after_read",
     "logo_preference",
+    "features",
+    "preliminary_manufacturer",
+    "preserve_motion",
+    "preserve_hdr",
+}
+
+_OPTION_COLUMNS = {
+    "features_json": "TEXT",
+    "preliminary_manufacturer": "TEXT",
+    "preserve_motion": "INTEGER",
+    "preserve_hdr": "INTEGER",
 }
 
 
@@ -89,6 +100,12 @@ class AppState:
             self._conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_tasks_submitted_at ON tasks(submitted_at)"
             )
+            existing_columns = {
+                row["name"] for row in self._conn.execute("PRAGMA table_info(tasks)").fetchall()
+            }
+            for column, column_type in _OPTION_COLUMNS.items():
+                if column not in existing_columns:
+                    self._conn.execute(f"ALTER TABLE tasks ADD COLUMN {column} {column_type}")
             self._conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS burn_queue (
@@ -116,6 +133,10 @@ class AppState:
             "image_quality": row["image_quality"],
             "burn_after_read": row["burn_after_read"],
             "logo_preference": row["logo_preference"],
+            "features": json.loads(row["features_json"]) if row["features_json"] else None,
+            "preliminary_manufacturer": row["preliminary_manufacturer"],
+            "preserve_motion": None if row["preserve_motion"] is None else bool(row["preserve_motion"]),
+            "preserve_hdr": None if row["preserve_hdr"] is None else bool(row["preserve_hdr"]),
         }
         return task
 
@@ -136,7 +157,7 @@ class AppState:
         with self.tasks_lock:
             for row in rows:
                 task = self._row_to_task(row)
-                if task["status"] in ("queued", "processing"):
+                if task["status"] in ("queued", "processing", "needs_logo", "needs_options"):
                     task["status"] = "failed"
                     task["error"] = "服务重启导致任务中断"
                     task["stage"] = "failed"
@@ -147,7 +168,7 @@ class AppState:
         if interrupted:
             with self.db_lock:
                 self._conn.execute(
-                    "UPDATE tasks SET status = 'failed', error = ?, stage = 'failed', progress = 1.0, updated_at = ? WHERE status IN ('queued', 'processing')",
+                    "UPDATE tasks SET status = 'failed', error = ?, stage = 'failed', progress = 1.0, updated_at = ? WHERE status IN ('queued', 'processing', 'needs_logo', 'needs_options')",
                     ("服务重启导致任务中断", now),
                 )
                 self._conn.commit()
@@ -172,6 +193,10 @@ class AppState:
             "image_quality": initial_data.get("image_quality"),
             "burn_after_read": initial_data.get("burn_after_read"),
             "logo_preference": initial_data.get("logo_preference"),
+            "features": initial_data.get("features"),
+            "preliminary_manufacturer": initial_data.get("preliminary_manufacturer"),
+            "preserve_motion": initial_data.get("preserve_motion"),
+            "preserve_hdr": initial_data.get("preserve_hdr"),
         }
         with self.tasks_lock:
             self.tasks[task_id] = dict(payload)
@@ -182,8 +207,9 @@ class AppState:
                 INSERT INTO tasks(
                     task_id, status, submitted_at, updated_at, progress, stage,
                     result_json, error, filepath, lang, watermark_type,
-                    image_quality, burn_after_read, logo_preference
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    image_quality, burn_after_read, logo_preference,
+                    features_json, preliminary_manufacturer, preserve_motion, preserve_hdr
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     task_id,
@@ -200,6 +226,10 @@ class AppState:
                     payload["image_quality"],
                     payload["burn_after_read"],
                     payload["logo_preference"],
+                    json.dumps(payload["features"], ensure_ascii=False) if payload["features"] is not None else None,
+                    payload["preliminary_manufacturer"],
+                    None if payload["preserve_motion"] is None else int(bool(payload["preserve_motion"])),
+                    None if payload["preserve_hdr"] is None else int(bool(payload["preserve_hdr"])),
                 ),
             )
             self._conn.commit()
@@ -218,6 +248,12 @@ class AppState:
             if key == "result":
                 sql_fields.append("result_json = ?")
                 sql_values.append(json.dumps(value, ensure_ascii=False) if value is not None else None)
+            elif key == "features":
+                sql_fields.append("features_json = ?")
+                sql_values.append(json.dumps(value, ensure_ascii=False) if value is not None else None)
+            elif key in {"preserve_motion", "preserve_hdr"}:
+                sql_fields.append(f"{key} = ?")
+                sql_values.append(None if value is None else int(bool(value)))
             else:
                 sql_fields.append(f"{key} = ?")
                 sql_values.append(value)
