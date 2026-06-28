@@ -57,3 +57,26 @@ def test_cleanup_stale_uploads_without_state_db_path(tmp_path):
 
     assert cleaned == 1
     assert not stale_file.exists()
+
+
+def test_cleanup_stale_uploads_keeps_fresh_paired_file(tmp_path):
+    upload_dir = tmp_path / "upload"
+    upload_dir.mkdir()
+
+    stale_original = upload_dir / "old.jpg"
+    stale_original.write_text("old", encoding="utf-8")
+    fresh_watermark = upload_dir / "old_watermark.jpg"
+    fresh_watermark.write_text("fresh", encoding="utf-8")
+
+    now = time.time()
+    old_ts = now - 2 * 86400
+    os.utime(stale_original, (old_ts, old_ts))
+
+    app = SimpleNamespace(config={"UPLOAD_FOLDER": str(upload_dir), "STATE_DB_PATH": None})
+    logger = logging.getLogger("tests.cleanup")
+
+    cleaned = _cleanup_stale_uploads(app, now, logger)
+
+    assert cleaned == 1
+    assert not stale_original.exists()
+    assert fresh_watermark.exists()
