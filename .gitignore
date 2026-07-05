@@ -9,6 +9,8 @@ logs/
 test/
 tests/fixtures/*.jpg
 tests/fixtures/*.jpeg
+tests/fixtures/*.JPG
+tests/fixtures/*.JPEG
 tests/fixtures/*.png
 tests/fixtures/*.heic
 tests/fixtures/*.heif
@@ -16,6 +18,11 @@ tests/fixtures/*.webp
 tests/fixtures/*.tif
 tests/fixtures/*.tiff
 tests/fixtures/*.bmp
+!tests/fixtures/sample_with_exif.jpg
+!tests/fixtures/no_exif.jpg
+!tests/fixtures/unsupported_brand.jpg
+!tests/fixtures/motion_photo.jpg
+!tests/fixtures/ultrahdr.jpg
 scripts/*
 !scripts/__init__.py
 !scripts/generate_film_frame.py
@@ -31,3 +38,5 @@ AGENTS.md
 .omx/
 docs/
 .playwright-mcp/
+review/
+CONTEXT.md
