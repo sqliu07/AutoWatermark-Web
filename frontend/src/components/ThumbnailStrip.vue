@@ -23,6 +23,15 @@
           <a-spin size="small" />
         </div>
         <div v-if="task.status === 'failed'" class="thumb-badge failed">!</div>
+        <button
+          v-if="task.status === 'failed'"
+          class="thumb-retry"
+          type="button"
+          :disabled="task.retrying"
+          @click.stop="store.retryTask(task)"
+        >
+          {{ t('action.retry') }}
+        </button>
 
         <!-- 下载按钮 -->
         <a
@@ -43,8 +52,10 @@
 
 <script setup>
 import { ref, watch, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useAppStore } from '../stores/app'
 
+const { t } = useI18n()
 const store = useAppStore()
 
 const thumbUrls = ref([])
@@ -175,6 +186,28 @@ function onClickThumb(task) {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.thumb-retry {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  bottom: 4px;
+  height: 20px;
+  border: 0;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--color-error);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 20px;
+  padding: 0;
+  cursor: pointer;
+}
+
+.thumb-retry:disabled {
+  cursor: default;
+  opacity: 0.72;
 }
 
 .thumb-download {

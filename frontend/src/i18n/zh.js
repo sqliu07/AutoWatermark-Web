@@ -25,6 +25,7 @@ export default {
     download: '下载',
     preview: '预览',
     downloadAll: '打包下载全部',
+    retry: '重试',
   },
   status: {
     uploading: '上传中...',

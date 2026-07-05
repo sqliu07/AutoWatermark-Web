@@ -24,6 +24,13 @@
         </div>
         <p class="error-name">{{ previewTask.originalName }}</p>
         <p class="error-msg">{{ previewTask.error }}</p>
+        <a-button
+          size="small"
+          :loading="previewTask.retrying"
+          @click="store.retryTask(previewTask)"
+        >
+          {{ t('action.retry') }}
+        </a-button>
       </div>
     </template>
 
@@ -65,12 +72,14 @@
 
 <script setup>
 import { ref, computed, watch, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useAppStore } from '../stores/app'
 import ResultCompare from './preview/ResultCompare.vue'
 import OptionsPrompt from './preview/OptionsPrompt.vue'
 import ProgressOverlay from './preview/ProgressOverlay.vue'
 import FullscreenPreview from './preview/FullscreenPreview.vue'
 
+const { t } = useI18n()
 const store = useAppStore()
 
 const localPreviewUrl = ref(null)
