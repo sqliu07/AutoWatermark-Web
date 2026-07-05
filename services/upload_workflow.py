@@ -12,13 +12,13 @@ from werkzeug.utils import secure_filename
 from constants import ImageConstants, format_pixel_limit
 from errors import WatermarkError, WatermarkErrorCode
 from process import detect_image_features
+from services import task_lifecycle
 from services.download_token import verify_token
 from services.i18n import get_error_message, normalize_lang
 from services.tasks import (
     TaskPayload,
     allowed_file,
     cleanup_old_tasks,
-    create_task,
     detect_manufacturer,
     normalize_image_quality,
     submit_existing_task,
@@ -234,17 +234,15 @@ def handle_upload(*, files, form, args, config, state, style_config: dict, logge
     if manufacturer and "xiaomi" in manufacturer.lower():
         normalized_preference = (logo_preference or "").lower()
         if normalized_preference not in {"xiaomi", "leica"}:
-            task_id = create_task(state, {**pending_task, "status": "needs_logo", "stage": "awaiting_logo"})
+            task_id = task_lifecycle.create_waiting_logo_task(state, pending_task)
             return WorkflowResponse({"needs_logo_choice": True, "task_id": task_id}, 200)
         logo_preference = normalized_preference
 
     if _has_media_options(features) and _option_selection_missing(features, preserve_motion, preserve_hdr):
-        task_id = create_task(
+        task_id = task_lifecycle.create_waiting_options_task(
             state,
             {
                 **pending_task,
-                "status": "needs_options",
-                "stage": "awaiting_options",
                 "logo_preference": logo_preference,
                 "preserve_motion": _preserve_default(preserve_motion),
                 "preserve_hdr": _preserve_default(preserve_hdr),
@@ -301,13 +299,7 @@ def confirm_logo_choice(*, payload: dict, state, style_config: dict, logger) -> 
     preserve_hdr = task.get("preserve_hdr")
     preliminary_manufacturer = task.get("preliminary_manufacturer")
     if _has_media_options(features) and _option_selection_missing(features, preserve_motion, preserve_hdr):
-        state.update_task(
-            task_id,
-            status="needs_options",
-            stage="awaiting_options",
-            progress=0.0,
-            logo_preference=logo_preference,
-        )
+        task_lifecycle.mark_waiting_options(state, task_id, logo_preference=logo_preference)
         return WorkflowResponse(_options_payload(task_id, features, preserve_motion, preserve_hdr), 200)
 
     submit_existing_task(

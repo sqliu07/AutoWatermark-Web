@@ -12,6 +12,7 @@ from errors import WatermarkError, WatermarkErrorCode
 from exif import get_exif_data_with_exiftool, get_manufacturer
 from process import process_image
 from process_result import ProcessResult
+from services import task_lifecycle
 from services.download_token import build_signed_url
 from services.i18n import get_error_message
 
@@ -140,7 +141,7 @@ def background_process(payload: TaskPayload) -> None:
 
     start_time = time.time()
     try:
-        state.update_task(task_id, status="processing", stage="processing", progress=0.01)
+        task_lifecycle.mark_processing(state, task_id, progress=0.01)
 
         def update_progress(progress, stage=None):
             task = state.get_task(task_id)
@@ -196,13 +197,7 @@ def background_process(payload: TaskPayload) -> None:
         if is_hdr:
             task_result["is_hdr"] = True
 
-        state.update_task(
-            task_id,
-            status="succeeded",
-            result=task_result,
-            progress=1.0,
-            stage="done",
-        )
+        task_lifecycle.mark_succeeded(state, task_id, task_result)
 
         with state.metrics_lock:
             state.metrics["succeeded_tasks"] += 1
@@ -216,7 +211,7 @@ def background_process(payload: TaskPayload) -> None:
         elif err.error_code == WatermarkErrorCode.UNEXPECTED_ERROR:
             pass  # 不向客户端暴露内部错误详情，detail 仅记录到日志
 
-        state.update_task(task_id, status="failed", error=message, progress=1.0, stage="failed")
+        task_lifecycle.mark_failed(state, task_id, message)
         if err.error_code == WatermarkErrorCode.UNEXPECTED_ERROR:
             logger.exception(
                 "Task %s failed: %s | detail=%s | file=%s | style=%s",
@@ -240,13 +235,7 @@ def background_process(payload: TaskPayload) -> None:
 
     except Exception:
         logger.exception("Unexpected error in background task %s", task_id)
-        state.update_task(
-            task_id,
-            status="failed",
-            error=get_error_message("unexpected_error", lang),
-            progress=1.0,
-            stage="failed",
-        )
+        task_lifecycle.mark_failed(state, task_id, get_error_message("unexpected_error", lang))
         with state.metrics_lock:
             state.metrics["failed_tasks"] += 1
 

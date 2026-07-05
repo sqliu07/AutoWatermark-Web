@@ -3,7 +3,7 @@ from flask import Blueprint, Response, current_app, jsonify, redirect, render_te
 from constants import AppConstants
 from extensions import limiter
 from routes._utils import is_browser_request
-from services import upload_workflow
+from services import task_lifecycle, upload_workflow
 
 
 bp = Blueprint("upload", __name__)
@@ -60,6 +60,20 @@ def confirm_options():
     payload = request.get_json(silent=True) or {}
     result = upload_workflow.confirm_options(
         payload=payload,
+        state=state,
+        style_config=style_config,
+        logger=current_app.logger,
+    )
+    return jsonify(result.payload), result.status_code
+
+
+@bp.route("/tasks/<task_id>/retry", methods=["POST"])
+@limiter.limit(AppConstants.UPLOAD_RATE_LIMIT)
+def retry_task(task_id):
+    state = current_app.extensions["state"]
+    style_config = current_app.extensions.get("watermark_styles", {})
+    result = task_lifecycle.retry_failed_task(
+        task_id=task_id,
         state=state,
         style_config=style_config,
         logger=current_app.logger,
