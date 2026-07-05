@@ -72,7 +72,7 @@ def _update_queue_metrics(state, task_id: str, logger) -> None:
         total = state.metrics["total_tasks"]
         failed = state.metrics["failed_tasks"]
         failure_rate = (failed / total) if total else 0
-    queue_length = state.count_tasks_by_status("queued")
+    queue_length = state.count_tasks_by_status(task_lifecycle.TaskStatus.QUEUED)
     logger.info(
         "Queued task %s | queue=%s | failure_rate=%.2f%%",
         task_id,
@@ -84,10 +84,10 @@ def _update_queue_metrics(state, task_id: str, logger) -> None:
 def create_task(state, initial_data: Optional[dict] = None) -> str:
     task_id = str(uuid.uuid4())
     payload = {
-        "status": "queued",
+        "status": task_lifecycle.TaskStatus.QUEUED,
         "submitted_at": time.time(),
         "progress": 0.0,
-        "stage": "queued",
+        "stage": task_lifecycle.TaskStage.QUEUED,
     }
     if initial_data:
         payload.update(initial_data)
@@ -100,8 +100,8 @@ def _submit_task_with_id(task_id: str, payload: TaskPayload) -> None:
     state = payload.state
     state.update_task(
         task_id,
-        status="queued",
-        stage="queued",
+        status=task_lifecycle.TaskStatus.QUEUED,
+        stage=task_lifecycle.TaskStage.QUEUED,
         filepath=payload.filepath,
         lang=payload.lang,
         watermark_type=payload.watermark_type,
@@ -245,7 +245,10 @@ def background_process(payload: TaskPayload) -> None:
             total = state.metrics["total_tasks"]
             failed = state.metrics["failed_tasks"]
             failure_rate = (failed / total) if total else 0
-        queue_length = state.count_tasks_by_status("queued", "processing")
+        queue_length = state.count_tasks_by_status(
+            task_lifecycle.TaskStatus.QUEUED,
+            task_lifecycle.TaskStatus.PROCESSING,
+        )
         logger.info(
             "Task %s finished in %.2f s | queue=%s | failure_rate=%.2f%%",
             task_id,

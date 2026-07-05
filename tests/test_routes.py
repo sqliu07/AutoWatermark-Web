@@ -110,6 +110,7 @@ def test_retry_failed_processing_task_requeues_same_task(client, monkeypatch, tm
             "stage": "failed",
             "progress": 1.0,
             "error": "boom",
+            "result": {"preview_url": "/stale"},
             "filepath": str(image_path),
             "lang": "zh",
             "watermark_type": 1,
@@ -137,6 +138,10 @@ def test_retry_failed_processing_task_requeues_same_task(client, monkeypatch, tm
     assert response.get_json()["task_id"] == task_id
     assert submitted["task_id"] == task_id
     assert submitted["payload"].filepath == str(image_path)
+    task = state.get_task(task_id)
+    assert task["status"] == "queued"
+    assert task["error"] is None
+    assert task["result"] is None
 
 
 def test_retry_non_failed_task_conflicts(client, tmp_path):
@@ -191,6 +196,31 @@ def test_retry_failed_task_missing_file_returns_404(client):
 
     assert response.status_code == 404
     assert response.get_json()["error"] == "File not found."
+
+
+def test_retry_failed_task_with_invalid_input_returns_400(client, tmp_path):
+    state = client.application.extensions["state"]
+    image_path = tmp_path / "invalid.jpg"
+    image_path.write_bytes(b"fake")
+    task_id = "invalid-input-task"
+    state.create_task(
+        task_id,
+        {
+            "status": "failed",
+            "stage": "failed",
+            "progress": 1.0,
+            "filepath": str(image_path),
+            "lang": "zh",
+            "watermark_type": "bad",
+            "image_quality": 90,
+            "burn_after_read": "0",
+        },
+    )
+
+    response = client.post(f"/api/tasks/{task_id}/retry")
+
+    assert response.status_code == 400
+    assert response.get_json()["error"] == "处理水印时发生未知错误。"
 
 
 def test_download_zip_no_files(client):

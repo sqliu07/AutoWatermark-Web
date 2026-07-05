@@ -282,7 +282,7 @@ def confirm_logo_choice(*, payload: dict, state, style_config: dict, logger) -> 
     task = state.get_task(task_id)
     if not task:
         return WorkflowResponse({"status": "unknown"}, 404)
-    if task.get("status") != "needs_logo":
+    if task.get("status") != task_lifecycle.TaskStatus.NEEDS_LOGO:
         return WorkflowResponse({"error": "task is not waiting for logo choice"}, 409)
 
     filepath = task.get("filepath")
@@ -328,7 +328,7 @@ def confirm_options(*, payload: dict, state, style_config: dict, logger) -> Work
     task = state.get_task(task_id)
     if not task:
         return WorkflowResponse({"status": "unknown"}, 404)
-    if task.get("status") != "needs_options":
+    if task.get("status") != task_lifecycle.TaskStatus.NEEDS_OPTIONS:
         return WorkflowResponse({"error": "task is not waiting for options"}, 409)
 
     preserve_motion = _json_bool(
