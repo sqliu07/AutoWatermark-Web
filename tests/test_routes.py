@@ -98,6 +98,101 @@ def test_status_unknown(client):
     assert payload["status"] == "unknown"
 
 
+def test_retry_failed_processing_task_requeues_same_task(client, monkeypatch, tmp_path):
+    state = client.application.extensions["state"]
+    image_path = tmp_path / "retry.jpg"
+    image_path.write_bytes(b"fake")
+    task_id = "retry-task"
+    state.create_task(
+        task_id,
+        {
+            "status": "failed",
+            "stage": "failed",
+            "progress": 1.0,
+            "error": "boom",
+            "filepath": str(image_path),
+            "lang": "zh",
+            "watermark_type": 1,
+            "image_quality": 90,
+            "burn_after_read": "0",
+            "logo_preference": None,
+            "preliminary_manufacturer": "oppo",
+            "preserve_motion": True,
+            "preserve_hdr": True,
+        },
+    )
+
+    submitted = {}
+
+    def fake_submit_existing_task(submitted_task_id, payload):
+        submitted["task_id"] = submitted_task_id
+        submitted["payload"] = payload
+        return submitted_task_id
+
+    monkeypatch.setattr("services.tasks.submit_existing_task", fake_submit_existing_task)
+
+    response = client.post(f"/api/tasks/{task_id}/retry")
+
+    assert response.status_code == 202
+    assert response.get_json()["task_id"] == task_id
+    assert submitted["task_id"] == task_id
+    assert submitted["payload"].filepath == str(image_path)
+
+
+def test_retry_non_failed_task_conflicts(client, tmp_path):
+    state = client.application.extensions["state"]
+    image_path = tmp_path / "queued.jpg"
+    image_path.write_bytes(b"fake")
+    task_id = "queued-task"
+    state.create_task(
+        task_id,
+        {
+            "status": "queued",
+            "stage": "queued",
+            "progress": 0.0,
+            "filepath": str(image_path),
+            "lang": "zh",
+            "watermark_type": 1,
+            "image_quality": 90,
+            "burn_after_read": "0",
+        },
+    )
+
+    response = client.post(f"/api/tasks/{task_id}/retry")
+
+    assert response.status_code == 409
+
+
+def test_retry_missing_task_returns_unknown(client):
+    response = client.post("/api/tasks/missing/retry")
+
+    assert response.status_code == 404
+    assert response.get_json()["status"] == "unknown"
+
+
+def test_retry_failed_task_missing_file_returns_404(client):
+    state = client.application.extensions["state"]
+    task_id = "missing-file-task"
+    state.create_task(
+        task_id,
+        {
+            "status": "failed",
+            "stage": "failed",
+            "progress": 1.0,
+            "filepath": "/tmp/does-not-exist-autowatermark.jpg",
+            "lang": "en",
+            "watermark_type": 1,
+            "image_quality": 90,
+            "burn_after_read": "0",
+        },
+    )
+
+    response = client.post(f"/api/tasks/{task_id}/retry")
+
+    assert response.status_code == 404
+    assert response.get_json()["error"] == "File not found."
+
+
 def test_download_zip_no_files(client):
     response = client.post("/api/download_zip", json={})
     assert response.status_code == 400
