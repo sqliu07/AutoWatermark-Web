@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from services.i18n import get_error_message
+from services.path_safety import resolve_under_root
 from services.watermark_styles import is_style_enabled
 
 
@@ -99,12 +100,13 @@ def mark_failed(state, task_id: str, error: str) -> None:
     )
 
 
-def task_payload_from_persisted_task(*, task_id: str, state, task: dict[str, Any], style_config, logger):
+def task_payload_from_persisted_task(*, task_id: str, state, task: dict[str, Any], upload_folder: str, style_config, logger):
     from services.tasks import TaskPayload
 
     lang = task.get("lang", "zh")
     filepath = task.get("filepath")
-    if not filepath or not os.path.exists(filepath):
+    safe_filepath = resolve_under_root(upload_folder, filepath or "")
+    if safe_filepath is None or not os.path.exists(safe_filepath):
         return None, LifecycleResult({"error": get_error_message("file_not_found", lang)}, 404)
 
     watermark_type = task.get("watermark_type")
@@ -114,7 +116,7 @@ def task_payload_from_persisted_task(*, task_id: str, state, task: dict[str, Any
     return TaskPayload(
         task_id=task_id,
         state=state,
-        filepath=filepath,
+        filepath=safe_filepath,
         lang=lang,
         watermark_type=watermark_type,
         image_quality=int(task.get("image_quality") or 85),
@@ -128,7 +130,7 @@ def task_payload_from_persisted_task(*, task_id: str, state, task: dict[str, Any
     ), None
 
 
-def retry_failed_task(*, task_id: str, state, style_config, logger) -> LifecycleResult:
+def retry_failed_task(*, task_id: str, state, upload_folder: str, style_config, logger) -> LifecycleResult:
     from services.tasks import submit_existing_task
 
     task = state.get_task(task_id)
@@ -141,6 +143,7 @@ def retry_failed_task(*, task_id: str, state, style_config, logger) -> Lifecycle
         task_id=task_id,
         state=state,
         task=task,
+        upload_folder=upload_folder,
         style_config=style_config,
         logger=logger,
     )

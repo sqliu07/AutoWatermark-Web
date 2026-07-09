@@ -100,7 +100,7 @@ def test_status_unknown(client):
 
 def test_retry_failed_processing_task_requeues_same_task(client, monkeypatch, tmp_path):
     state = client.application.extensions["state"]
-    image_path = tmp_path / "retry.jpg"
+    image_path = pathlib.Path(client.application.config["UPLOAD_FOLDER"]) / "retry.jpg"
     image_path.write_bytes(b"fake")
     task_id = "retry-task"
     state.create_task(
@@ -198,9 +198,40 @@ def test_retry_failed_task_missing_file_returns_404(client):
     assert response.get_json()["error"] == "File not found."
 
 
+def test_retry_failed_task_outside_upload_folder_returns_404(client, monkeypatch, tmp_path):
+    state = client.application.extensions["state"]
+    outside_path = tmp_path / "outside-upload-folder.jpg"
+    outside_path.write_bytes(b"fake")
+    task_id = "outside-folder-task"
+    state.create_task(
+        task_id,
+        {
+            "status": "failed",
+            "stage": "failed",
+            "progress": 1.0,
+            "filepath": str(outside_path),
+            "lang": "en",
+            "watermark_type": 1,
+            "image_quality": 90,
+            "burn_after_read": "0",
+        },
+    )
+
+    def fail_submit_existing_task(*_args, **_kwargs):
+        raise AssertionError("outside-upload-folder task should not be retried")
+
+    monkeypatch.setattr("services.tasks.submit_existing_task", fail_submit_existing_task)
+
+    response = client.post(f"/api/tasks/{task_id}/retry")
+
+    assert response.status_code == 404
+    assert response.get_json()["error"] == "File not found."
+    assert state.get_task(task_id)["status"] == "failed"
+
+
 def test_retry_failed_task_with_invalid_input_returns_400(client, tmp_path):
     state = client.application.extensions["state"]
-    image_path = tmp_path / "invalid.jpg"
+    image_path = pathlib.Path(client.application.config["UPLOAD_FOLDER"]) / "invalid.jpg"
     image_path.write_bytes(b"fake")
     task_id = "invalid-input-task"
     state.create_task(

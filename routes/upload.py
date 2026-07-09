@@ -40,6 +40,7 @@ def confirm_logo_choice():
     result = upload_workflow.confirm_logo_choice(
         payload=payload,
         state=state,
+        upload_folder=current_app.config["UPLOAD_FOLDER"],
         style_config=style_config,
         logger=current_app.logger,
     )
@@ -61,6 +62,7 @@ def confirm_options():
     result = upload_workflow.confirm_options(
         payload=payload,
         state=state,
+        upload_folder=current_app.config["UPLOAD_FOLDER"],
         style_config=style_config,
         logger=current_app.logger,
     )
@@ -75,6 +77,7 @@ def retry_task(task_id):
     result = task_lifecycle.retry_failed_task(
         task_id=task_id,
         state=state,
+        upload_folder=current_app.config["UPLOAD_FOLDER"],
         style_config=style_config,
         logger=current_app.logger,
     )

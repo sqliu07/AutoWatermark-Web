@@ -15,6 +15,7 @@ from process import detect_image_features
 from services import task_lifecycle
 from services.download_token import verify_token
 from services.i18n import get_error_message, normalize_lang
+from services.path_safety import resolve_under_root
 from services.tasks import (
     TaskPayload,
     allowed_file,
@@ -120,9 +121,12 @@ def _task_payload_from_waiting_task(
     )
 
 
-def _read_image_dimensions(filepath: str) -> tuple[int, int] | None:
+def _read_image_dimensions(filepath: str, upload_folder: str) -> tuple[int, int] | None:
+    safe_path = resolve_under_root(upload_folder, filepath)
+    if safe_path is None:
+        return None
     try:
-        with open(filepath, "rb") as f:
+        with open(safe_path, "rb") as f:
             header = f.read(32)
             if len(header) < 8:
                 return None
@@ -151,8 +155,8 @@ def _read_image_dimensions(filepath: str) -> tuple[int, int] | None:
     return None
 
 
-def _check_image_pixel_limit(filepath: str) -> None:
-    dims = _read_image_dimensions(filepath)
+def _check_image_pixel_limit(filepath: str, upload_folder: str) -> None:
+    dims = _read_image_dimensions(filepath, upload_folder)
     if dims is None:
         return
     width, height = dims
@@ -169,7 +173,9 @@ def _save_upload(file, upload_folder: str) -> str:
     else:
         stem, extension = filename.rsplit(".", 1)
         filename_with_timestamp = f"{stem}_{timestamp}.{extension}"
-    filepath = os.path.join(upload_folder, filename_with_timestamp)
+    filepath = resolve_under_root(upload_folder, filename_with_timestamp)
+    if filepath is None:
+        raise ValueError("upload path escaped upload folder")
     file.save(filepath)
     return filepath
 
@@ -205,9 +211,11 @@ def handle_upload(*, files, form, args, config, state, style_config: dict, logge
 
     filepath = _save_upload(file, config["UPLOAD_FOLDER"])
     try:
-        _check_image_pixel_limit(filepath)
+        _check_image_pixel_limit(filepath, config["UPLOAD_FOLDER"])
     except WatermarkError:
-        os.remove(filepath)
+        safe_path = resolve_under_root(config["UPLOAD_FOLDER"], filepath)
+        if safe_path is not None:
+            os.remove(safe_path)
         error = get_error_message(
             "image_too_large",
             lang,
@@ -270,7 +278,7 @@ def handle_upload(*, files, form, args, config, state, style_config: dict, logge
     return WorkflowResponse({"task_id": task_id}, 202)
 
 
-def confirm_logo_choice(*, payload: dict, state, style_config: dict, logger) -> WorkflowResponse:
+def confirm_logo_choice(*, payload: dict, state, upload_folder: str, style_config: dict, logger) -> WorkflowResponse:
     task_id = str(payload.get("task_id", "")).strip()
     logo_preference = str(payload.get("logo_preference", "")).strip().lower()
 
@@ -287,7 +295,8 @@ def confirm_logo_choice(*, payload: dict, state, style_config: dict, logger) -> 
 
     filepath = task.get("filepath")
     lang = task.get("lang", "zh")
-    if not filepath or not os.path.exists(filepath):
+    safe_filepath = resolve_under_root(upload_folder, filepath or "")
+    if safe_filepath is None or not os.path.exists(safe_filepath):
         return WorkflowResponse({"error": get_error_message("file_not_found", lang)}, 404)
 
     watermark_type = task.get("watermark_type")
@@ -308,7 +317,7 @@ def confirm_logo_choice(*, payload: dict, state, style_config: dict, logger) -> 
             task_id=task_id,
             state=state,
             task=task,
-            filepath=filepath,
+            filepath=safe_filepath,
             logo_preference=logo_preference,
             style_config=style_config,
             logger=logger,
@@ -320,7 +329,7 @@ def confirm_logo_choice(*, payload: dict, state, style_config: dict, logger) -> 
     return WorkflowResponse({"task_id": task_id}, 202)
 
 
-def confirm_options(*, payload: dict, state, style_config: dict, logger) -> WorkflowResponse:
+def confirm_options(*, payload: dict, state, upload_folder: str, style_config: dict, logger) -> WorkflowResponse:
     task_id = str(payload.get("task_id", "")).strip()
     if not task_id:
         return WorkflowResponse({"error": "task_id is required"}, 400)
@@ -344,21 +353,22 @@ def confirm_options(*, payload: dict, state, style_config: dict, logger) -> Work
 
     filepath = task.get("filepath")
     lang = task.get("lang", "zh")
-    if not filepath or not os.path.exists(filepath):
+    safe_filepath = resolve_under_root(upload_folder, filepath or "")
+    if safe_filepath is None or not os.path.exists(safe_filepath):
         return WorkflowResponse({"error": get_error_message("file_not_found", lang)}, 404)
 
     watermark_type = task.get("watermark_type")
     if not isinstance(watermark_type, int) or not is_style_enabled(style_config, watermark_type):
         return WorkflowResponse({"error": get_error_message("unexpected_error", lang)}, 400)
 
-    manufacturer = task.get("preliminary_manufacturer") or detect_manufacturer(filepath, logger)
+    manufacturer = task.get("preliminary_manufacturer") or detect_manufacturer(safe_filepath, logger)
     submit_existing_task(
         task_id,
         _task_payload_from_waiting_task(
             task_id=task_id,
             state=state,
             task=task,
-            filepath=filepath,
+            filepath=safe_filepath,
             logo_preference=task.get("logo_preference"),
             style_config=style_config,
             logger=logger,
@@ -373,6 +383,10 @@ def confirm_options(*, payload: dict, state, style_config: dict, logger) -> Work
 def get_preview_file(*, filename: str, args, upload_folder: str, is_browser: bool) -> PreviewFile:
     lang = normalize_lang(args.get("lang", "zh"))
     safe_filename = secure_filename(filename)
+    if not safe_filename:
+        if is_browser:
+            return PreviewFile(status_code=404, render_deleted=True)
+        return PreviewFile(status_code=404, error=get_error_message("file_not_found", lang))
     if not verify_token(
         safe_filename,
         args.get("token", ""),
@@ -383,8 +397,8 @@ def get_preview_file(*, filename: str, args, upload_folder: str, is_browser: boo
             return PreviewFile(status_code=404, render_deleted=True)
         return PreviewFile(status_code=403, error=get_error_message("link_expired", lang))
 
-    file_path = os.path.join(upload_folder, safe_filename)
-    if not os.path.exists(file_path):
+    file_path = resolve_under_root(upload_folder, safe_filename)
+    if file_path is None or not os.path.exists(file_path):
         if is_browser:
             return PreviewFile(status_code=404, render_deleted=True)
         return PreviewFile(status_code=404, error=get_error_message("file_not_found", lang))
@@ -395,6 +409,8 @@ def get_preview_file(*, filename: str, args, upload_folder: str, is_browser: boo
 def get_motion_video(*, filename: str, args, upload_folder: str, logger) -> MotionVideo:
     lang = normalize_lang(args.get("lang", "zh"))
     safe_filename = secure_filename(filename)
+    if not safe_filename:
+        return MotionVideo(status_code=404, error=get_error_message("file_not_found", lang))
     if not verify_token(
         safe_filename,
         args.get("token", ""),
@@ -403,8 +419,8 @@ def get_motion_video(*, filename: str, args, upload_folder: str, logger) -> Moti
     ):
         return MotionVideo(status_code=403, error=get_error_message("link_expired", lang))
 
-    file_path = os.path.join(upload_folder, safe_filename)
-    if not os.path.exists(file_path):
+    file_path = resolve_under_root(upload_folder, safe_filename)
+    if file_path is None or not os.path.exists(file_path):
         return MotionVideo(status_code=404, error=get_error_message("file_not_found", lang))
 
     from media.motion_photo import find_motion_video_start
