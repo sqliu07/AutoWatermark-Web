@@ -25,6 +25,7 @@ export default {
     download: 'Download',
     preview: 'Preview',
     downloadAll: 'Download All (ZIP)',
+    retry: 'Retry',
   },
   status: {
     uploading: 'Uploading...',

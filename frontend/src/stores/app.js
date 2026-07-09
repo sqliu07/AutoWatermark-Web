@@ -80,6 +80,91 @@ export const useAppStore = defineStore('app', () => {
     currentPreview.value = task
   }
 
+  function applyOptionsResponse(task, res) {
+    task.status = 'needs_options'
+    task.features = res.features || {}
+    task.preserveOptions = {
+      preserve_hdr: res.preserve_hdr !== false,
+      preserve_motion: res.preserve_motion !== false,
+    }
+    if (!currentPreview.value || currentPreview.value.status !== 'needs_options') {
+      currentPreview.value = task
+    }
+  }
+
+  async function uploadTask(task) {
+    task.status = 'uploading'
+    task.progress = 0.05
+    task.error = null
+    task.result = null
+    task.lastFailedStep = null
+    try {
+      const res = await api.uploadFile(task.file, {
+        watermark_type: selectedStyle.value,
+        image_quality: imageQuality.value,
+        burn_after_read: burnAfterRead.value ? '1' : '0',
+        logo_preference: logoPreference.value,
+      })
+
+      if (res.needs_logo_choice) {
+        task.id = res.task_id
+        task.status = 'needs_logo'
+        return
+      }
+
+      if (res.needs_options) {
+        task.id = res.task_id
+        applyOptionsResponse(task, res)
+        return
+      }
+
+      task.id = res.task_id
+      task.status = 'processing'
+      await pollTask(task)
+    } catch (e) {
+      task.status = 'failed'
+      task.progress = 1
+      task.error = e.message || 'Upload failed'
+      task.lastFailedStep = 'upload'
+    }
+  }
+
+  async function confirmTaskLogo(task, choice) {
+    task.lastLogoChoice = choice
+    task.error = null
+    task.lastFailedStep = null
+    try {
+      const res = await api.confirmLogoChoice(task.id, choice)
+      if (res.needs_options) {
+        applyOptionsResponse(task, res)
+        return
+      }
+      task.status = 'processing'
+      await pollTask(task)
+    } catch (e) {
+      task.status = 'failed'
+      task.progress = 1
+      task.error = e.message || 'Confirm logo failed'
+      task.lastFailedStep = 'confirm_logo'
+    }
+  }
+
+  async function confirmTaskOptions(task, options) {
+    task.lastOptions = { ...options }
+    task.error = null
+    task.lastFailedStep = null
+    try {
+      await api.confirmOptions(task.id, options)
+      task.status = 'processing'
+      await pollTask(task)
+    } catch (e) {
+      task.status = 'failed'
+      task.progress = 1
+      task.error = e.message || 'Confirm options failed'
+      task.lastFailedStep = 'confirm_options'
+    }
+  }
+
   async function processAll() {
     if (files.value.length === 0) return
     isProcessing.value = true
@@ -93,6 +178,10 @@ export const useAppStore = defineStore('app', () => {
       progress: 0,
       result: null,
       error: null,
+      lastFailedStep: null,
+      lastLogoChoice: null,
+      lastOptions: null,
+      retrying: false,
     }))
     // 新一轮处理必须重置预览引用，避免继续显示上一次任务结果
     currentPreview.value = tasks.value[0] || null
@@ -101,50 +190,9 @@ export const useAppStore = defineStore('app', () => {
     const concurrency = 3
     const queue = [...tasks.value]
 
-    async function processOne(task) {
-      task.status = 'uploading'
-      task.progress = 0.05  // 上传开始
-      try {
-        const res = await api.uploadFile(task.file, {
-          watermark_type: selectedStyle.value,
-          image_quality: imageQuality.value,
-          burn_after_read: burnAfterRead.value ? '1' : '0',
-          logo_preference: logoPreference.value,
-        })
-
-        if (res.needs_logo_choice) {
-          task.id = res.task_id
-          task.status = 'needs_logo'
-          return
-        }
-
-        if (res.needs_options) {
-          task.id = res.task_id
-          task.status = 'needs_options'
-          task.features = res.features || {}
-          task.preserveOptions = {
-            preserve_hdr: res.preserve_hdr !== false,
-            preserve_motion: res.preserve_motion !== false,
-          }
-          if (!currentPreview.value || currentPreview.value.status !== 'needs_options') {
-            currentPreview.value = task
-          }
-          return
-        }
-
-        task.id = res.task_id
-        task.status = 'processing'
-        await pollTask(task)
-      } catch (e) {
-        task.status = 'failed'
-        task.progress = 1
-        task.error = e.message || 'Upload failed'
-      }
-    }
-
     const executing = new Set()
     for (const task of queue) {
-      const p = processOne(task).then(() => executing.delete(p))
+      const p = uploadTask(task).then(() => executing.delete(p))
       executing.add(p)
       if (executing.size >= concurrency) {
         await Promise.race(executing)
@@ -165,33 +213,9 @@ export const useAppStore = defineStore('app', () => {
     const concurrency = 3
     const queue = [...pendingTasks]
 
-    async function processOne(task) {
-      try {
-        const res = await api.confirmLogoChoice(task.id, choice)
-        if (res.needs_options) {
-          task.status = 'needs_options'
-          task.features = res.features || {}
-          task.preserveOptions = {
-            preserve_hdr: res.preserve_hdr !== false,
-            preserve_motion: res.preserve_motion !== false,
-          }
-          if (!currentPreview.value || currentPreview.value.status !== 'needs_options') {
-            currentPreview.value = task
-          }
-          return
-        }
-        task.status = 'processing'
-        await pollTask(task)
-      } catch (e) {
-        task.status = 'failed'
-        task.progress = 1
-        task.error = e.message || 'Confirm logo failed'
-      }
-    }
-
     const executing = new Set()
     for (const task of queue) {
-      const p = processOne(task).then(() => executing.delete(p))
+      const p = confirmTaskLogo(task, choice).then(() => executing.delete(p))
       executing.add(p)
       if (executing.size >= concurrency) {
         await Promise.race(executing)
@@ -207,17 +231,11 @@ export const useAppStore = defineStore('app', () => {
     isProcessing.value = true
 
     try {
-      await api.confirmOptions(task.id, options)
-      task.status = 'processing'
-      await pollTask(task)
+      await confirmTaskOptions(task, options)
       const nextPending = tasks.value.find(t => t.status === 'needs_options')
       if (nextPending) {
         currentPreview.value = nextPending
       }
-    } catch (e) {
-      task.status = 'failed'
-      task.progress = 1
-      task.error = e.message || 'Confirm options failed'
     } finally {
       isProcessing.value = false
     }
@@ -248,6 +266,7 @@ export const useAppStore = defineStore('app', () => {
         if (data.status === 'failed') {
           task.progress = 1
           task.error = data.error
+          task.lastFailedStep = 'processing'
           return
         }
       } catch {
@@ -256,6 +275,7 @@ export const useAppStore = defineStore('app', () => {
           task.status = 'failed'
           task.progress = 1
           task.error = 'Connection lost'
+          task.lastFailedStep = task.id ? 'processing' : 'upload'
           return
         }
       }
@@ -267,6 +287,50 @@ export const useAppStore = defineStore('app', () => {
     task.status = 'failed'
     task.progress = 1
     task.error = 'Processing timeout'
+    task.lastFailedStep = task.id ? 'processing' : 'upload'
+  }
+
+  async function retryTask(task) {
+    if (!task || task.status !== 'failed' || task.retrying) return
+    task.retrying = true
+    task.error = null
+    task.progress = 0
+    isProcessing.value = true
+
+    try {
+      if (task.lastFailedStep === 'upload' || !task.id) {
+        await uploadTask(task)
+        return
+      }
+
+      if (task.lastFailedStep === 'confirm_logo') {
+        if (task.lastLogoChoice) {
+          await confirmTaskLogo(task, task.lastLogoChoice)
+        } else {
+          task.status = 'needs_logo'
+          currentPreview.value = task
+        }
+        return
+      }
+
+      if (task.lastFailedStep === 'confirm_options') {
+        await confirmTaskOptions(task, task.lastOptions || task.preserveOptions || {})
+        return
+      }
+
+      const res = await api.retryTask(task.id)
+      task.id = res.task_id || task.id
+      task.status = 'processing'
+      task.lastFailedStep = null
+      await pollTask(task)
+    } catch (e) {
+      task.status = 'failed'
+      task.progress = 1
+      task.error = e.message || 'Retry failed'
+    } finally {
+      task.retrying = false
+      isProcessing.value = false
+    }
   }
 
   async function downloadZip() {
@@ -303,6 +367,6 @@ export const useAppStore = defineStore('app', () => {
     burnAfterRead, logoPreference, isProcessing, tasks, currentPreview, completedCount, totalCount, allDone,
     succeededTasks, canDownloadZip, stylesLoaded, loadStyles, addFiles,
     clearFiles, reselectFiles, setPreview, processAll, processPendingLogoTasks,
-    processPendingOptionsTask, downloadZip, hasPendingOptions,
+    processPendingOptionsTask, retryTask, downloadZip, hasPendingOptions,
   }
 })

@@ -6,7 +6,7 @@ import shutil
 import pytest
 from PIL import Image
 
-import routes.upload as upload_routes
+from services import upload_workflow
 from constants import ImageConstants
 from errors import WatermarkError, WatermarkErrorCode
 from exif import find_logo, get_manufacturer
@@ -98,6 +98,162 @@ def test_status_unknown(client):
     assert payload["status"] == "unknown"
 
 
+def test_retry_failed_processing_task_requeues_same_task(client, monkeypatch, tmp_path):
+    state = client.application.extensions["state"]
+    image_path = pathlib.Path(client.application.config["UPLOAD_FOLDER"]) / "retry.jpg"
+    image_path.write_bytes(b"fake")
+    task_id = "retry-task"
+    state.create_task(
+        task_id,
+        {
+            "status": "failed",
+            "stage": "failed",
+            "progress": 1.0,
+            "error": "boom",
+            "result": {"preview_url": "/stale"},
+            "filepath": str(image_path),
+            "lang": "zh",
+            "watermark_type": 1,
+            "image_quality": 90,
+            "burn_after_read": "0",
+            "logo_preference": None,
+            "preliminary_manufacturer": "oppo",
+            "preserve_motion": True,
+            "preserve_hdr": True,
+        },
+    )
+
+    submitted = {}
+
+    def fake_submit_existing_task(submitted_task_id, payload):
+        submitted["task_id"] = submitted_task_id
+        submitted["payload"] = payload
+        return submitted_task_id
+
+    monkeypatch.setattr("services.tasks.submit_existing_task", fake_submit_existing_task)
+
+    response = client.post(f"/api/tasks/{task_id}/retry")
+
+    assert response.status_code == 202
+    assert response.get_json()["task_id"] == task_id
+    assert submitted["task_id"] == task_id
+    assert submitted["payload"].filepath == str(image_path)
+    task = state.get_task(task_id)
+    assert task["status"] == "queued"
+    assert task["error"] is None
+    assert task["result"] is None
+
+
+def test_retry_non_failed_task_conflicts(client, tmp_path):
+    state = client.application.extensions["state"]
+    image_path = tmp_path / "queued.jpg"
+    image_path.write_bytes(b"fake")
+    task_id = "queued-task"
+    state.create_task(
+        task_id,
+        {
+            "status": "queued",
+            "stage": "queued",
+            "progress": 0.0,
+            "filepath": str(image_path),
+            "lang": "zh",
+            "watermark_type": 1,
+            "image_quality": 90,
+            "burn_after_read": "0",
+        },
+    )
+
+    response = client.post(f"/api/tasks/{task_id}/retry")
+
+    assert response.status_code == 409
+
+
+def test_retry_missing_task_returns_unknown(client):
+    response = client.post("/api/tasks/missing/retry")
+
+    assert response.status_code == 404
+    assert response.get_json()["status"] == "unknown"
+
+
+def test_retry_failed_task_missing_file_returns_404(client):
+    state = client.application.extensions["state"]
+    task_id = "missing-file-task"
+    state.create_task(
+        task_id,
+        {
+            "status": "failed",
+            "stage": "failed",
+            "progress": 1.0,
+            "filepath": "/tmp/does-not-exist-autowatermark.jpg",
+            "lang": "en",
+            "watermark_type": 1,
+            "image_quality": 90,
+            "burn_after_read": "0",
+        },
+    )
+
+    response = client.post(f"/api/tasks/{task_id}/retry")
+
+    assert response.status_code == 404
+    assert response.get_json()["error"] == "File not found."
+
+
+def test_retry_failed_task_outside_upload_folder_returns_404(client, monkeypatch, tmp_path):
+    state = client.application.extensions["state"]
+    outside_path = tmp_path / "outside-upload-folder.jpg"
+    outside_path.write_bytes(b"fake")
+    task_id = "outside-folder-task"
+    state.create_task(
+        task_id,
+        {
+            "status": "failed",
+            "stage": "failed",
+            "progress": 1.0,
+            "filepath": str(outside_path),
+            "lang": "en",
+            "watermark_type": 1,
+            "image_quality": 90,
+            "burn_after_read": "0",
+        },
+    )
+
+    def fail_submit_existing_task(*_args, **_kwargs):
+        raise AssertionError("outside-upload-folder task should not be retried")
+
+    monkeypatch.setattr("services.tasks.submit_existing_task", fail_submit_existing_task)
+
+    response = client.post(f"/api/tasks/{task_id}/retry")
+
+    assert response.status_code == 404
+    assert response.get_json()["error"] == "File not found."
+    assert state.get_task(task_id)["status"] == "failed"
+
+
+def test_retry_failed_task_with_invalid_input_returns_400(client, tmp_path):
+    state = client.application.extensions["state"]
+    image_path = pathlib.Path(client.application.config["UPLOAD_FOLDER"]) / "invalid.jpg"
+    image_path.write_bytes(b"fake")
+    task_id = "invalid-input-task"
+    state.create_task(
+        task_id,
+        {
+            "status": "failed",
+            "stage": "failed",
+            "progress": 1.0,
+            "filepath": str(image_path),
+            "lang": "zh",
+            "watermark_type": "bad",
+            "image_quality": 90,
+            "burn_after_read": "0",
+        },
+    )
+
+    response = client.post(f"/api/tasks/{task_id}/retry")
+
+    assert response.status_code == 400
+    assert response.get_json()["error"] == "处理水印时发生未知错误。"
+
+
 def test_download_zip_no_files(client):
     response = client.post("/api/download_zip", json={})
     assert response.status_code == 400
@@ -134,7 +290,7 @@ def test_upload_unknown_watermark_type(client):
 
 
 def test_upload_xiaomi_requires_logo_choice(client, monkeypatch):
-    monkeypatch.setattr(upload_routes, "detect_manufacturer", lambda _: "xiaomi")
+    monkeypatch.setattr(upload_workflow, "detect_manufacturer", lambda *_args: "xiaomi")
     data = {
         "file": (io.BytesIO(b"fake"), "sample.jpg"),
     }
@@ -149,7 +305,7 @@ def test_upload_success_returns_task_id(client, monkeypatch):
     def fake_submit_task(*args, **kwargs):
         return "task-123"
 
-    monkeypatch.setattr(upload_routes, "submit_task", fake_submit_task)
+    monkeypatch.setattr(upload_workflow, "submit_task", fake_submit_task)
 
     data = {
         "file": (io.BytesIO(b"fake"), "sample.jpg"),
@@ -162,8 +318,8 @@ def test_upload_success_returns_task_id(client, monkeypatch):
 
 
 def test_upload_detected_media_features_waits_for_options(client, monkeypatch):
-    monkeypatch.setattr(upload_routes, "detect_manufacturer", lambda _: None)
-    monkeypatch.setattr(upload_routes, "detect_image_features", lambda _: {"is_hdr": True, "is_motion": False})
+    monkeypatch.setattr(upload_workflow, "detect_manufacturer", lambda *_args: None)
+    monkeypatch.setattr(upload_workflow, "detect_image_features", lambda _: {"is_hdr": True, "is_motion": False})
 
     data = {
         "file": (io.BytesIO(b"fake"), "sample.jpg"),
@@ -184,7 +340,7 @@ def test_upload_detected_media_features_waits_for_options(client, monkeypatch):
 
 
 def test_confirm_logo_choice_submits_existing_task(client, monkeypatch):
-    monkeypatch.setattr(upload_routes, "detect_manufacturer", lambda _: "xiaomi")
+    monkeypatch.setattr(upload_workflow, "detect_manufacturer", lambda *_args: "xiaomi")
 
     submitted = {}
 
@@ -192,7 +348,7 @@ def test_confirm_logo_choice_submits_existing_task(client, monkeypatch):
         submitted["task_id"] = task_id
         return task_id
 
-    monkeypatch.setattr(upload_routes, "submit_existing_task", fake_submit_existing_task)
+    monkeypatch.setattr(upload_workflow, "submit_existing_task", fake_submit_existing_task)
 
     upload_response = client.post(
         "/api/upload",
@@ -213,8 +369,8 @@ def test_confirm_logo_choice_submits_existing_task(client, monkeypatch):
 
 
 def test_confirm_logo_choice_can_continue_to_media_options(client, monkeypatch):
-    monkeypatch.setattr(upload_routes, "detect_manufacturer", lambda _: "xiaomi")
-    monkeypatch.setattr(upload_routes, "detect_image_features", lambda _: {"is_hdr": False, "is_motion": True})
+    monkeypatch.setattr(upload_workflow, "detect_manufacturer", lambda *_args: "xiaomi")
+    monkeypatch.setattr(upload_workflow, "detect_image_features", lambda _: {"is_hdr": False, "is_motion": True})
 
     upload_response = client.post(
         "/api/upload",
@@ -241,8 +397,8 @@ def test_confirm_logo_choice_can_continue_to_media_options(client, monkeypatch):
 
 
 def test_xiaomi_logo_to_options_preserves_preliminary_manufacturer(client, monkeypatch):
-    monkeypatch.setattr(upload_routes, "detect_manufacturer", lambda _: "xiaomi")
-    monkeypatch.setattr(upload_routes, "detect_image_features", lambda _: {"is_hdr": True, "is_motion": True})
+    monkeypatch.setattr(upload_workflow, "detect_manufacturer", lambda *_args: "xiaomi")
+    monkeypatch.setattr(upload_workflow, "detect_image_features", lambda _: {"is_hdr": True, "is_motion": True})
 
     upload_response = client.post(
         "/api/upload",
@@ -257,10 +413,10 @@ def test_xiaomi_logo_to_options_preserves_preliminary_manufacturer(client, monke
     )
     assert logo_response.status_code == 200
 
-    def fail_detect(_filepath):
+    def fail_detect(*_args):
         raise AssertionError("confirm_options should reuse preliminary_manufacturer")
 
-    monkeypatch.setattr(upload_routes, "detect_manufacturer", fail_detect)
+    monkeypatch.setattr(upload_workflow, "detect_manufacturer", fail_detect)
 
     submitted = {}
 
@@ -269,7 +425,7 @@ def test_xiaomi_logo_to_options_preserves_preliminary_manufacturer(client, monke
         submitted["payload"] = payload
         return submitted_task_id
 
-    monkeypatch.setattr(upload_routes, "submit_existing_task", fake_submit_existing_task)
+    monkeypatch.setattr(upload_workflow, "submit_existing_task", fake_submit_existing_task)
 
     options_response = client.post(
         "/api/upload/confirm_options",
@@ -315,7 +471,7 @@ def test_confirm_options_submits_preserve_choices(client, monkeypatch, tmp_path)
         submitted["payload"] = payload
         return submitted_task_id
 
-    monkeypatch.setattr(upload_routes, "submit_existing_task", fake_submit_existing_task)
+    monkeypatch.setattr(upload_workflow, "submit_existing_task", fake_submit_existing_task)
 
     response = client.post(
         "/api/upload/confirm_options",
@@ -362,7 +518,7 @@ def test_confirm_options_uses_persisted_preserve_defaults(client, monkeypatch):
         submitted["payload"] = payload
         return submitted_task_id
 
-    monkeypatch.setattr(upload_routes, "submit_existing_task", fake_submit_existing_task)
+    monkeypatch.setattr(upload_workflow, "submit_existing_task", fake_submit_existing_task)
 
     response = client.post("/api/upload/confirm_options", json={"task_id": task_id})
 

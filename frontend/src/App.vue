@@ -78,16 +78,17 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { defineAsyncComponent, ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import zhCN from 'ant-design-vue/es/locale/zh_CN'
 import enUS from 'ant-design-vue/es/locale/en_US'
 import { setLanguage } from './i18n'
 import { useAppStore } from './stores/app'
 import UploadZone from './components/UploadZone.vue'
-import PreviewArea from './components/PreviewArea.vue'
 import SettingsPanel from './components/SettingsPanel.vue'
-import ThumbnailStrip from './components/ThumbnailStrip.vue'
+
+const PreviewArea = defineAsyncComponent(() => import('./components/PreviewArea.vue'))
+const ThumbnailStrip = defineAsyncComponent(() => import('./components/ThumbnailStrip.vue'))
 
 const { t, locale } = useI18n()
 const store = useAppStore()

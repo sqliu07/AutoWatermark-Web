@@ -57,6 +57,11 @@ export async function confirmOptions(taskId, options) {
   return data
 }
 
+export async function retryTask(taskId) {
+  const { data } = await http.post(`/tasks/${taskId}/retry`)
+  return data
+}
+
 export async function downloadZip(items) {
   const { data } = await http.post('/download_zip', { items })
   return data

@@ -82,7 +82,7 @@ def detect_image_features(image_path: str) -> dict:
             result["is_motion"] = bool(motion_session.has_motion)
             motion_session.cleanup()
     except Exception:
-        pass
+        logger.debug("Motion Photo feature detection failed for %s", image_path, exc_info=True)
 
     # 检测 Ultra HDR（读取前 64KB 检查标记）
     UHDR_MARKERS = (
@@ -97,7 +97,7 @@ def detect_image_features(image_path: str) -> dict:
         if any(m in header for m in UHDR_MARKERS):
             result["is_hdr"] = True
     except Exception:
-        pass
+        logger.debug("Ultra HDR marker detection failed for %s", image_path, exc_info=True)
 
     return result
 
@@ -358,12 +358,12 @@ def _cleanup(state: Optional[_ProcessingState]) -> None:
         try:
             state.image.close()
         except Exception:
-            pass
+            logger.debug("Failed to close source image for %s", state.image_path, exc_info=True)
     if state.new_image is not None:
         try:
             state.new_image.close()
         except Exception:
-            pass
+            logger.debug("Failed to close rendered image for %s", state.image_path, exc_info=True)
     if state.motion_session is not None:
         state.motion_session.cleanup()
 
