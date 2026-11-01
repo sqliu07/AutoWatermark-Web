@@ -8,6 +8,7 @@ from urllib.parse import urlencode
 
 DEFAULT_TTL = 3600  # 1 小时
 _SECRET_PLACEHOLDER = "__CHANGE_ME__"
+MIN_SECRET_BYTES = 32
 
 
 def _get_secret() -> str:
@@ -17,8 +18,8 @@ def _get_secret() -> str:
 
 def ensure_secret_configured() -> None:
     secret = _get_secret()
-    if not secret or secret == _SECRET_PLACEHOLDER:
-        raise RuntimeError("DOWNLOAD_TOKEN_SECRET must be set to a non-placeholder value")
+    if len(secret.encode()) < MIN_SECRET_BYTES or secret == _SECRET_PLACEHOLDER:
+        raise RuntimeError("DOWNLOAD_TOKEN_SECRET must contain at least 32 random bytes; generate it with secrets.token_urlsafe(32)")
 
 
 def _canonical_claims(claims: dict) -> str:
@@ -33,8 +34,7 @@ def _token_payload(filename: str, expires: int, claims: dict) -> str:
 def generate_token(filename: str, ttl: int = DEFAULT_TTL, **claims) -> tuple[str, int]:
     """生成带过期时间的签名 token。返回 (token, expires)。"""
     secret = _get_secret()
-    if not secret or secret == _SECRET_PLACEHOLDER:
-        raise RuntimeError("DOWNLOAD_TOKEN_SECRET is not configured")
+    ensure_secret_configured()
     expires = int(time.time()) + ttl
     payload = _token_payload(filename, expires, claims)
     token = hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()[:32]
@@ -44,14 +44,20 @@ def generate_token(filename: str, ttl: int = DEFAULT_TTL, **claims) -> tuple[str
 def verify_token(filename: str, token: str, expires: str, **claims) -> bool:
     """校验 token 是否有效且未过期。"""
     secret = _get_secret()
-    if not secret:
+    if len(secret.encode()) < MIN_SECRET_BYTES or secret == _SECRET_PLACEHOLDER:
+        return False
+    if not isinstance(token, str) or len(token) != 32 or any(c not in "0123456789abcdef" for c in token):
+        return False
+    if isinstance(expires, bool) or not isinstance(expires, (str, int)):
+        return False
+    if isinstance(expires, str) and (len(expires) > 12 or not expires.isascii() or not expires.isdecimal()):
         return False
     try:
         expires_int = int(expires)
     except (ValueError, TypeError):
         return False
 
-    if time.time() > expires_int:
+    if not 0 < expires_int <= 999_999_999_999 or time.time() > expires_int:
         return False
 
     payload = _token_payload(filename, expires_int, claims)

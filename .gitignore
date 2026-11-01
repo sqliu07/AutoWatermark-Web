@@ -3,7 +3,9 @@ upload/
 venv/
 .venv/
 .venvtest/
-.env.local
+.env
+.env.*
+!.env.example
 experiments/
 logs/
 test/

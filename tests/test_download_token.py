@@ -6,7 +6,7 @@ from services import download_token
 
 
 def test_build_signed_url_uses_url_encoding(monkeypatch):
-    monkeypatch.setenv("DOWNLOAD_TOKEN_SECRET", "test-secret")
+    monkeypatch.setenv("DOWNLOAD_TOKEN_SECRET", "test-secret-for-ci-only-at-least-32-bytes")
 
     url = download_token.build_signed_url(
         "/upload/demo.jpg",
@@ -31,7 +31,7 @@ def test_generate_token_requires_secret(monkeypatch):
 
 
 def test_token_is_bound_to_action_and_burn(monkeypatch):
-    monkeypatch.setenv("DOWNLOAD_TOKEN_SECRET", "test-secret")
+    monkeypatch.setenv("DOWNLOAD_TOKEN_SECRET", "test-secret-for-ci-only-at-least-32-bytes")
 
     token, expires = download_token.generate_token("demo.jpg", action="download", burn="1")
 
@@ -41,7 +41,7 @@ def test_token_is_bound_to_action_and_burn(monkeypatch):
 
 
 def test_build_signed_url_adds_action_claim(monkeypatch):
-    monkeypatch.setenv("DOWNLOAD_TOKEN_SECRET", "test-secret")
+    monkeypatch.setenv("DOWNLOAD_TOKEN_SECRET", "test-secret-for-ci-only-at-least-32-bytes")
 
     url = download_token.build_signed_url("/api/download/demo.jpg", "demo.jpg", action="download", burn="1")
     query = parse_qs(urlparse(url).query)
@@ -55,3 +55,14 @@ def test_build_signed_url_adds_action_claim(monkeypatch):
         action=query["action"][0],
         burn=query["burn"][0],
     )
+
+
+@pytest.mark.parametrize("token", [None, 12, [], {}, "密钥", "a" * 33, "G" * 32])
+def test_invalid_token_input_fails_closed(token):
+    assert not download_token.verify_token("demo.jpg", token, "9999999999", action="preview")
+
+
+@pytest.mark.parametrize("expires", [None, [], {}, True, 1.5, pytest.param("9" * 5000, id="overlong"),
+                                    pytest.param(10 ** 5000, id="huge-integer"), "１２３", "-1"])
+def test_invalid_expiry_input_fails_closed(expires):
+    assert not download_token.verify_token("demo.jpg", "a" * 32, expires, action="preview")

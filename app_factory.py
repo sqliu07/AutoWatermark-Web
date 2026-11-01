@@ -1,9 +1,9 @@
 import atexit
 import os
-import signal
 import tempfile
+from urllib.parse import urlsplit
 
-from flask import Flask, send_from_directory
+from flask import Flask, jsonify, request, send_from_directory
 
 from constants import AppConstants, CommonConstants
 from extensions import limiter
@@ -16,6 +16,7 @@ from routes.upload import bp as upload_bp
 from services.cleanup import start_background_cleaner
 from services.download_token import ensure_secret_configured
 from services.state import AppState
+from services.trusted_proxy import TrustedProxyFix
 from services.watermark_styles import load_cached_watermark_styles
 
 
@@ -82,6 +83,8 @@ def _resolve_runtime_paths(app, logger) -> None:
 
 
 def create_app(config_overrides=None):
+    if int(os.environ.get("GUNICORN_WORKERS", "1")) != 1:
+        raise RuntimeError("Task processing requires a single worker without preload")
     app = Flask(__name__, static_url_path="/static", static_folder="./static")
 
     logger = get_logger("autowatermark.app")
@@ -96,6 +99,11 @@ def create_app(config_overrides=None):
         STATE_DB_PATH=None,
         ALLOWED_EXTENSIONS=AppConstants.ALLOWED_EXTENSIONS,
         MAX_CONTENT_LENGTH=AppConstants.MAX_CONTENT_LENGTH,
+        MAX_FORM_MEMORY_SIZE=128 * 1024,
+        MAX_FORM_PARTS=16,
+        TRUSTED_HOSTS=[host.strip() for host in os.environ.get("TRUSTED_HOSTS", "").split(",") if host.strip()] or None,
+        TRUSTED_PROXY_CIDRS=[peer.strip() for peer in os.environ.get("TRUSTED_PROXY_CIDRS", "").split(",") if peer.strip()],
+        RATELIMIT_HEADERS_ENABLED=True,
         START_BACKGROUND_CLEANER=True,
         WATERMARK_STYLE_CONFIG_PATH=CommonConstants.WATERMARK_STYLE_CONFIG_PATH,
     )
@@ -103,9 +111,11 @@ def create_app(config_overrides=None):
     if config_overrides:
         app.config.update(config_overrides)
 
-    _resolve_runtime_paths(app, logger)
-
     ensure_secret_configured()
+    if app.config["TRUSTED_PROXY_CIDRS"]:
+        app.wsgi_app = TrustedProxyFix(app.wsgi_app, app.config["TRUSTED_PROXY_CIDRS"])
+
+    _resolve_runtime_paths(app, logger)
 
     limiter.init_app(app)
 
@@ -115,32 +125,64 @@ def create_app(config_overrides=None):
 
     state = app.extensions["state"]
     atexit.register(state.shutdown)
-    signal.signal(signal.SIGTERM, lambda signum, frame: state.shutdown())
-
-    # 多 worker 下 memory:// storage 无法跨进程共享限速状态
-    gunicorn_workers = int(os.environ.get("GUNICORN_WORKERS", "1"))
-    if gunicorn_workers > 1:
-        logger.warning(
-            "GUNICORN_WORKERS=%d > 1: rate limiter uses memory:// storage, "
-            "limits will not be shared across workers",
-            gunicorn_workers,
-        )
 
     register_error_handlers(app)
+
+    @app.before_request
+    def _check_lifecycle():
+        if state.owner_pid != os.getpid() or state.stop_event.is_set():
+            from werkzeug.exceptions import ServiceUnavailable
+            raise ServiceUnavailable("Worker unavailable; preload is not supported")
+
+    @app.before_request
+    def _check_api_request():
+        if not request.path.startswith("/api/"):
+            return None
+        if request.method not in {"GET", "HEAD", "OPTIONS"}:
+            # Block browser-driven cross-origin resource consumption. Clients
+            # without browser Origin/Fetch Metadata headers remain supported.
+            origin = request.headers.get("Origin")
+            if request.headers.get("Sec-Fetch-Site") == "cross-site":
+                return jsonify(error="Cross-origin requests are not allowed"), 403
+            if origin:
+                try:
+                    parsed = urlsplit(origin)
+                    expected = urlsplit(request.host_url)
+                    valid = (parsed.scheme in {"http", "https"}
+                             and parsed.scheme == expected.scheme
+                             and parsed.hostname == expected.hostname
+                             and (parsed.port or (443 if parsed.scheme == "https" else 80))
+                             == (expected.port or (443 if expected.scheme == "https" else 80))
+                             and not parsed.username and not parsed.password
+                             and not parsed.path and not parsed.query and not parsed.fragment)
+                except ValueError:
+                    valid = False
+                if not valid:
+                    return jsonify(error="Cross-origin requests are not allowed"), 403
+        if request.method == "POST" and request.path != "/api/upload":
+            request.max_content_length = 16 * 1024
+        return None
 
     @app.after_request
     def _set_security_headers(response):
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
-        response.headers["X-XSS-Protection"] = "1; mode=block"
-        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        if request.path.startswith("/api/"):
+            response.headers["Cache-Control"] = "no-store, private"
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
+        if request.is_secure:
+            response.headers["Strict-Transport-Security"] = "max-age=31536000"
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
             "script-src 'self'; "
             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
             "font-src 'self' https://fonts.gstatic.com; "
             "img-src 'self' blob: data:; "
-            "connect-src 'self'"
+            "media-src 'self' blob:; "
+            "connect-src 'self'; "
+            "object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
         )
         return response
 

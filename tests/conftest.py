@@ -34,7 +34,7 @@ def _next_log_path():
 
 @pytest.hookimpl(tryfirst=True)
 def pytest_configure(config):
-    os.environ.setdefault("DOWNLOAD_TOKEN_SECRET", "test-secret-for-ci")
+    os.environ.setdefault("DOWNLOAD_TOKEN_SECRET", "test-secret-for-ci-only-at-least-32-bytes")
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     config.option.log_file = str(_next_log_path())
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
