@@ -168,7 +168,7 @@ def _ensure_exif_dict(image_path: str, exif_dict: Optional[dict]) -> Optional[di
         return exif_dict
 
     try:
-        with Image.open(image_path) as image:
+        with Image.open(image_path, formats=("JPEG", "PNG")) as image:
             exif_bytes = image.info.get('exif')
             if not exif_bytes:
                 return None
@@ -287,6 +287,7 @@ def get_exif_data(image_path: str, exif_dict: Optional[dict] = None) -> Tuple[Op
                         output = subprocess.check_output(
                             [str(exif_tool_path), exif_id, image_path],
                             stderr=subprocess.STDOUT,
+                            timeout=10,
                         )
                     except Exception:
                         continue

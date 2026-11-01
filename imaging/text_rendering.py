@@ -1,6 +1,8 @@
+from imaging.safety import new_image
 from PIL import Image, ImageDraw, ImageFont
 from constants import ImageConstants
 from imaging.image_ops import image_resize
+from errors import WatermarkError, WatermarkErrorCode
 
 # 文字渲染相关常量
 FONT_PADDING_RATIO = 0.2       # 文字画布宽度额外留白比例
@@ -10,10 +12,17 @@ RIGHT_BLOCK_LINE_WIDTH_RATIO = 0.02  # 竖线宽度占底栏高度比例
 RIGHT_BLOCK_LINE_HEIGHT_RATIO = 0.45  # 竖线高度占底栏高度比例
 
 
+def _validate_text(text):
+    # EXIF strings are untrusted; bound font measurement as well as raster size.
+    if len(text) > 4096:
+        raise WatermarkError(WatermarkErrorCode.IMAGE_TOO_LARGE, detail="metadata text exceeds 4096 characters")
+
+
 def text_to_image(text, font_path, font_size, color):
     """
     直接使用确定的字号渲染文字
     """
+    _validate_text(text)
     try:
         font = ImageFont.truetype(font_path, int(font_size))
     except Exception:
@@ -27,7 +36,7 @@ def text_to_image(text, font_path, font_size, color):
     text_width = bbox[2] - bbox[0] + int(font_size * FONT_PADDING_RATIO)
 
     # 画布高度留足空间
-    image = Image.new("RGBA", (text_width, int(line_height * 1.2)), (255, 255, 255, 0))
+    image = new_image("RGBA", (text_width, int(line_height * 1.2)), (255, 255, 255, 0))
     draw = ImageDraw.Draw(image)
 
     draw.text((0, 0), text, font=font, fill=color)
@@ -41,6 +50,7 @@ def text_to_image_with_symbol_font(text, font_path, font_size, color, symbol_fon
     """
     针对特定字符单独使用另一套字体渲染，避免等宽字体里的字形过于突兀。
     """
+    _validate_text(text)
     if not text or not symbol_font_path or symbol_char not in text:
         return text_to_image(text, font_path, font_size, color)
 
@@ -78,7 +88,7 @@ def text_to_image_with_symbol_font(text, font_path, font_size, color, symbol_fon
         total_width += (bbox[2] - bbox[0])
 
     total_width += int(font_size * FONT_PADDING_RATIO)
-    image = Image.new("RGBA", (max(1, total_width), int(line_height * 1.2)), (255, 255, 255, 0))
+    image = new_image("RGBA", (max(1, total_width), int(line_height * 1.2)), (255, 255, 255, 0))
     draw = ImageDraw.Draw(image)
 
     current_x = 0
@@ -107,7 +117,7 @@ def create_text_block(line1_text, line2_text, font_bold, font_thin, font_size):
     total_h = img1.height + gap + img2.height
     max_w = max(img1.width, img2.width)
 
-    combined = Image.new("RGBA", (max_w, total_h), (255, 255, 255, 0))
+    combined = new_image("RGBA", (max_w, total_h), (255, 255, 255, 0))
 
     # 左对齐
     combined.paste(img1, (0, 0), img1)
@@ -137,7 +147,7 @@ def create_right_block(logo_path, text_block_img, footer_height, with_line=True,
         total_width = logo.width + spacing + text_block_img.width
 
     max_height = max(logo.height, text_block_img.height, line_height)
-    combined = Image.new("RGBA", (total_width, max_height), (255, 255, 255, 0))
+    combined = new_image("RGBA", (total_width, max_height), (255, 255, 255, 0))
 
     current_x = 0
 

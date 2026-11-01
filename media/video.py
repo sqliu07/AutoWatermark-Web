@@ -3,11 +3,30 @@
 from __future__ import annotations
 
 import json
-import re
+import math
 import shutil
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
+
+from imaging.safety import MAX_RASTER_PIXELS, validate_input_size, validate_raster_size
+
+MAX_VIDEO_SECONDS = 30
+MAX_VIDEO_OUTPUT_BYTES = 128 * 1024 * 1024
+MAX_PROBE_JSON_CHARS = 64 * 1024
+
+# Only decode self-contained phone videos. In particular, do not auto-detect
+# playlists, follow network protocols, or resolve QuickTime external tracks.
+_MOTION_INPUT_OPTIONS = (
+    "-f", "mov",
+    "-protocol_whitelist", "file",
+    "-enable_drefs", "0",
+    "-use_absolute_path", "0",
+    "-max_streams", "8",
+    "-max_pixels", str(MAX_RASTER_PIXELS),
+    "-threads", "2",
+)
 
 __all__ = [
     "_copy_all_metadata_with_exiftool",
@@ -45,18 +64,27 @@ def _copy_all_metadata_with_exiftool(src_jpg: Path, dst_jpg: Path) -> None:
         # Do not fail the pipeline if metadata copy fails; motion photo may still work on some devices.
         return
 
-def _get_video_wh(video_path: Path) -> tuple[int, int]:
+@dataclass(frozen=True)
+class _VideoMetadata:
+    width: int
+    height: int
+    duration: float
+    rotation: Optional[int]
+
+
+def _read_video_metadata(video_path: Path) -> tuple[dict, dict]:
     ffprobe_path = shutil.which("ffprobe")
     if not ffprobe_path:
-        raise RuntimeError("ffprobe is required to read motion photo video dimensions but was not found in PATH")
+        raise RuntimeError("ffprobe is required to read motion photo metadata but was not found in PATH")
     try:
-        r = subprocess.run(
+        result = subprocess.run(
             [
                 ffprobe_path,
                 "-v", "error",
+                *_MOTION_INPUT_OPTIONS,
                 "-select_streams", "v:0",
-                "-show_entries", "stream=width,height",
-                "-of", "csv=p=0:s=x",
+                "-show_entries", "stream=width,height:stream_tags=rotate:stream_side_data=rotation:format=duration",
+                "-of", "json",
                 str(video_path),
             ],
             check=True,
@@ -65,19 +93,84 @@ def _get_video_wh(video_path: Path) -> tuple[int, int]:
             text=True,
             timeout=30,
         )
-        s = r.stdout.strip()
-        match = re.search(r"(\d+)x(\d+)", s)
-        if match:
-            return int(match.group(1)), int(match.group(2))
-        raise RuntimeError(f"Unable to parse video dimensions from ffprobe output: {s or '<empty>'}")
     except subprocess.CalledProcessError as exc:
-        detail = exc.stderr.strip() or exc.stdout.strip() or "unknown ffprobe error"
-        raise RuntimeError(f"ffprobe failed to read motion photo video dimensions: {detail}") from exc
-    except ValueError as exc:
-        raise RuntimeError(f"Unable to parse video dimensions from ffprobe output: {s or '<empty>'}") from exc
+        detail = (exc.stderr or exc.stdout or "unknown ffprobe error").strip()
+        raise RuntimeError(f"ffprobe failed to read motion photo metadata: {detail[:2000]}") from exc
+
+    if not isinstance(result.stdout, str) or len(result.stdout) > MAX_PROBE_JSON_CHARS:
+        raise ValueError("Motion photo metadata exceeded the size limit")
+    payload = json.loads(result.stdout)
+    if not isinstance(payload, dict):
+        raise ValueError("Invalid motion photo metadata")
+    streams = payload.get("streams")
+    file_format = payload.get("format", {})
+    if (not isinstance(streams, list) or len(streams) != 1
+            or not isinstance(streams[0], dict) or not isinstance(file_format, dict)):
+        raise ValueError("Invalid motion photo video stream metadata")
+    return streams[0], file_format
+
+
+def _video_dimensions(stream: dict) -> tuple[int, int]:
+    width, height = stream.get("width"), stream.get("height")
+    if (not isinstance(width, int) or isinstance(width, bool)
+            or not isinstance(height, int) or isinstance(height, bool)):
+        raise ValueError("Invalid motion photo video dimensions")
+    size = width, height
+    validate_input_size(size)
+    return size
+
+
+def _video_duration(file_format: dict) -> float:
+    value = file_format.get("duration")
+    if isinstance(value, bool) or not isinstance(value, (str, int, float)):
+        raise ValueError("Invalid motion photo video duration")
+    duration = float(value)
+    if not math.isfinite(duration) or not 0 < duration <= MAX_VIDEO_SECONDS:
+        raise ValueError(f"Motion photo video must be between 0 and {MAX_VIDEO_SECONDS} seconds")
+    return duration
+
+
+def _video_rotation(stream: dict) -> Optional[int]:
+    side_data_list = stream.get("side_data_list", [])
+    tags = stream.get("tags", {})
+    if not isinstance(side_data_list, list) or not isinstance(tags, dict):
+        raise ValueError("Invalid motion photo rotation metadata")
+    for side_data in side_data_list:
+        if not isinstance(side_data, dict):
+            raise ValueError("Invalid motion photo rotation metadata")
+        rotation = side_data.get("rotation")
+        if rotation is not None:
+            return _normalize_rotation(rotation)
+    rotate_tag = tags.get("rotate")
+    if rotate_tag is not None:
+        # Legacy tags have the opposite sign from display-matrix side data.
+        return (-_normalize_rotation(rotate_tag)) % 360
+    return None
+
+
+def _probe_video(video_path: Path) -> _VideoMetadata:
+    stream, file_format = _read_video_metadata(video_path)
+    width, height = _video_dimensions(stream)
+    return _VideoMetadata(width, height, _video_duration(file_format), _video_rotation(stream))
+
+
+def _get_video_wh(video_path: Path) -> tuple[int, int]:
+    stream, _ = _read_video_metadata(video_path)
+    return _video_dimensions(stream)
+
+
+def _get_video_duration(video_path: Path) -> float:
+    _, file_format = _read_video_metadata(video_path)
+    return _video_duration(file_format)
+
 
 def _normalize_rotation(value: int | float | str) -> int:
-    return int(round(float(value))) % 360
+    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+        raise ValueError("Invalid motion photo video rotation")
+    rotation = float(value)
+    if not math.isfinite(rotation):
+        raise ValueError("Invalid motion photo video rotation")
+    return int(round(rotation)) % 360
 
 def _apply_watermark_to_video(
     video_path: Path,
@@ -91,19 +184,18 @@ def _apply_watermark_to_video(
 
     # Still/watermark canvas (same as watermarked JPG / overlay PNG)
     canvas_w, canvas_h = overlay_size
-    if canvas_w <= 0 or canvas_h <= 0:
-        raise ValueError("Invalid overlay size")
+    validate_raster_size(overlay_size)
 
     left, top, right, bottom = content_box
     content_w = right - left
     content_h = bottom - top
-    if content_w <= 0 or content_h <= 0:
+    if not (0 <= left < right <= canvas_w and 0 <= top < bottom <= canvas_h):
         raise ValueError("Invalid content box")
 
     # Video coded size (before rotation metadata)
-    vw, vh = _get_video_wh(video_path)
-
-    rotation = _get_video_rotation(video_path)  # e.g. 270
+    metadata = _probe_video(video_path)
+    vw, vh = metadata.width, metadata.height
+    rotation = metadata.rotation  # e.g. 270
 
     # Bake rotation into pixels so output is upright and we don't depend on rotate/displaymatrix quirks.
     rot_filter = ""
@@ -122,6 +214,7 @@ def _apply_watermark_to_video(
     # content area in video stays ~disp_w x disp_h, but overall canvas grows by (canvas/content) ratio.
     out_canvas_w = int(round(disp_w * (canvas_w / content_w)))
     out_canvas_h = int(round(disp_h * (canvas_h / content_h)))
+    validate_input_size((out_canvas_w, out_canvas_h))
 
     # Positions scaled to the new output canvas
     scale_x = out_canvas_w / canvas_w
@@ -160,65 +253,55 @@ def _apply_watermark_to_video(
     command = [
         "ffmpeg",
         "-y",
+        "-nostdin",
+        "-v", "error",
+        "-xerror",
+        "-filter_complex_threads", "2",
         "-noautorotate",
+        *_MOTION_INPUT_OPTIONS,
         "-i", str(video_path),
+        "-f", "image2",
+        "-pattern_type", "none",
+        "-protocol_whitelist", "file",
+        "-c:v", "png",
+        "-threads", "2",
+        "-max_pixels", str(MAX_RASTER_PIXELS),
         "-loop", "1",
         "-i", str(overlay_path),
         "-filter_complex", filter_complex,
         "-map", "[out]",
-        "-map", "0:a?",
+        "-map", "0:a:0?",
         "-c:v", "libx264",
+        "-threads", "2",
         "-preset", "medium",
         "-crf", "23",
         "-pix_fmt", "yuv420p",
         "-c:a", "copy",
+        "-t", str(MAX_VIDEO_SECONDS),
+        "-fpsmax", "120",
+        "-frames:v", "3600",
+        "-fs", str(MAX_VIDEO_OUTPUT_BYTES),
         "-metadata:s:v:0", "rotate=0",   # baked rotation -> no metadata rotation
         str(output_path),
     ]
 
     try:
         subprocess.run(command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=120)
+        if output_path.stat().st_size >= MAX_VIDEO_OUTPUT_BYTES:
+            raise ValueError("Motion photo video output exceeded the size limit")
     except subprocess.CalledProcessError as exc:
+        output_path.unlink(missing_ok=True)
         raise RuntimeError(
             f"Failed to overlay watermark onto motion video: {exc.stderr.decode(errors='ignore')}"
         ) from exc
+    except Exception:
+        output_path.unlink(missing_ok=True)
+        raise
 
 def _get_video_rotation(video_path: Path) -> Optional[int]:
-    ffprobe_path = shutil.which("ffprobe")
-    if not ffprobe_path:
-        return None
-
     try:
-        result = subprocess.run(
-            [
-                ffprobe_path,
-                "-v",
-                "error",
-                "-select_streams",
-                "v:0",
-                "-show_streams",
-                "-of",
-                "json",
-                str(video_path),
-            ],
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            timeout=30,
-        )
-        payload = json.loads(result.stdout)
-        stream = (payload.get("streams") or [{}])[0]
-
-        for side_data in stream.get("side_data_list") or []:
-            rotation = side_data.get("rotation")
-            if rotation is not None:
-                return _normalize_rotation(rotation)
-
-        rotate_tag = (stream.get("tags") or {}).get("rotate")
-        if rotate_tag:
-            # Legacy rotate tag uses the opposite sign convention from side_data rotation.
-            return (-_normalize_rotation(rotate_tag)) % 360
+        stream, _ = _read_video_metadata(video_path)
+        return _video_rotation(stream)
     except Exception:
         return None
     return None

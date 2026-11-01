@@ -1,3 +1,4 @@
+from imaging.safety import new_image, validate_raster_size
 from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps
 
 from imaging.renderer_base import LayoutRenderer, RenderContext
@@ -15,6 +16,7 @@ class FilmFrameRenderer(LayoutRenderer):
         photo = origin.convert("RGB") if origin.mode != "RGB" else origin.copy()
 
         border_size = max(2, int(round(min(photo.size) * style["frame"]["border_ratio"])))
+        validate_raster_size((photo.width + 2 * border_size, photo.height + 2 * border_size))
         framed_photo = ImageOps.expand(photo, border=border_size, fill="black")
         metrics = self._get_metrics(style, framed_photo)
 
@@ -31,11 +33,11 @@ class FilmFrameRenderer(LayoutRenderer):
 
         if style.get("frame", {}).get("force_square", False):
             canvas_side = max(canvas_width, canvas_height)
-            canvas = Image.new("RGB", (canvas_side, canvas_side), metrics["background_color"])
+            canvas = new_image("RGB", (canvas_side, canvas_side), metrics["background_color"])
             offset_x = (canvas_side - canvas_width) // 2
             offset_y = (canvas_side - canvas_height) // 2
         else:
-            canvas = Image.new("RGB", (canvas_width, canvas_height), metrics["background_color"])
+            canvas = new_image("RGB", (canvas_width, canvas_height), metrics["background_color"])
             offset_x = 0
             offset_y = 0
 
@@ -99,7 +101,7 @@ class FilmFrameRenderer(LayoutRenderer):
         shadow_x_offset_divisor = 2
 
         shadow_padding = blur_radius * shadow_padding_multiplier
-        shadow = Image.new(
+        shadow = new_image(
             "RGBA",
             (
                 framed_photo.width + shadow_padding * 2,
@@ -190,7 +192,7 @@ class FilmFrameRenderer(LayoutRenderer):
         if len(caption_images) > 1:
             group_height += line_gap * (len(caption_images) - 1)
 
-        caption_group = Image.new("RGBA", (group_width, group_height), (255, 255, 255, 0))
+        caption_group = new_image("RGBA", (group_width, group_height), (255, 255, 255, 0))
         current_y = 0
 
         logo_x = (group_width - logo_image.width) // 2

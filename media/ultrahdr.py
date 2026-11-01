@@ -147,7 +147,6 @@ def _strip_xmp(jpeg_bytes: bytes) -> bytes:
         if idx + 2 > n:
             break
         seglen = _read_u16_be(jpeg_bytes, idx)
-        seg_start = idx - 2
         seg_end = idx + seglen
         if seg_end > n:
             break
@@ -177,7 +176,13 @@ def inject_xmp(jpeg_bytes: bytes, xmp_xml: bytes) -> bytes:
 # ---- GContainer parsing / updating ----
 def parse_gcontainer_items_from_xmp(xmp_xml_bytes: bytes) -> Optional[List[Dict]]:
     try:
+        # XMP lives in a single JPEG APP1 segment. DTDs/entities are not part
+        # of this format and must never expand attacker-controlled metadata.
+        if len(xmp_xml_bytes) > 65535:
+            return None
         text = xmp_xml_bytes.decode("utf-8", errors="replace")
+        if "\x00" in text or "<!DOCTYPE" in text or "<!ENTITY" in text:
+            return None
         root = ET.fromstring(text)
     except Exception:
         return None
@@ -365,7 +370,6 @@ def _looks_like_gainmap(jpeg_bytes: bytes) -> bool:
 def split_ultrahdr(file_bytes: bytes) -> UltraHDRParts:
     base_end = find_end_of_jpeg(file_bytes, 0)
     primary = file_bytes[:base_end]
-    tail = file_bytes[base_end:]
 
     primary_xmp = None
     pkts = iter_app1_xmp_packets(primary)
@@ -443,9 +447,12 @@ def expand_gainmap_for_borders(
     (nw, nh) = new_primary_size
     left_px, top_px, _, _ = content_box
 
+    from imaging.safety import new_image, validate_input_size
+
     # Decode gainmap JPEG to image
-    gm_img = Image.open(BytesIO(orig_gainmap_jpeg))
+    gm_img = Image.open(BytesIO(orig_gainmap_jpeg), formats=("JPEG",))
     try:
+        validate_input_size(gm_img.size)
         gm_img.load()
         gm_rgb = gm_img.convert("RGB")
     finally:
@@ -468,7 +475,7 @@ def expand_gainmap_for_borders(
         params = parse_gainmap_params_from_xmp(orig_gainmap_xmp)
         neutral = neutral_encoded_recovery_for_gain_1(params)
 
-        canvas = Image.new("L", (new_gw, new_gh), color=neutral)
+        canvas = new_image("L", (new_gw, new_gh), color=neutral)
         canvas.paste(gm_rgb, (pad_x, pad_y))
     finally:
         gm_rgb.close()

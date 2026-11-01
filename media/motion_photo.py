@@ -115,18 +115,16 @@ class MotionPhotoSession:
                 from PIL import Image
 
                 if self.ultrahdr_gainmap_xmp is not None:
-                    new_im = Image.open(BytesIO(watermarked_still_bytes))
+                    new_im = Image.open(BytesIO(watermarked_still_bytes), formats=("JPEG",))
                     try:
-                        new_im.load()
                         new_size = new_im.size
                     finally:
                         new_im.close()
 
                     orig_size = self.ultrahdr_primary_size
                     if orig_size is None:
-                        src_im = Image.open(self.still_path)
+                        src_im = Image.open(self.still_path, formats=("JPEG",))
                         try:
-                            src_im.load()
                             orig_size = src_im.size
                         finally:
                             src_im.close()
@@ -207,9 +205,8 @@ def prepare_motion_photo(image_path: str | Path) -> Optional[MotionPhotoSession]
             ultrahdr_gainmap_jpeg = parts.gainmap_jpeg
             ultrahdr_gainmap_xmp = parts.gainmap_xmp
             try:
-                im = Image.open(BytesIO(parts.primary_jpeg))
+                im = Image.open(BytesIO(parts.primary_jpeg), formats=("JPEG",))
                 try:
-                    im.load()
                     ultrahdr_primary_size = im.size
                 finally:
                     im.close()
@@ -329,13 +326,16 @@ def find_motion_video_start(file_path: str | Path) -> Optional[int]:
     if not path.exists() or not path.is_file():
         return None
 
+    if path.stat().st_size < 16:
+        return None
     with path.open("rb") as fp:
         with mmap.mmap(fp.fileno(), 0, access=mmap.ACCESS_READ) as mm:
             file_size = len(mm)
             if file_size < 16:
                 return None
 
-            xmp = _extract_xmp_segment(mm)
+            # XMP belongs to JPEG metadata; never materialize arbitrary file tails.
+            xmp = _extract_xmp_segment(mm[:min(file_size, 1024 * 1024)])
             if not xmp:
                 return None
 

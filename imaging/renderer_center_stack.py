@@ -1,3 +1,4 @@
+from imaging.safety import new_image
 from PIL import Image
 
 from imaging.renderer_base import LayoutRenderer, RenderContext
@@ -28,7 +29,7 @@ class CenterStackRenderer(LayoutRenderer):
         v_gap = int(context.footer_height * style["center_gap_ratio"])
         total_group_h = logo.height + v_gap + center_text.height
         total_group_w = max(logo.width, center_text.width)
-        center_group = Image.new("RGBA", (total_group_w, total_group_h), (255, 255, 255, 0))
+        center_group = new_image("RGBA", (total_group_w, total_group_h), (255, 255, 255, 0))
 
         logo_x = (total_group_w - logo.width) // 2
         center_group.paste(logo, (logo_x, 0), logo)

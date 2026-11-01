@@ -47,7 +47,11 @@ class AppConstants:
     ZIP_RATE_LIMIT = "10 per minute"
     ZIP_MAX_FILES = 50
 
-    EXECUTOR_MAX_WORKERS = 4
+    EXECUTOR_MAX_WORKERS = 2
+    MAX_PENDING_TASKS = 8  # Includes running jobs.
+    MAX_PENDING_BYTES = 512 * 1024 * 1024
+    MAX_UPLOAD_STORAGE_BYTES = 2 * 1024 * 1024 * 1024
+    STATUS_RATE_LIMIT = "120 per minute"
     TASK_RETENTION_SECONDS = 3600
 
     CLEANER_INTERVAL_SECONDS = 10
@@ -70,7 +74,7 @@ def format_pixel_limit(limit: int, lang: str = "zh") -> str:
 
 
 class ImageConstants:
-    MAX_IMAGE_PIXELS = 200_000_000
+    MAX_IMAGE_PIXELS = 40_000_000
 
     # split_lr 布局中右侧 Logo 高度占底栏的比例
     LOGO_HEIGHT_RATIO = 0.5

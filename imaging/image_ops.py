@@ -1,3 +1,4 @@
+from imaging.safety import new_image, validate_raster_size
 from functools import lru_cache
 import piexif
 from PIL import Image, ImageDraw, ImageStat
@@ -66,6 +67,7 @@ def image_resize(image, target_height):
         return image
     aspect_ratio = image.width / image.height
     new_width = int(target_height * aspect_ratio)
+    validate_raster_size((new_width, int(target_height)))
     return image.resize((new_width, int(target_height)), Image.LANCZOS)
 
 
@@ -77,7 +79,7 @@ def _rounded_mask_cached(w: int, h: int, radius: int, aa: int) -> Image.Image:
     W, H = w * aa, h * aa
     R = radius * aa
 
-    mask = Image.new("L", (W, H), 0)
+    mask = new_image("L", (W, H), 0)
     draw = ImageDraw.Draw(mask)
     draw.rounded_rectangle((0, 0, W - 1, H - 1), radius=R, fill=255)
 

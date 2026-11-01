@@ -1,3 +1,4 @@
+from imaging.safety import new_image, validate_raster_size
 from PIL import Image, ImageDraw, ImageFilter
 from constants import ImageConstants
 from imaging.image_ops import is_landscape, _darken_rgb_inplace
@@ -38,6 +39,7 @@ def create_frosted_glass_effect(origin_image):
 
     blurred_bg = small_bg.filter(ImageFilter.GaussianBlur(BLUR_DOWNSAMPLE_RADIUS))
     # 放大铺满
+    validate_raster_size(canvas_size)
     final_bg = blurred_bg.resize(canvas_size, Image.Resampling.LANCZOS)
     del small_bg
 
@@ -66,7 +68,7 @@ def create_frosted_glass_effect(origin_image):
     patch_w = max(1, x1 - x0)
     patch_h = max(1, y1 - y0)
 
-    shadow_patch = Image.new("RGBA", (patch_w, patch_h), (0, 0, 0, 0))
+    shadow_patch = new_image("RGBA", (patch_w, patch_h), (0, 0, 0, 0))
     d = ImageDraw.Draw(shadow_patch)
 
     rx0 = shadow_x - x0
@@ -93,7 +95,7 @@ def create_frosted_glass_effect(origin_image):
         bg_bl = final_image.crop((fg_x, fg_y + ori_h - corner_radius, fg_x + corner_radius, fg_y + ori_h))
         bg_br = final_image.crop((fg_x + ori_w - corner_radius, fg_y + ori_h - corner_radius, fg_x + ori_w, fg_y + ori_h))
 
-        corner_mask = Image.new("L", (corner_radius, corner_radius), 255)
+        corner_mask = new_image("L", (corner_radius, corner_radius), 255)
         corner_draw = ImageDraw.Draw(corner_mask)
         corner_draw.pieslice((0, 0, corner_radius * 2, corner_radius * 2), 180, 270, fill=0)
         corner_mask_tr = corner_mask.transpose(Image.FLIP_LEFT_RIGHT)

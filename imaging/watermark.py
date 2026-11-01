@@ -1,4 +1,5 @@
-from PIL import Image, ImageOps
+from imaging.safety import validate_raster_size, validate_input_size
+from PIL import ImageOps
 
 from constants import CommonConstants
 from imaging.image_ops import is_landscape
@@ -14,7 +15,9 @@ logger = get_logger("autowatermark.watermark")
 def generate_watermark_image(origin_image, logo_path, camera_info, shooting_info,
                              font_path_thin, font_path_bold, watermark_type=1,
                              return_metadata=False, style_config=None, style=None,
-                             font_path_regular=None, font_path_symbol=None):
+                             font_path_regular=None, font_path_symbol=None,
+                             include_overlay=True):
+    validate_input_size(origin_image.size)
     if font_path_regular is None:
         font_path_regular = font_path_bold
     if font_path_symbol is None:
@@ -58,17 +61,21 @@ def generate_watermark_image(origin_image, logo_path, camera_info, shooting_info
     new_width = ori_width + 2 * border_left
     new_height = ori_height + border_top + footer_height
 
-    left_block = create_text_block(
-        camera_info[0], camera_info[1],
-        font_path_bold, font_path_thin,
-        font_size
-    )
+    validate_raster_size((new_width + new_width % 2, new_height + new_height % 2))
 
-    shooting_info_block = create_text_block(
-        shooting_info[0], shooting_info[1],
-        font_path_bold, font_path_thin,
-        font_size
-    )
+    left_block = None
+    shooting_info_block = None
+    if style["layout"] == "split_lr":
+        left_block = create_text_block(
+            camera_info[0], camera_info[1],
+            font_path_bold, font_path_thin,
+            font_size,
+        )
+        shooting_info_block = create_text_block(
+            shooting_info[0], shooting_info[1],
+            font_path_bold, font_path_thin,
+            font_size,
+        )
 
     footer_center_y = border_top + ori_height + (footer_height / 2)
 
@@ -98,28 +105,36 @@ def generate_watermark_image(origin_image, logo_path, camera_info, shooting_info
 
     # 通过注册表获取渲染器
     renderer = get_renderer(style["layout"])
-    final_image = renderer.render(context)
+    try:
+        final_image = renderer.render(context)
+    finally:
+        if left_block is not None:
+            left_block.close()
+        if shooting_info_block is not None:
+            shooting_info_block.close()
 
     # 尺寸对齐（偶数化）
     final_width, final_height = final_image.size
     if final_width % 2 != 0 or final_height % 2 != 0:
+        validate_raster_size((final_width + final_width % 2, final_height + final_height % 2))
+        unaligned_image = final_image
         final_image = ImageOps.expand(
             final_image,
             border=(0, 0, final_width % 2, final_height % 2),
             fill='white',
         )
+        unaligned_image.close()
 
     if return_metadata:
         content_box = context.content_box or (border_left, border_top, border_left + ori_width, border_top + ori_height)
-        overlay_image = final_image.copy().convert("RGBA")
-        transparent = Image.new("RGBA", (content_box[2] - content_box[0], content_box[3] - content_box[1]), (0, 0, 0, 0))
-        overlay_image.paste(transparent, (content_box[0], content_box[1]))
-
         metadata = {
-            "overlay_image": overlay_image,
             "content_box": content_box,
             "final_size": final_image.size,
         }
+        if include_overlay:
+            overlay_image = final_image.convert("RGBA")
+            overlay_image.paste((0, 0, 0, 0), content_box)
+            metadata["overlay_image"] = overlay_image
         return final_image, metadata
 
     return final_image

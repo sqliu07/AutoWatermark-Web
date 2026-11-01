@@ -6,11 +6,11 @@ import media.motion_photo as motion_module
 import media.video as video_module
 
 
-def test_get_video_wh_accepts_trailing_separator(monkeypatch):
+def test_get_video_wh_reads_json_dimensions(monkeypatch):
     monkeypatch.setattr(video_module.shutil, "which", lambda _: "/usr/local/bin/ffprobe")
 
     def fake_run(*args, **kwargs):
-        return SimpleNamespace(stdout="1008x1344x\n", stderr="")
+        return SimpleNamespace(stdout=json.dumps({"streams": [{"width": 1008, "height": 1344}]}), stderr="")
 
     monkeypatch.setattr(video_module.subprocess, "run", fake_run)
 

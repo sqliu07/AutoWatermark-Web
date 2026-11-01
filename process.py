@@ -22,7 +22,8 @@ from media.ultrahdr import (
     build_primary_xmp_for_gainmap,
     expand_gainmap_for_borders,
 )
-from media.motion_photo import prepare_motion_photo
+from media.motion_photo import prepare_motion_photo, find_motion_video_start
+from imaging.safety import validate_input_size
 from process_result import ProcessResult
 from logging_utils import get_logger
 from services.i18n import get_error_message
@@ -30,6 +31,26 @@ from services.watermark_styles import get_style, load_cached_watermark_styles
 
 
 logger = get_logger("autowatermark.process")
+
+_JPEG_METADATA_SCAN_BYTES = 1024 * 1024  # Same bound as Motion Photo XMP detection.
+_ULTRAHDR_MARKERS = (
+    b"hdrgm:Version",
+    b"urn:apple:photo:2024:aux:hdrgainmap",
+    b'Item:Semantic="GainMap"',
+    b"http://ns.adobe.com/hdr-gain-map/1.0/",
+)
+
+
+def _has_ultrahdr_metadata(image_path: str) -> bool:
+    """Check the same bounded prefix for upload detection and HDR processing."""
+    with open(image_path, "rb") as stream:
+        header = stream.read(_JPEG_METADATA_SCAN_BYTES)
+    if not header.startswith(b"\xff\xd8"):
+        return False
+    # Gain-map-only files can keep XMP in the appended JPEG rather than the
+    # primary JPEG, so retain marker detection past its first SOS/EOI.
+    return any(value in header for value in _ULTRAHDR_MARKERS)
+
 
 def _enforce_image_pixel_limit(image: Image.Image) -> None:
     max_pixels = ImageConstants.MAX_IMAGE_PIXELS
@@ -75,39 +96,32 @@ def detect_image_features(image_path: str) -> dict:
     """快速检测图片是否为 HDR 或 Motion Photo（仅读取文件头，不加载图像）。"""
     result = {"is_hdr": False, "is_motion": False}
 
-    # 检测 Motion Photo
+    # mmap parsing locates MP4 without copying the photo or decoding pixels.
     try:
-        motion_session = prepare_motion_photo(image_path)
-        if motion_session:
-            result["is_motion"] = bool(motion_session.has_motion)
-            motion_session.cleanup()
+        result["is_motion"] = find_motion_video_start(image_path) is not None
     except Exception:
         logger.debug("Motion Photo feature detection failed for %s", image_path, exc_info=True)
 
-    # 检测 Ultra HDR（读取前 64KB 检查标记）
-    UHDR_MARKERS = (
-        b"hdrgm:Version",
-        b"urn:apple:photo:2024:aux:hdrgainmap",
-        b'Item:Semantic="GainMap"',
-        b"http://ns.adobe.com/hdr-gain-map/1.0/",
-    )
     try:
-        with open(image_path, "rb") as f:
-            header = f.read(65536)
-        if any(m in header for m in UHDR_MARKERS):
-            result["is_hdr"] = True
+        result["is_hdr"] = _has_ultrahdr_metadata(image_path)
     except Exception:
         logger.debug("Ultra HDR marker detection failed for %s", image_path, exc_info=True)
 
     return result
 
 
-def _detect_format(state: _ProcessingState) -> None:
+def _detect_format(state: _ProcessingState, *, preserve_motion: bool = True,
+                   preserve_hdr: bool = True, preview: bool = False) -> None:
     """检测 motion photo 和 Ultra HDR 格式，更新 working_image_path。"""
-    state.motion_session = prepare_motion_photo(state.image_path)
+    keep_motion = not preview and preserve_motion and state.style.get("supports_motion", True)
+    keep_hdr = not preview and preserve_hdr and state.style.get("supports_ultrahdr", True)
+    video_start = None
+    if keep_motion:
+        video_start = find_motion_video_start(state.image_path)
+        state.motion_session = prepare_motion_photo(state.image_path) if video_start is not None else None
     if state.motion_session and state.motion_session.has_motion:
         state.working_image_path = str(state.motion_session.still_path)
-        if state.motion_session.ultrahdr_gainmap_jpeg:
+        if keep_hdr and state.motion_session.ultrahdr_gainmap_jpeg:
             primary_jpeg = Path(state.motion_session.still_path).read_bytes()
             state.ultrahdr_parts = UltraHDRParts(
                 primary_jpeg=primary_jpeg,
@@ -120,20 +134,20 @@ def _detect_format(state: _ProcessingState) -> None:
     else:
         state.motion_session = None
 
+    if not keep_hdr:
+        state.ultrahdr_parts = None
+        return
+
     try:
-        # 先读前 64KB 检查 Ultra HDR 专有特征，避免对大文件做全量读取
-        UHDR_MARKERS = (
-            b"hdrgm:Version",
-            b"urn:apple:photo:2024:aux:hdrgainmap",
-            b'Item:Semantic="GainMap"',
-            b"http://ns.adobe.com/hdr-gain-map/1.0/",
-        )
-        with open(state.working_image_path, "rb") as f:
-            header = f.read(65536)
-        if not any(m in header for m in UHDR_MARKERS):
+        if not _has_ultrahdr_metadata(state.working_image_path):
             state.ultrahdr_parts = None
             return
-        data_bytes = Path(state.working_image_path).read_bytes()
+        # Dropping Motion only needs the still prefix, not a copied video tail
+        # or a temporary workspace. Pillow also reads its primary JPEG directly.
+        if state.motion_session is None and not keep_motion:
+            video_start = find_motion_video_start(state.working_image_path)
+        with open(state.working_image_path, "rb") as f:
+            data_bytes = f.read(video_start) if video_start is not None and state.motion_session is None else f.read()
         state.ultrahdr_parts = split_ultrahdr(data_bytes)
     except Exception:
         logger.debug("Ultra HDR detection failed for %s, treating as SDR", state.working_image_path, exc_info=True)
@@ -159,12 +173,16 @@ def _load_image(state: _ProcessingState) -> None:
     Image.MAX_IMAGE_PIXELS = ImageConstants.MAX_IMAGE_PIXELS
     try:
         if state.ultrahdr_parts is not None:
-            state.image = Image.open(BytesIO(state.ultrahdr_parts.primary_jpeg))
+            state.image = Image.open(BytesIO(state.ultrahdr_parts.primary_jpeg), formats=("JPEG",))
         else:
-            state.image = Image.open(state.working_image_path)
+            state.image = Image.open(state.working_image_path, formats=("JPEG", "PNG"))
     except Image.DecompressionBombError as e:
         raise WatermarkError(WatermarkErrorCode.IMAGE_TOO_LARGE, detail=str(e)) from e
-    state.image = reset_image_orientation(state.image)
+    validate_input_size(state.image.size)
+    original_image = state.image
+    state.image = reset_image_orientation(original_image)
+    if state.image is not original_image:
+        original_image.close()
     _enforce_image_pixel_limit(state.image)
 
 
@@ -229,7 +247,8 @@ def _resolve_logo(state: _ProcessingState) -> None:
         raise WatermarkError(WatermarkErrorCode.UNSUPPORTED_MANUFACTURER, detail=detail)
 
 
-def _render_watermark(state: _ProcessingState) -> None:
+def _render_watermark(state: _ProcessingState, *, preserve_motion: bool = True,
+                      preserve_hdr: bool = True, preview: bool = False) -> None:
     """生成水印图像，写入 state.new_image 和 state.watermark_metadata。"""
     camera_info_lines = state.camera_info.split('\n')
     shooting_info_lines = state.shooting_info.split('\n')
@@ -238,7 +257,10 @@ def _render_watermark(state: _ProcessingState) -> None:
         camera_info_lines[0], camera_info_lines[1], shooting_info_lines[0],
     )
 
-    needs_metadata = (state.motion_session is not None) or (state.ultrahdr_parts is not None)
+    needs_overlay = bool(not preview and preserve_motion and state.motion_session is not None
+                         and state.style.get("supports_motion", True))
+    needs_metadata = bool(needs_overlay or (not preview and preserve_hdr and state.ultrahdr_parts is not None
+                                           and state.style.get("supports_ultrahdr", True)))
     logger.info("Generating watermark, current manufacturer: %s", state.manufacturer)
     generated = generate_watermark_image(
         state.image,
@@ -251,6 +273,7 @@ def _render_watermark(state: _ProcessingState) -> None:
         font_path_regular=CommonConstants.GLOBAL_FONT_PATH_MONO,
         font_path_symbol=CommonConstants.GLOBAL_FONT_PATH_REGULAR,
         return_metadata=needs_metadata,
+        include_overlay=needs_overlay,
         style_config=state.style_config,
         style=state.style,
     )
@@ -267,7 +290,9 @@ def _save_output(state: _ProcessingState, preview: bool, advance_progress: Calla
                  preserve_motion: bool = True, preserve_hdr: bool = True) -> ProcessResult:
     """保存输出图像（预览 / motion photo / Ultra HDR / 标准 JPEG）。"""
     if preview:
-        return ProcessResult(preview_image=state.new_image)
+        preview_image = state.new_image
+        state.new_image = None  # Ownership transfers to the caller.
+        return ProcessResult(preview_image=preview_image)
 
     advance_progress("saving")
     is_motion = False
@@ -364,6 +389,10 @@ def _cleanup(state: Optional[_ProcessingState]) -> None:
             state.new_image.close()
         except Exception:
             logger.debug("Failed to close rendered image for %s", state.image_path, exc_info=True)
+    if state.watermark_metadata:
+        overlay = state.watermark_metadata.get("overlay_image")
+        if overlay is not None:
+            overlay.close()
     if state.motion_session is not None:
         state.motion_session.cleanup()
 
@@ -429,7 +458,7 @@ def process_image(
             progress_step += 1
             _report_progress(progress_callback, min(progress_step / progress_total, 1.0), stage)
 
-        _detect_format(state)
+        _detect_format(state, preserve_motion=preserve_motion, preserve_hdr=preserve_hdr, preview=preview)
         logger.info(
             "Received image: %s, output: %s, is_motion: %s, start processing...",
             image_path, output_path, None != state.motion_session,
@@ -442,7 +471,7 @@ def process_image(
             _resolve_logo(state)
         advance_progress("metadata")
 
-        _render_watermark(state)
+        _render_watermark(state, preserve_motion=preserve_motion, preserve_hdr=preserve_hdr, preview=preview)
         advance_progress("rendered")
 
         return _save_output(state, preview, advance_progress, preserve_motion, preserve_hdr)

@@ -1,4 +1,5 @@
 from __future__ import annotations
+from imaging.safety import new_image
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -70,7 +71,7 @@ class LayoutRenderer(ABC):
             from imaging.frosted_glass import create_frosted_glass_effect
             return create_frosted_glass_effect(context.origin_image)
         else:  # "white"
-            canvas = Image.new("RGB", (context.new_width, context.new_height), "white")
+            canvas = new_image("RGB", (context.new_width, context.new_height), "white")
             canvas.paste(context.origin_image, (context.border_left, context.border_top))
             return canvas
 
