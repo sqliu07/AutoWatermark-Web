@@ -36,7 +36,9 @@ def upload_file():
 def confirm_logo_choice():
     state = current_app.extensions["state"]
     style_config = current_app.extensions.get("watermark_styles", {})
-    payload = request.get_json(silent=True) or {}
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        return jsonify(error="A JSON object is required"), 400
     result = upload_workflow.confirm_logo_choice(
         payload=payload,
         state=state,
@@ -58,7 +60,9 @@ def confirm_options():
     """确认 HDR/Motion Photo 选项后继续处理。"""
     state = current_app.extensions["state"]
     style_config = current_app.extensions.get("watermark_styles", {})
-    payload = request.get_json(silent=True) or {}
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        return jsonify(error="A JSON object is required"), 400
     result = upload_workflow.confirm_options(
         payload=payload,
         state=state,
@@ -85,6 +89,7 @@ def retry_task(task_id):
 
 
 @bp.route("/status/<task_id>", methods=["GET"])
+@limiter.limit(AppConstants.STATUS_RATE_LIMIT)
 def get_task_status(task_id):
     if is_browser_request():
         return redirect("/")
@@ -93,15 +98,27 @@ def get_task_status(task_id):
     task = state.get_task(task_id)
     if not task:
         return jsonify({"status": "unknown"}), 404
-    return jsonify(
-        {
+    payload = {
             "status": task.get("status"),
             "progress": task.get("progress", 0.0),
             "stage": task.get("stage"),
             "result": task.get("result"),
             "error": task.get("error"),
-        }
+    }
+    if task.get("status") in {task_lifecycle.TaskStatus.NEEDS_LOGO, task_lifecycle.TaskStatus.NEEDS_OPTIONS}:
+        payload.update(features=task.get("features"), preserve_hdr=task.get("preserve_hdr"),
+                       preserve_motion=task.get("preserve_motion"))
+    return jsonify(payload)
+
+
+@bp.route("/tasks/<task_id>/cancel", methods=["POST"])
+@limiter.limit(AppConstants.STATUS_RATE_LIMIT)
+def cancel_waiting_task(task_id):
+    result = task_lifecycle.cancel_waiting_task(
+        task_id=task_id, state=current_app.extensions["state"],
+        config=current_app.config, logger=current_app.logger,
     )
+    return jsonify(result.payload), result.status_code
 
 
 @bp.route("/upload/<filename>")
@@ -117,6 +134,8 @@ def upload_file_served(filename):
         return render_template("image_deleted.html"), result.status_code
     if result.error:
         return jsonify(error=result.error), result.status_code
+    if result.file_path is None:
+        return jsonify(error="File not found"), 404
     return send_file(result.file_path)
 
 
@@ -132,9 +151,12 @@ def upload_motion_video(filename):
     )
     if result.error:
         return jsonify(error=result.error), result.status_code
+    file_path = result.file_path
+    if file_path is None:
+        return jsonify(error="File not found"), 404
 
     def generate_video_stream():
-        with open(result.file_path, "rb") as fp:
+        with open(file_path, "rb") as fp:
             fp.seek(result.video_start)
             while True:
                 chunk = fp.read(1024 * 1024)

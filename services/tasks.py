@@ -7,14 +7,15 @@ from typing import Optional, Set
 from PIL import Image
 import piexif
 
-from constants import CommonConstants
+from constants import AppConstants, CommonConstants
 from errors import WatermarkError, WatermarkErrorCode
 from exif import get_exif_data_with_exiftool, get_manufacturer
 from process import process_image
-from process_result import ProcessResult
 from services import task_lifecycle
 from services.download_token import build_signed_url
+from services.filenames import download_name
 from services.i18n import get_error_message
+from services.previews import create_previews
 
 
 @dataclass
@@ -33,6 +34,7 @@ class TaskPayload:
     preliminary_manufacturer: Optional[str] = None
     preserve_motion: bool = True
     preserve_hdr: bool = True
+    original_name: Optional[str] = None
 
 
 def allowed_file(filename: str, allowed_extensions: Set[str]) -> bool:
@@ -47,7 +49,7 @@ def cleanup_old_tasks(state) -> None:
 
 def detect_manufacturer(filepath: str, logger=None):
     try:
-        with Image.open(filepath) as image:
+        with Image.open(filepath, formats=("JPEG", "PNG")) as image:
             exif_bytes = image.info.get("exif")
             if exif_bytes:
                 exif_dict = piexif.load(exif_bytes)
@@ -111,9 +113,14 @@ def _submit_task_with_id(task_id: str, payload: TaskPayload) -> None:
         preliminary_manufacturer=payload.preliminary_manufacturer,
         preserve_motion=payload.preserve_motion,
         preserve_hdr=payload.preserve_hdr,
+        original_name=payload.original_name,
     )
     _update_queue_metrics(state, task_id, payload.logger)
-    state.executor.submit(background_process, payload)
+    try:
+        state.submit(background_process, payload)
+    except Exception:
+        task_lifecycle.mark_failed(state, task_id, "服务繁忙或任务提交失败，请稍后重试")
+        raise
 
 
 def submit_task(payload: TaskPayload) -> str:
@@ -148,7 +155,8 @@ def background_process(payload: TaskPayload) -> None:
             if not task:
                 return
             current = task.get("progress", 0)
-            updates = {"progress": max(current, min(progress, 1))}
+            # Reserve the final tenth for display derivatives and publication.
+            updates = {"progress": max(current, min(progress, 1) * .9)}
             if stage:
                 updates["stage"] = stage
             state.update_task(task_id, **updates)
@@ -173,7 +181,7 @@ def background_process(payload: TaskPayload) -> None:
         original_name, extension = os.path.splitext(filename)
         processed_filename = f"{original_name}_watermark{extension}"
 
-        preview_url = build_signed_url(
+        full_preview_url = build_signed_url(
             f"/api/upload/{processed_filename}",
             processed_filename,
             action="preview",
@@ -186,7 +194,25 @@ def background_process(payload: TaskPayload) -> None:
             burn=burn_after_read,
         )
 
-        task_result = {"preview_url": preview_url, "download_url": download_url}
+        task_result = {
+            "preview_url": full_preview_url,
+            "thumbnail_url": full_preview_url,
+            "full_preview_url": full_preview_url,
+            "download_url": download_url,
+            "download_name": download_name(payload.original_name, processed_filename),
+        }
+        try:
+            state.update_task(task_id, stage="previews", progress=.95)
+            with state.upload_lock:
+                variants = create_previews(
+                    os.path.join(os.path.dirname(filepath), processed_filename),
+                    storage_quota_bytes=AppConstants.MAX_UPLOAD_STORAGE_BYTES,
+                )
+            for kind, path in variants.items():
+                name = os.path.basename(path)
+                task_result[kind + "_url"] = build_signed_url(f"/api/upload/{name}", name, action="preview")
+        except Exception:
+            logger.warning("Display preview unavailable for task %s; using full result", task_id, exc_info=True)
         if is_motion:
             task_result["is_motion"] = True
             task_result["motion_video_url"] = build_signed_url(

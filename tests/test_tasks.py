@@ -140,12 +140,11 @@ def test_submit_existing_task_persists_media_preserve_fields(monkeypatch, tmp_pa
 
     submitted = {}
 
-    class FakeExecutor:
-        def submit(self, fn, payload):
-            submitted["fn"] = fn
-            submitted["payload"] = payload
+    def fake_submit(fn, payload):
+        submitted["fn"] = fn
+        submitted["payload"] = payload
 
-    state.executor = FakeExecutor()
+    monkeypatch.setattr(state, "submit", fake_submit)
 
     payload = TaskPayload(
         task_id=task_id,

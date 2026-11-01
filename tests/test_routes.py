@@ -30,6 +30,14 @@ def require_asset(path: pathlib.Path, hint: str) -> None:
         pytest.skip(f"Missing test asset: {path.name}. {hint}")
 
 
+def jpeg_stream():
+    stream = io.BytesIO()
+    with Image.new("RGB", (2, 2), "white") as image:
+        image.save(stream, format="JPEG")
+    stream.seek(0)
+    return stream
+
+
 def test_index_ok(client):
     response = client.get("/")
     assert response.status_code == 200
@@ -292,7 +300,7 @@ def test_upload_unknown_watermark_type(client):
 def test_upload_xiaomi_requires_logo_choice(client, monkeypatch):
     monkeypatch.setattr(upload_workflow, "detect_manufacturer", lambda *_args: "xiaomi")
     data = {
-        "file": (io.BytesIO(b"fake"), "sample.jpg"),
+        "file": (jpeg_stream(), "sample.jpg"),
     }
     response = client.post("/api/upload", data=data, content_type="multipart/form-data")
     assert response.status_code == 200
@@ -308,7 +316,7 @@ def test_upload_success_returns_task_id(client, monkeypatch):
     monkeypatch.setattr(upload_workflow, "submit_task", fake_submit_task)
 
     data = {
-        "file": (io.BytesIO(b"fake"), "sample.jpg"),
+        "file": (jpeg_stream(), "sample.jpg"),
         "watermark_type": "1",
     }
     response = client.post("/api/upload", data=data, content_type="multipart/form-data")
@@ -322,7 +330,7 @@ def test_upload_detected_media_features_waits_for_options(client, monkeypatch):
     monkeypatch.setattr(upload_workflow, "detect_image_features", lambda _: {"is_hdr": True, "is_motion": False})
 
     data = {
-        "file": (io.BytesIO(b"fake"), "sample.jpg"),
+        "file": (jpeg_stream(), "sample.jpg"),
         "watermark_type": "1",
     }
     response = client.post("/api/upload", data=data, content_type="multipart/form-data")
@@ -352,7 +360,7 @@ def test_confirm_logo_choice_submits_existing_task(client, monkeypatch):
 
     upload_response = client.post(
         "/api/upload",
-        data={"file": (io.BytesIO(b"fake"), "sample.jpg")},
+        data={"file": (jpeg_stream(), "sample.jpg")},
         content_type="multipart/form-data",
     )
     assert upload_response.status_code == 200
@@ -374,7 +382,7 @@ def test_confirm_logo_choice_can_continue_to_media_options(client, monkeypatch):
 
     upload_response = client.post(
         "/api/upload",
-        data={"file": (io.BytesIO(b"fake"), "sample.jpg")},
+        data={"file": (jpeg_stream(), "sample.jpg")},
         content_type="multipart/form-data",
     )
     assert upload_response.status_code == 200
@@ -402,7 +410,7 @@ def test_xiaomi_logo_to_options_preserves_preliminary_manufacturer(client, monke
 
     upload_response = client.post(
         "/api/upload",
-        data={"file": (io.BytesIO(b"fake"), "sample.jpg")},
+        data={"file": (jpeg_stream(), "sample.jpg")},
         content_type="multipart/form-data",
     )
     task_id = upload_response.get_json()["task_id"]

@@ -2,20 +2,23 @@ from __future__ import annotations
 
 import os
 import struct
-import time
 from dataclasses import dataclass
-from datetime import datetime
+import tempfile
 from typing import Any
 
+from PIL import Image
 from werkzeug.utils import secure_filename
 
-from constants import ImageConstants, format_pixel_limit
-from errors import WatermarkError, WatermarkErrorCode
+from constants import AppConstants, ImageConstants, format_pixel_limit
+from imaging.safety import validate_input_size
+from werkzeug.exceptions import ServiceUnavailable, RequestEntityTooLarge
+from errors import WatermarkError
 from process import detect_image_features
 from services import task_lifecycle
 from services.download_token import verify_token
 from services.i18n import get_error_message, normalize_lang
 from services.path_safety import resolve_under_root
+from services.previews import preview_source
 from services.tasks import (
     TaskPayload,
     allowed_file,
@@ -118,6 +121,7 @@ def _task_payload_from_waiting_task(
         preliminary_manufacturer=preliminary_manufacturer,
         preserve_motion=_preserve_default(preserve_motion),
         preserve_hdr=_preserve_default(preserve_hdr),
+        original_name=task.get("original_name"),
     )
 
 
@@ -158,30 +162,54 @@ def _read_image_dimensions(filepath: str, upload_folder: str) -> tuple[int, int]
 def _check_image_pixel_limit(filepath: str, upload_folder: str) -> None:
     dims = _read_image_dimensions(filepath, upload_folder)
     if dims is None:
-        return
+        raise ValueError("Only JPEG and PNG uploads are accepted")
     width, height = dims
-    if width * height > ImageConstants.MAX_IMAGE_PIXELS:
-        raise WatermarkError(WatermarkErrorCode.IMAGE_TOO_LARGE, detail=f"{width}x{height}")
+    validate_input_size((width, height))
+    # Restrict decoder selection before any EXIF tool or background processing.
+    with Image.open(filepath, formats=("JPEG", "PNG")) as image:
+        validate_input_size(image.size)
+        image.verify()
 
 
 def _save_upload(file, upload_folder: str) -> str:
-    timestamp = datetime.fromtimestamp(int(time.time())).strftime("%Y-%m-%d_%H-%M-%S")
-    filename = secure_filename(file.filename)
-    if not filename or "." not in filename:
-        extension = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else "jpg"
-        filename_with_timestamp = f"upload_{timestamp}.{extension}"
-    else:
-        stem, extension = filename.rsplit(".", 1)
-        filename_with_timestamp = f"{stem}_{timestamp}.{extension}"
-    filepath = resolve_under_root(upload_folder, filename_with_timestamp)
-    if filepath is None:
-        raise ValueError("upload path escaped upload folder")
-    file.save(filepath)
-    return filepath
+    # The storage basename is random; preserve the validated source extension
+    # even when secure_filename would strip a non-ASCII basename entirely.
+    extension = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else "jpg"
+    if extension not in AppConstants.ALLOWED_EXTENSIONS:
+        extension = "jpg"
+    fd, filepath = tempfile.mkstemp(prefix="photo_", suffix="." + extension, dir=upload_folder)
+    try:
+        with os.fdopen(fd, "wb") as target:
+            size = 0
+            while chunk := file.stream.read(1024 * 1024):
+                size += len(chunk)
+                if size > AppConstants.MAX_CONTENT_LENGTH:
+                    raise RequestEntityTooLarge()
+                target.write(chunk)
+    except BaseException:
+        os.unlink(filepath)
+        raise
+    return os.path.abspath(filepath)
 
 
 def handle_upload(*, files, form, args, config, state, style_config: dict, logger) -> WorkflowResponse:
-    cleanup_old_tasks(state)
+    # Include metadata parsing and waiting prompts in admission, rather than
+    # admitting unlimited work before it reaches the bounded executor.
+    if not state.upload_lock.acquire(blocking=False):
+        raise ServiceUnavailable("Upload processing is busy; try again later")
+    try:
+        cleanup_old_tasks(state)
+        if state.count_tasks_by_status("queued", "processing", "needs_logo", "needs_options") >= AppConstants.MAX_PENDING_TASKS:
+            raise ServiceUnavailable("Task capacity reached; try again later")
+        return _handle_upload(
+            files=files, form=form, args=args, config=config, state=state,
+            style_config=style_config, logger=logger,
+        )
+    finally:
+        state.upload_lock.release()
+
+
+def _handle_upload(*, files, form, args, config, state, style_config: dict, logger) -> WorkflowResponse:
     lang = normalize_lang(args.get("lang", "zh"))
 
     if "file" not in files:
@@ -209,6 +237,17 @@ def handle_upload(*, files, form, args, config, state, style_config: dict, logge
     if not is_style_enabled(style_config, watermark_type_int):
         return WorkflowResponse({"error": get_error_message("unexpected_error", lang)}, 400)
 
+    with os.scandir(config["UPLOAD_FOLDER"]) as entries:
+        used = 0
+        for entry in entries:
+            try:
+                if entry.is_file(follow_symlinks=False):
+                    used += entry.stat(follow_symlinks=False).st_size
+            except FileNotFoundError:
+                pass  # The cleaner can remove expired files concurrently.
+    # Reserve enough space for the largest accepted request before writing.
+    if used + AppConstants.MAX_CONTENT_LENGTH > AppConstants.MAX_UPLOAD_STORAGE_BYTES:
+        raise ServiceUnavailable("Upload storage is full; try again later")
     filepath = _save_upload(file, config["UPLOAD_FOLDER"])
     try:
         _check_image_pixel_limit(filepath, config["UPLOAD_FOLDER"])
@@ -222,11 +261,15 @@ def handle_upload(*, files, form, args, config, state, style_config: dict, logge
             limit=format_pixel_limit(ImageConstants.MAX_IMAGE_PIXELS, lang),
         )
         return WorkflowResponse({"error": error}, 400)
+    except (ValueError, OSError, SyntaxError, Image.DecompressionBombError):
+        os.remove(filepath)
+        return WorkflowResponse({"error": get_error_message("invalid_file_type", lang)}, 400)
 
     image_quality_int = normalize_image_quality(image_quality)
     manufacturer = detect_manufacturer(filepath, logger)
     features = detect_image_features(filepath)
     pending_task = {
+        "original_name": file.filename,
         "progress": 0.0,
         "filepath": filepath,
         "lang": lang,
@@ -273,13 +316,17 @@ def handle_upload(*, files, form, args, config, state, style_config: dict, logge
             preliminary_manufacturer=manufacturer,
             preserve_motion=_preserve_default(preserve_motion),
             preserve_hdr=_preserve_default(preserve_hdr),
+            original_name=file.filename,
         )
     )
     return WorkflowResponse({"task_id": task_id}, 202)
 
 
 def confirm_logo_choice(*, payload: dict, state, upload_folder: str, style_config: dict, logger) -> WorkflowResponse:
-    task_id = str(payload.get("task_id", "")).strip()
+    task_id = payload.get("task_id", "")
+    if not isinstance(task_id, str) or not task_id.strip() or len(task_id) > 128:
+        return WorkflowResponse({"error": "task_id must be a non-empty string"}, 400)
+    task_id = task_id.strip()
     logo_preference = str(payload.get("logo_preference", "")).strip().lower()
 
     if not task_id:
@@ -308,9 +355,20 @@ def confirm_logo_choice(*, payload: dict, state, upload_folder: str, style_confi
     preserve_hdr = task.get("preserve_hdr")
     preliminary_manufacturer = task.get("preliminary_manufacturer")
     if _has_media_options(features) and _option_selection_missing(features, preserve_motion, preserve_hdr):
-        task_lifecycle.mark_waiting_options(state, task_id, logo_preference=logo_preference)
+        if not state.update_task(
+            task_id, expected_status=task_lifecycle.TaskStatus.NEEDS_LOGO,
+            status=task_lifecycle.TaskStatus.NEEDS_OPTIONS,
+            stage=task_lifecycle.TaskStage.AWAITING_OPTIONS, progress=0.0,
+            logo_preference=logo_preference,
+        ):
+            return WorkflowResponse({"error": "task is not waiting for logo choice"}, 409)
         return WorkflowResponse(_options_payload(task_id, features, preserve_motion, preserve_hdr), 200)
 
+    if not state.update_task(
+        task_id, expected_status=task_lifecycle.TaskStatus.NEEDS_LOGO,
+        status=task_lifecycle.TaskStatus.QUEUED, stage=task_lifecycle.TaskStage.QUEUED,
+    ):
+        return WorkflowResponse({"error": "task is not waiting for logo choice"}, 409)
     submit_existing_task(
         task_id,
         _task_payload_from_waiting_task(
@@ -330,7 +388,10 @@ def confirm_logo_choice(*, payload: dict, state, upload_folder: str, style_confi
 
 
 def confirm_options(*, payload: dict, state, upload_folder: str, style_config: dict, logger) -> WorkflowResponse:
-    task_id = str(payload.get("task_id", "")).strip()
+    task_id = payload.get("task_id", "")
+    if not isinstance(task_id, str) or not task_id.strip() or len(task_id) > 128:
+        return WorkflowResponse({"error": "task_id must be a non-empty string"}, 400)
+    task_id = task_id.strip()
     if not task_id:
         return WorkflowResponse({"error": "task_id is required"}, 400)
 
@@ -362,6 +423,11 @@ def confirm_options(*, payload: dict, state, upload_folder: str, style_config: d
         return WorkflowResponse({"error": get_error_message("unexpected_error", lang)}, 400)
 
     manufacturer = task.get("preliminary_manufacturer") or detect_manufacturer(safe_filepath, logger)
+    if not state.update_task(
+        task_id, expected_status=task_lifecycle.TaskStatus.NEEDS_OPTIONS,
+        status=task_lifecycle.TaskStatus.QUEUED, stage=task_lifecycle.TaskStage.QUEUED,
+    ):
+        return WorkflowResponse({"error": "task is not waiting for options"}, 409)
     submit_existing_task(
         task_id,
         _task_payload_from_waiting_task(
@@ -383,7 +449,7 @@ def confirm_options(*, payload: dict, state, upload_folder: str, style_config: d
 def get_preview_file(*, filename: str, args, upload_folder: str, is_browser: bool) -> PreviewFile:
     lang = normalize_lang(args.get("lang", "zh"))
     safe_filename = secure_filename(filename)
-    if not safe_filename:
+    if not safe_filename or not allowed_file(safe_filename, AppConstants.ALLOWED_EXTENSIONS):
         if is_browser:
             return PreviewFile(status_code=404, render_deleted=True)
         return PreviewFile(status_code=404, error=get_error_message("file_not_found", lang))
@@ -398,7 +464,10 @@ def get_preview_file(*, filename: str, args, upload_folder: str, is_browser: boo
         return PreviewFile(status_code=403, error=get_error_message("link_expired", lang))
 
     file_path = resolve_under_root(upload_folder, safe_filename)
-    if file_path is None or not os.path.exists(file_path):
+    source_path = preview_source(file_path) if file_path is not None else None
+    if (os.path.islink(os.path.join(upload_folder, safe_filename))
+            or file_path is None or not os.path.isfile(file_path)
+            or (source_path is not None and not os.path.isfile(source_path))):
         if is_browser:
             return PreviewFile(status_code=404, render_deleted=True)
         return PreviewFile(status_code=404, error=get_error_message("file_not_found", lang))
@@ -409,7 +478,7 @@ def get_preview_file(*, filename: str, args, upload_folder: str, is_browser: boo
 def get_motion_video(*, filename: str, args, upload_folder: str, logger) -> MotionVideo:
     lang = normalize_lang(args.get("lang", "zh"))
     safe_filename = secure_filename(filename)
-    if not safe_filename:
+    if not safe_filename or not allowed_file(safe_filename, AppConstants.ALLOWED_EXTENSIONS):
         return MotionVideo(status_code=404, error=get_error_message("file_not_found", lang))
     if not verify_token(
         safe_filename,
