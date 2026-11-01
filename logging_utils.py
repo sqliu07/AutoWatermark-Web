@@ -1,7 +1,12 @@
 import logging
 import os
+import sys
+import threading
+from logging.handlers import RotatingFileHandler
 from typing import Optional
 
+
+_HANDLER_LOCK = threading.RLock()
 
 _DEFAULT_LOG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
 _LOG_DIR = os.environ.get("LOG_DIR", _DEFAULT_LOG_DIR)
@@ -13,7 +18,7 @@ def _ensure_log_dir() -> str:
     return os.path.abspath(_LOG_FILE)
 
 
-def get_logger(name: Optional[str] = None) -> logging.Logger:
+def _configure_logger(name: Optional[str] = None) -> logging.Logger:
     """Return a logger configured to write both to stdout and the shared log file."""
     logfile_path = _ensure_log_dir()
     logger_name = name or "autowatermark"
@@ -27,12 +32,12 @@ def get_logger(name: Optional[str] = None) -> logging.Logger:
         return False
 
     if not _has_file_handler():
-        file_handler = logging.FileHandler(logfile_path)
+        file_handler = RotatingFileHandler(logfile_path, maxBytes=10 * 1024 * 1024, backupCount=3, encoding="utf-8")
         file_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
         logger.addHandler(file_handler)
 
-    if not any(isinstance(handler, logging.StreamHandler) for handler in logger.handlers):
-        stream_handler = logging.StreamHandler()
+    if not any(isinstance(handler, logging.StreamHandler) and not isinstance(handler, logging.FileHandler) for handler in logger.handlers):
+        stream_handler = logging.StreamHandler(sys.stdout)
         stream_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
         logger.addHandler(stream_handler)
 
@@ -40,3 +45,9 @@ def get_logger(name: Optional[str] = None) -> logging.Logger:
     logger.propagate = False
     return logger
 
+
+
+def get_logger(name: Optional[str] = None) -> logging.Logger:
+    """Configure handlers once, even when processing threads initialize concurrently."""
+    with _HANDLER_LOCK:
+        return _configure_logger(name)

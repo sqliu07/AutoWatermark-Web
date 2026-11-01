@@ -6,6 +6,8 @@ import threading
 import time
 
 from constants import AppConstants
+from services.path_safety import protected_state_paths, resolve_under_root
+from services.previews import preview_paths
 
 _WATERMARK_SUFFIX = "_watermark"
 _WATERMARK_PATTERN = re.compile(r"(.+)_watermark(\.[^.]+)$")
@@ -24,28 +26,21 @@ def _derive_paired_path(file_path: str) -> str | None:
     return os.path.join(dirname, f"{root}{_WATERMARK_SUFFIX}{ext}")
 
 
-def cleanup_file_and_original(file_path: str, logger) -> None:
-    """Delete a single file if it exists."""
-    if os.path.exists(file_path):
-        try:
-            os.remove(file_path)
-            logger.info("[Burn] Deleted: %s", os.path.basename(file_path))
-        except OSError:
-            pass
+def cleanup_file_and_original(file_path: str, logger) -> bool:
+    """Delete a queued file, retaining failed deletions for the next pass."""
+    try:
+        os.remove(file_path)
+        logger.info("[Burn] Deleted: %s", os.path.basename(file_path))
+    except FileNotFoundError:
+        pass
+    except OSError:
+        logger.warning("[Burn] Deletion deferred: %s", os.path.basename(file_path), exc_info=True)
+        return False
+    return True
 
 
 def _protected_upload_files(app) -> set[str]:
-    protected: set[str] = set()
-    state_db_path = app.config.get("STATE_DB_PATH")
-    if not state_db_path:
-        return protected
-
-    db_real = os.path.realpath(state_db_path)
-    protected.add(db_real)
-    protected.add(db_real + "-wal")
-    protected.add(db_real + "-shm")
-    protected.add(db_real + "-journal")
-    return protected
+    return protected_state_paths(app.config.get("STATE_DB_PATH"))
 
 
 def _is_stale_upload_file(file_path: str, current_time: float, protected: set[str]) -> bool:
@@ -65,6 +60,18 @@ def _delete_stale_upload(file_path: str, logger) -> bool:
         return False
 
 
+def _delete_display_previews(file_path: str, root: str, protected: set[str], logger) -> int:
+    removed = 0
+    for path in preview_paths(file_path).values():
+        if os.path.islink(path):
+            continue
+        safe_path = resolve_under_root(root, path)
+        if (safe_path is not None and safe_path not in protected
+                and os.path.isfile(safe_path) and _delete_stale_upload(path, logger)):
+            removed += 1
+    return removed
+
+
 def _cleanup_stale_uploads(app, current_time: float, logger) -> int:
     upload_dir = app.config["UPLOAD_FOLDER"]
     if not os.path.isdir(upload_dir):
@@ -74,8 +81,8 @@ def _cleanup_stale_uploads(app, current_time: float, logger) -> int:
     cleaned_stale = 0
 
     for filename in os.listdir(upload_dir):
-        file_path = os.path.realpath(os.path.join(upload_dir, filename))
-        if file_path in protected:
+        file_path = resolve_under_root(upload_dir, filename)
+        if file_path is None or file_path in protected:
             continue
 
         try:
@@ -83,9 +90,11 @@ def _cleanup_stale_uploads(app, current_time: float, logger) -> int:
                 paired = _derive_paired_path(file_path)
                 if _delete_stale_upload(file_path, logger):
                     cleaned_stale += 1
+                    cleaned_stale += _delete_display_previews(file_path, upload_dir, protected, logger)
                 if paired and _is_stale_upload_file(paired, current_time, protected):
                     if _delete_stale_upload(paired, logger):
                         cleaned_stale += 1
+                        cleaned_stale += _delete_display_previews(paired, upload_dir, protected, logger)
         except OSError:
             pass
 
@@ -96,47 +105,49 @@ def start_background_cleaner(app, state, logger) -> threading.Thread:
     """Start background cleanup worker for burn queue, zip temp files, and stale uploads."""
 
     def background_cleaner() -> None:
-        while True:
-            time.sleep(AppConstants.CLEANER_INTERVAL_SECONDS)
-            current_time = time.time()
+        while not state.stop_event.wait(AppConstants.CLEANER_INTERVAL_SECONDS):
+            try:
+                current_time = time.time()
+                cleaned_burn = 0
+                cleaned_zip = 0
+                protected = _protected_upload_files(app)
 
-            cleaned_burn = 0
-            cleaned_zip = 0
-            cleaned_stale = 0
+                # Keep durable entries until deletion succeeds or the file is absent.
+                for fp in state.get_expired_burn_files(current_time):
+                    safe_path = resolve_under_root(app.config["UPLOAD_FOLDER"], fp)
+                    if safe_path is None or safe_path in protected:
+                        logger.warning("[Burn] Refused deletion outside upload files")
+                        continue
+                    if cleanup_file_and_original(safe_path, logger):
+                        state.acknowledge_burn_file(fp)
+                        cleaned_burn += 1
 
-            # 1) Burn queue cleanup
-            expired_burn_files = state.pop_expired_burn_files(current_time)
-            for fp in expired_burn_files:
-                cleanup_file_and_original(fp, logger)
-                cleaned_burn += 1
+                temp_dir = tempfile.gettempdir()
+                zip_pattern = os.path.join(temp_dir, "watermark_*.zip")
+                for zip_file in glob.glob(zip_pattern):
+                    try:
+                        if current_time - os.path.getmtime(zip_file) > AppConstants.ZIP_RETENTION_SECONDS:
+                            os.remove(zip_file)
+                            logger.info("[Auto-Clean] Deleted old zip: %s", zip_file)
+                            cleaned_zip += 1
+                    except OSError:
+                        pass
 
-            # 2) Stale zip files in temp dir
-            temp_dir = tempfile.gettempdir()
-            zip_pattern = os.path.join(temp_dir, "watermark_*.zip")
-            for zip_file in glob.glob(zip_pattern):
-                try:
-                    if current_time - os.path.getmtime(zip_file) > AppConstants.ZIP_RETENTION_SECONDS:
-                        os.remove(zip_file)
-                        logger.info("[Auto-Clean] Deleted old zip: %s", zip_file)
-                        cleaned_zip += 1
-                except OSError:
-                    pass
+                cleaned_stale = _cleanup_stale_uploads(app, current_time, logger)
+                cleaned_tasks = state.cleanup_old_tasks(current_time)
 
-            # 3) Stale uploads in upload folder
-            cleaned_stale = _cleanup_stale_uploads(app, current_time, logger)
-
-            # 4) Stale tasks in memory
-            cleaned_tasks = state.cleanup_old_tasks(current_time)
-
-            if cleaned_burn or cleaned_zip or cleaned_stale or cleaned_tasks:
-                logger.info(
-                    "[Auto-Clean] Summary - burn: %s, zip: %s, stale: %s, tasks: %s",
-                    cleaned_burn,
-                    cleaned_zip,
-                    cleaned_stale,
-                    cleaned_tasks,
-                )
+                if cleaned_burn or cleaned_zip or cleaned_stale or cleaned_tasks:
+                    logger.info(
+                        "[Auto-Clean] Summary - burn: %s, zip: %s, stale: %s, tasks: %s",
+                        cleaned_burn,
+                        cleaned_zip,
+                        cleaned_stale,
+                        cleaned_tasks,
+                    )
+            except Exception:
+                logger.exception("[Auto-Clean] Cleanup pass failed; retrying next interval")
 
     thread = threading.Thread(target=background_cleaner, daemon=True)
+    state.cleaner_thread = thread
     thread.start()
     return thread

@@ -12,3 +12,10 @@ def resolve_under_root(root: str, *parts: str) -> str | None:
     except ValueError:
         return None
     return candidate
+
+
+def protected_state_paths(db_path: str | None) -> set[str]:
+    if not db_path:
+        return set()
+    database = os.path.realpath(db_path)
+    return {database + suffix for suffix in ("", "-wal", "-shm", "-journal", ".lock")}
