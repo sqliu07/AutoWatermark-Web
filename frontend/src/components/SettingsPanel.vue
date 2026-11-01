@@ -12,6 +12,7 @@
       <a-segmented
         v-model:value="store.imageQuality"
         :options="qualityOptions"
+        :disabled="store.hasActiveBatch"
         block
       />
     </section>
@@ -23,9 +24,11 @@
           <div class="toggle-label">{{ t('settings.burnAfterRead') }}</div>
           <div class="toggle-desc">{{ t('settings.burnTip') }}</div>
         </div>
-        <a-switch v-model:checked="store.burnAfterRead" />
+        <a-switch v-model:checked="store.burnAfterRead" :disabled="store.hasActiveBatch" :aria-label="t('settings.burnAfterRead')" />
       </div>
     </section>
+
+    <p v-if="store.hasActiveBatch" class="toggle-desc">{{ t('settings.batchFixed') }}</p>
 
     <div class="section-divider" />
 
@@ -36,7 +39,7 @@
         block
         size="large"
         :loading="store.isProcessing"
-        :disabled="store.files.length === 0"
+        :disabled="store.files.length === 0 || store.hasActiveBatch"
         class="process-btn"
         @click="store.processAll()"
       >
@@ -52,12 +55,23 @@
       </a-button>
 
       <a-button
+        v-if="store.hasPendingLogo"
+        block
+        @click="continueLogoChoice"
+      >
+        {{ t('logo.continue') }}
+      </a-button>
+
+      <a-button
         v-if="store.canDownloadZip"
         block
+        :loading="store.isDownloadingZip"
+        :disabled="store.isDownloadingZip"
         @click="store.downloadZip()"
       >
-        {{ t('action.downloadAll') }}
+        {{ t(store.isDownloadingZip ? 'action.packing' : 'action.downloadAll') }}
       </a-button>
+      <p v-if="store.zipError" class="download-error" role="alert">{{ store.zipError }}</p>
     </section>
 
     <!-- 状态 -->
@@ -84,6 +98,11 @@ import StyleSelector from './StyleSelector.vue'
 const { t } = useI18n()
 const store = useAppStore()
 
+function continueLogoChoice() {
+  const task = store.tasks.find(task => task.status === 'needs_logo')
+  if (task) store.setPreview(task)
+}
+
 function reselect() {
   store.clearFiles()
   // 等 DOM 更新后 UploadZone 挂载，触发其文件选择器
@@ -105,6 +124,12 @@ const qualityOptions = computed(() => [
   display: flex;
   flex-direction: column;
   gap: 0;
+}
+
+.download-error {
+  font-size: 12px;
+  color: var(--color-error);
+  overflow-wrap: anywhere;
 }
 
 .section {

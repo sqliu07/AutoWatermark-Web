@@ -5,7 +5,13 @@
       :key="style.style_id"
       class="style-card"
       :class="{ active: store.selectedStyle === style.style_id }"
-      @click="store.selectedStyle = style.style_id"
+      role="button"
+      :tabindex="store.hasActiveBatch ? -1 : 0"
+      :aria-pressed="store.selectedStyle === style.style_id"
+      :aria-disabled="store.hasActiveBatch"
+      @click="selectStyle(style)"
+      @keydown.enter.prevent="selectStyle(style)"
+      @keydown.space.prevent="selectStyle(style)"
     >
       <div class="style-preview">
         <img
@@ -27,6 +33,10 @@ import { useAppStore } from '../stores/app'
 
 const { locale } = useI18n()
 const store = useAppStore()
+
+function selectStyle(style) {
+  if (!store.hasActiveBatch) store.selectedStyle = style.style_id
+}
 
 function styleName(style) {
   return locale.value === 'zh' ? style.label_zh : style.label_en

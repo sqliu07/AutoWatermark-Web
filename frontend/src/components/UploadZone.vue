@@ -2,10 +2,15 @@
   <div
     class="upload-zone"
     :class="{ dragging }"
+    role="button"
+    tabindex="0"
+    :aria-label="t('upload.clickHint')"
     @dragover.prevent="dragging = true"
     @dragleave="dragging = false"
     @drop.prevent="onDrop"
     @click="triggerInput"
+    @keydown.enter.self.prevent="triggerInput"
+    @keydown.space.self.prevent="triggerInput"
   >
     <input
       ref="fileInput"

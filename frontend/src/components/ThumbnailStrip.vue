@@ -3,34 +3,42 @@
     <div class="strip-scroll">
       <div
         v-for="(task, i) in store.tasks"
-        :key="i"
+        :key="task.clientId || task.id || i"
         class="thumb-item"
         :class="{
           active: store.currentPreview === task,
           succeeded: task.status === 'succeeded',
-          failed: task.status === 'failed',
-          processing: task.status === 'processing' || task.status === 'uploading',
+          failed: task.status === 'failed' || task.status === 'unavailable',
+          processing: ['queued', 'processing', 'uploading'].includes(task.status),
         }"
+        role="button"
+        tabindex="0"
+        :aria-label="task.originalName"
+        :aria-pressed="store.currentPreview === task"
         @click="onClickThumb(task)"
+        @keydown.enter.self.prevent="onClickThumb(task)"
+        @keydown.space.self.prevent="onClickThumb(task)"
       >
         <img
           v-if="thumbUrls[i]"
           :src="thumbUrls[i]"
           class="thumb-img"
           :alt="task.originalName"
+          loading="lazy"
+          decoding="async"
         />
-        <div v-if="task.status === 'processing' || task.status === 'uploading'" class="thumb-loading">
+        <div v-if="['queued', 'processing', 'uploading'].includes(task.status)" class="thumb-loading">
           <a-spin size="small" />
         </div>
-        <div v-if="task.status === 'failed'" class="thumb-badge failed">!</div>
+        <div v-if="task.status === 'failed' || task.status === 'unavailable'" class="thumb-badge failed">!</div>
         <button
-          v-if="task.status === 'failed'"
+          v-if="task.status === 'failed' || task.status === 'unavailable'"
           class="thumb-retry"
           type="button"
           :disabled="task.retrying"
           @click.stop="store.retryTask(task)"
         >
-          {{ t('action.retry') }}
+          {{ t(task.status === 'unavailable' ? 'action.resume' : 'action.retry') }}
         </button>
 
         <!-- 下载按钮 -->
@@ -38,7 +46,8 @@
           v-if="task.status === 'succeeded' && task.result?.download_url"
           class="thumb-download"
           :href="task.result.download_url"
-          :download="task.originalName"
+          :download="task.result.download_name || task.originalName"
+          :aria-label="t('action.download') + ' ' + task.originalName"
           @click.stop
         >
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
@@ -54,38 +63,34 @@
 import { ref, watch, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '../stores/app'
+import { createBlobUrlPool } from '../utils/blob-urls.js'
 
 const { t } = useI18n()
 const store = useAppStore()
 
 const thumbUrls = ref([])
-const blobUrlMap = new WeakMap() // file 对象 → blob URL，避免重复创建
+const blobUrls = createBlobUrlPool()
 
 function rebuildThumbUrls() {
+  const localFiles = []
   thumbUrls.value = store.tasks.map(task => {
-    // 已有处理结果，用服务端 URL
     if (task.status === 'succeeded' && task.result?.preview_url) {
-      return task.result.preview_url
+      return task.result.thumbnail_url || task.result.preview_url
     }
     // 本地文件预览：复用已创建的 blob URL
     if (task.file) {
-      if (!blobUrlMap.has(task.file)) {
-        blobUrlMap.set(task.file, URL.createObjectURL(task.file))
-      }
-      return blobUrlMap.get(task.file)
+      localFiles.push(task.file)
+      return blobUrls.get(task.file)
     }
     return null
   })
+  blobUrls.retain(localFiles)
 }
 
-// 仅在任务列表引用变化时重建（新增/清空），不监听每个属性变化
-watch(() => store.tasks.length, rebuildThumbUrls, { immediate: true })
-// 监听结果变化（处理完成后切换到服务端 URL）
-watch(() => store.tasks.map(t => t.result?.preview_url).join(','), rebuildThumbUrls)
+watch(() => store.tasks.map(task => [task.file, task.status, task.result?.thumbnail_url, task.result?.preview_url]),
+  rebuildThumbUrls, { immediate: true })
 
-onUnmounted(() => {
-  // WeakMap 无法遍历，blob URL 由浏览器在页面卸载时自动释放
-})
+onUnmounted(() => blobUrls.clear())
 
 function onClickThumb(task) {
   store.setPreview(task)

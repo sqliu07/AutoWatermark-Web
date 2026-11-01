@@ -1,372 +1,454 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import * as api from '../api'
+import { pollStatus, retryRequest } from '../api/polling.js'
+
+const SERVER_CAPACITY = 8
+const ACTIVE_STATUSES = new Set(['uploading', 'queued', 'processing'])
+const TERMINAL_STATUSES = new Set(['succeeded', 'failed', 'cancelled'])
 
 export const useAppStore = defineStore('app', () => {
-  // 上传的文件列表
   const files = ref([])
-  // 水印样式列表（从后端加载）
   const watermarkStyles = ref([])
-  // 当前选中样式
   const selectedStyle = ref(1)
-  // 输出质量
   const imageQuality = ref('high')
-  // 阅后即焚
   const burnAfterRead = ref(false)
-  // Logo 偏好 (xiaomi/leica)
   const logoPreference = ref(null)
-
-  // 处理状态
-  const isProcessing = ref(false)
-  const tasks = ref([]) // { id, file, originalName, status, progress, result, error }
-  const currentPreview = ref(null) // 当前大预览的任务
+  const tasks = ref([])
+  const currentPreview = ref(null)
   const stylesLoaded = ref(false)
+  const isDownloadingZip = ref(false)
+  const zipError = ref(null)
+
+  let generation = 0
+  let controller = new AbortController()
+  let uploadRunner = null
+  let uploadsPaused = false
+  let zipRequest = null
+  const polls = new Map()
+  let batchLogoChoice = null
+  let batchOptions = null
+
+  const isProcessing = computed(() => tasks.value.some(task =>
+    ACTIVE_STATUSES.has(task.status) || task.confirming || task.retrying))
+  const hasActiveBatch = computed(() => tasks.value.some(task => !TERMINAL_STATUSES.has(task.status)))
+  const completedCount = computed(() => tasks.value.filter(task => TERMINAL_STATUSES.has(task.status)).length)
+  const totalCount = computed(() => tasks.value.length)
+  const allDone = computed(() => tasks.value.length > 0 && !hasActiveBatch.value)
+  const succeededTasks = computed(() => tasks.value.filter(task => task.status === 'succeeded'))
+  const hasPendingOptions = computed(() => tasks.value.some(task => task.status === 'needs_options'))
+  const hasPendingLogo = computed(() => tasks.value.some(task => task.status === 'needs_logo'))
+  const canDownloadZip = computed(() => succeededTasks.value.length > 1 && succeededTasks.value.every(task => {
+    const url = task.result?.download_url
+    if (!url) return false
+    return (new URLSearchParams(url.split('?')[1] || '').get('burn') || '0') === '0'
+  }))
 
   async function loadStyles() {
     try {
       const data = await api.getStyles()
       watermarkStyles.value = data.styles || []
-      if (data.default_style_id != null) {
-        selectedStyle.value = data.default_style_id
-      } else if (watermarkStyles.value.length > 0) {
-        selectedStyle.value = watermarkStyles.value[0].style_id
-      }
-      stylesLoaded.value = true
+      selectedStyle.value = data.default_style_id ?? watermarkStyles.value[0]?.style_id ?? selectedStyle.value
     } catch {
+      watermarkStyles.value = []
+    } finally {
       stylesLoaded.value = true
     }
   }
 
-  const completedCount = computed(() =>
-    tasks.value.filter(t => t.status === 'succeeded' || t.status === 'failed').length
-  )
-  const totalCount = computed(() => tasks.value.length)
-  const allDone = computed(() =>
-    tasks.value.length > 0 && tasks.value.every(t => t.status === 'succeeded' || t.status === 'failed')
-  )
-  const succeededTasks = computed(() =>
-    tasks.value.filter(t => t.status === 'succeeded')
-  )
-  const canDownloadZip = computed(() =>
-    succeededTasks.value.length > 1 && succeededTasks.value.every(t => {
-      const url = t.result?.download_url
-      if (!url) return false
-      const queryString = url.split('?')[1] || ''
-      return (new URLSearchParams(queryString).get('burn') || '0') === '0'
-    })
-  )
-  const hasPendingOptions = computed(() =>
-    tasks.value.some(t => t.status === 'needs_options')
-  )
+  function isCurrent(task, epoch = generation) {
+    return epoch === generation && tasks.value.includes(task)
+  }
+
+  function resetBatch() {
+    generation++
+    controller.abort()
+    controller = new AbortController()
+    polls.clear()
+    uploadRunner = null
+    uploadsPaused = false
+    zipRequest = null
+    isDownloadingZip.value = false
+    zipError.value = null
+    batchLogoChoice = null
+    batchOptions = null
+  }
 
   function addFiles(newFiles) {
     files.value = [...files.value, ...newFiles]
   }
 
   function clearFiles() {
+    const waiting = tasks.value.filter(task => task.id && ['needs_logo', 'needs_options'].includes(task.status))
+    resetBatch()
     files.value = []
     tasks.value = []
     currentPreview.value = null
+    return Promise.allSettled(waiting.map(task => api.cancelTask(task.id)))
   }
 
   function reselectFiles() {
     clearFiles()
-    requestAnimationFrame(() => {
-      document.querySelector('.upload-zone input[type="file"]')?.click()
-    })
+    requestAnimationFrame(() => document.querySelector('.upload-zone input[type="file"]')?.click())
   }
 
   function setPreview(task) {
     currentPreview.value = task
   }
 
-  function applyOptionsResponse(task, res) {
+  function showNextPrompt(fallback) {
+    const next = tasks.value.find(task => task.status === 'needs_options')
+      || tasks.value.find(task => task.status === 'needs_logo')
+    if (next) currentPreview.value = next
+    else if (fallback && isCurrent(fallback)) currentPreview.value = fallback
+  }
+
+  function applyOptionsResponse(task, response) {
     task.status = 'needs_options'
-    task.features = res.features || {}
+    task.stage = 'awaiting_options'
+    task.features = response.features || task.features || {}
     task.preserveOptions = {
-      preserve_hdr: res.preserve_hdr !== false,
-      preserve_motion: res.preserve_motion !== false,
+      preserve_hdr: response.preserve_hdr !== false,
+      preserve_motion: response.preserve_motion !== false,
     }
-    if (!currentPreview.value || currentPreview.value.status !== 'needs_options') {
+    if (!currentPreview.value || !['needs_options', 'needs_logo'].includes(currentPreview.value.status)) {
       currentPreview.value = task
     }
   }
 
+  function applyServerStatus(task, data) {
+    if (data.status === 'cancelled') {
+      markMissing(task)
+      return true
+    }
+    task.status = data.status
+    task.stage = data.stage || data.status
+    task.progress = Math.max(task.progress, data.progress || 0)
+    task.error = null
+    if (data.status === 'succeeded') {
+      task.progress = 1
+      task.result = data.result
+      task.lastFailedStep = null
+      if (!currentPreview.value || ACTIVE_STATUSES.has(currentPreview.value.status)) currentPreview.value = task
+    } else if (data.status === 'failed') {
+      task.progress = 1
+      task.error = data.error
+      task.lastFailedStep = 'processing'
+    } else if (data.status === 'needs_options') {
+      applyOptionsResponse(task, data)
+    }
+    return TERMINAL_STATUSES.has(data.status) || ['needs_logo', 'needs_options'].includes(data.status)
+  }
+
+  function markUnavailable(task, error, step) {
+    task.status = 'unavailable'
+    task.error = error.message || 'Connection lost'
+    task.lastFailedStep = step
+  }
+
+  function markMissing(task) {
+    task.id = null
+    task.status = 'failed'
+    task.error = 'Task expired. Retry to upload the photo again.'
+    task.lastFailedStep = 'upload'
+  }
+
+  function startPolling(task) {
+    if (polls.has(task)) return polls.get(task)
+    const epoch = generation
+    const signal = controller.signal
+    const job = (async () => {
+      try {
+        await pollStatus(timeout => api.getTaskStatus(task.id, timeout, { signal }), data => {
+          if (!isCurrent(task, epoch)) return true
+          return applyServerStatus(task, data)
+        }, { interval: tasks.value.length > 1 ? 3000 : 2000, signal })
+      } catch (error) {
+        if (!isCurrent(task, epoch) || signal.aborted) return
+        if (Number(error.response?.status ?? error.code) === 404) markMissing(task)
+        else markUnavailable(task, error, task.lastFailedStep || 'processing')
+      } finally {
+        if (polls.get(task) === job) polls.delete(task)
+        if (isCurrent(task, epoch)) scheduleUploads()
+      }
+    })()
+    polls.set(task, job)
+    return job
+  }
+
+  function submitWithBackoff(task, operation) {
+    const epoch = generation
+    const signal = controller.signal
+    return retryRequest(operation, { signal, onWait: () => {
+      if (isCurrent(task, epoch)) task.stage = 'waiting'
+    } })
+  }
+
   async function uploadTask(task) {
+    const epoch = generation
+    const signal = controller.signal
     task.status = 'uploading'
-    task.progress = 0.05
+    task.stage = 'uploading'
+    task.progress = 0
+    task.uploadProgress = 0
     task.error = null
     task.result = null
-    task.lastFailedStep = null
+    task.lastFailedStep = 'upload'
+    const options = {
+      ...task.options,
+      logo_preference: task.lastLogoChoice || batchLogoChoice || task.options.logo_preference,
+      ...(task.lastOptions || batchOptions || {}),
+    }
+    if (options.logo_preference) task.lastLogoChoice = options.logo_preference
+    if (options.preserve_hdr != null || options.preserve_motion != null) {
+      task.lastOptions = { preserve_hdr: options.preserve_hdr, preserve_motion: options.preserve_motion }
+    }
     try {
-      const res = await api.uploadFile(task.file, {
-        watermark_type: selectedStyle.value,
-        image_quality: imageQuality.value,
-        burn_after_read: burnAfterRead.value ? '1' : '0',
-        logo_preference: logoPreference.value,
-      })
-
-      if (res.needs_logo_choice) {
-        task.id = res.task_id
+      const response = await submitWithBackoff(task, () => api.uploadFile(task.file, options, {
+        signal,
+        onUploadProgress: event => {
+          if (!isCurrent(task, epoch)) return
+          const fraction = event.total > 0 ? event.loaded / event.total : event.progress
+          if (Number.isFinite(fraction)) {
+            task.uploadProgress = Math.max(task.uploadProgress, Math.min(1, fraction))
+            task.progress = task.uploadProgress * 0.1
+          }
+        },
+      }))
+      if (!isCurrent(task, epoch)) return false
+      task.id = response.task_id
+      task.uploadProgress = 1
+      task.lastFailedStep = null
+      if (response.needs_logo_choice) {
         task.status = 'needs_logo'
-        return
+        task.stage = 'awaiting_logo'
+      } else if (response.needs_options) {
+        applyOptionsResponse(task, response)
+        if (batchOptions) await confirmTaskOptions(task, batchOptions)
+      } else {
+        task.status = 'processing'
+        task.stage = 'queued'
+        startPolling(task)
       }
-
-      if (res.needs_options) {
-        task.id = res.task_id
-        applyOptionsResponse(task, res)
-        return
+      return true
+    } catch (error) {
+      if (!isCurrent(task, epoch) || signal.aborted) return false
+      const status = Number(error.response?.status ?? error.code)
+      if (!status || [408, 429, 503].includes(status)) {
+        markUnavailable(task, error, 'upload')
+        return false
       }
-
-      task.id = res.task_id
-      task.status = 'processing'
-      await pollTask(task)
-    } catch (e) {
       task.status = 'failed'
       task.progress = 1
-      task.error = e.message || 'Upload failed'
-      task.lastFailedStep = 'upload'
+      task.error = error.message || 'Upload failed'
+      return true
     }
   }
 
-  async function confirmTaskLogo(task, choice) {
-    task.lastLogoChoice = choice
-    task.error = null
-    task.lastFailedStep = null
-    try {
-      const res = await api.confirmLogoChoice(task.id, choice)
-      if (res.needs_options) {
-        applyOptionsResponse(task, res)
-        return
+  function scheduleUploads() {
+    if (uploadRunner) return uploadRunner
+    if (uploadsPaused) return Promise.resolve()
+    const epoch = generation
+    const runner = (async () => {
+      while (epoch === generation) {
+        const outstanding = tasks.value.filter(task => task.id && !TERMINAL_STATUSES.has(task.status)).length
+        if (outstanding >= SERVER_CAPACITY) break
+        const next = tasks.value.find(task => task.status === 'pending')
+        if (!next) break
+        if (!await uploadTask(next)) {
+          if (epoch === generation) uploadsPaused = true
+          break
+        }
       }
-      task.status = 'processing'
-      await pollTask(task)
-    } catch (e) {
-      task.status = 'failed'
-      task.progress = 1
-      task.error = e.message || 'Confirm logo failed'
-      task.lastFailedStep = 'confirm_logo'
+    })().finally(() => {
+      if (uploadRunner !== runner) return
+      uploadRunner = null
+      // A poll can finish between the capacity check and this cleanup.
+      const outstanding = tasks.value.filter(task => task.id && !TERMINAL_STATUSES.has(task.status)).length
+      if (epoch === generation && !uploadsPaused && outstanding < SERVER_CAPACITY
+          && tasks.value.some(task => task.status === 'pending')) scheduleUploads()
+    })
+    uploadRunner = runner
+    return runner
+  }
+
+  async function processAll() {
+    if (!files.value.length || hasActiveBatch.value) return
+    resetBatch()
+    const options = Object.freeze({
+      watermark_type: selectedStyle.value,
+      image_quality: imageQuality.value,
+      burn_after_read: burnAfterRead.value ? '1' : '0',
+      logo_preference: logoPreference.value,
+    })
+    tasks.value = files.value.map(file => ({
+      id: null, file, options, originalName: file.name,
+      status: 'pending', stage: 'pending', progress: 0, uploadProgress: 0,
+      result: null, error: null, lastFailedStep: null,
+      lastLogoChoice: null, lastOptions: null, retrying: false, confirming: false,
+    }))
+    currentPreview.value = tasks.value[0]
+    await scheduleUploads()
+  }
+
+  async function confirmTaskLogo(task, choice) {
+    if (!isCurrent(task) || task.confirming) return
+    const epoch = generation
+    const signal = controller.signal
+    task.confirming = true
+    task.lastLogoChoice = choice
+    task.lastFailedStep = 'confirm_logo'
+    task.error = null
+    try {
+      const response = await submitWithBackoff(task, () => api.confirmLogoChoice(task.id, choice, { signal }))
+      if (!isCurrent(task, epoch)) return
+      if (response.needs_options) applyOptionsResponse(task, response)
+      else {
+        task.status = 'processing'
+        task.stage = 'queued'
+        startPolling(task)
+      }
+      task.lastFailedStep = null
+    } catch (error) {
+      if (isCurrent(task, epoch) && !signal.aborted) markUnavailable(task, error, 'confirm_logo')
+    } finally {
+      task.confirming = false
     }
   }
 
   async function confirmTaskOptions(task, options) {
+    if (!isCurrent(task) || task.confirming) return
+    const epoch = generation
+    const signal = controller.signal
+    task.confirming = true
     task.lastOptions = { ...options }
+    task.lastFailedStep = 'confirm_options'
     task.error = null
-    task.lastFailedStep = null
     try {
-      await api.confirmOptions(task.id, options)
+      await submitWithBackoff(task, () => api.confirmOptions(task.id, options, { signal }))
+      if (!isCurrent(task, epoch)) return
       task.status = 'processing'
-      await pollTask(task)
-    } catch (e) {
-      task.status = 'failed'
-      task.progress = 1
-      task.error = e.message || 'Confirm options failed'
-      task.lastFailedStep = 'confirm_options'
+      task.stage = 'queued'
+      task.lastFailedStep = null
+      startPolling(task)
+    } catch (error) {
+      if (isCurrent(task, epoch) && !signal.aborted) markUnavailable(task, error, 'confirm_options')
+    } finally {
+      task.confirming = false
     }
-  }
-
-  async function processAll() {
-    if (files.value.length === 0) return
-    isProcessing.value = true
-
-    // 一次性创建所有 task，total 从一开始就确定
-    tasks.value = files.value.map(file => ({
-      id: null,
-      file,
-      originalName: file.name,
-      status: 'pending',
-      progress: 0,
-      result: null,
-      error: null,
-      lastFailedStep: null,
-      lastLogoChoice: null,
-      lastOptions: null,
-      retrying: false,
-    }))
-    // 新一轮处理必须重置预览引用，避免继续显示上一次任务结果
-    currentPreview.value = tasks.value[0] || null
-
-    // 并发上传+轮询，限制并发数
-    const concurrency = 3
-    const queue = [...tasks.value]
-
-    const executing = new Set()
-    for (const task of queue) {
-      const p = uploadTask(task).then(() => executing.delete(p))
-      executing.add(p)
-      if (executing.size >= concurrency) {
-        await Promise.race(executing)
-      }
-    }
-    await Promise.all(executing)
-
-    isProcessing.value = false
   }
 
   async function processPendingLogoTasks(choice) {
-    const pendingTasks = tasks.value.filter(t => t.status === 'needs_logo' && t.id)
-    if (pendingTasks.length === 0) return
-
+    const epoch = generation
     logoPreference.value = choice
-    isProcessing.value = true
-
-    const concurrency = 3
-    const queue = [...pendingTasks]
-
-    const executing = new Set()
-    for (const task of queue) {
-      const p = confirmTaskLogo(task, choice).then(() => executing.delete(p))
-      executing.add(p)
-      if (executing.size >= concurrency) {
-        await Promise.race(executing)
-      }
+    batchLogoChoice = choice
+    const pending = tasks.value.filter(task => task.status === 'needs_logo' && task.id)
+    for (const task of pending) {
+      await confirmTaskLogo(task, choice)
+      if (epoch !== generation) return
+      if (task.status === 'needs_options' && batchOptions) await confirmTaskOptions(task, batchOptions)
+      if (epoch !== generation) return
+      showNextPrompt(task)
     }
-    await Promise.all(executing)
-
-    isProcessing.value = false
+    showNextPrompt(pending[0])
+    scheduleUploads()
   }
 
-  async function processPendingOptionsTask(task, options) {
+  async function processPendingOptionsTask(task, options, { applyAll = false } = {}) {
     if (!task || task.status !== 'needs_options' || !task.id) return
-    isProcessing.value = true
-
-    try {
-      await confirmTaskOptions(task, options)
-      const nextPending = tasks.value.find(t => t.status === 'needs_options')
-      if (nextPending) {
-        currentPreview.value = nextPending
-      }
-    } finally {
-      isProcessing.value = false
+    const epoch = generation
+    if (applyAll) batchOptions = { ...options }
+    const pending = applyAll ? tasks.value.filter(item => item.status === 'needs_options' && item.id) : [task]
+    for (const item of pending) {
+      await confirmTaskOptions(item, options)
+      if (epoch !== generation) return
+      showNextPrompt(item)
     }
-  }
-
-  async function pollTask(task) {
-    const baseInterval = tasks.value.length > 1 ? 1000 : 200
-    const maxRetries = 3
-    const maxDuration = 300000 // 5 分钟超时
-    const startTime = Date.now()
-    let retries = 0
-
-    while (Date.now() - startTime < maxDuration) {
-      try {
-        const data = await api.getTaskStatus(task.id)
-        retries = 0 // 成功则重置重试计数
-        task.progress = Math.max(task.progress, data.progress || 0)
-        task.status = data.status
-
-        if (data.status === 'succeeded') {
-          task.progress = 1
-          task.result = data.result
-          if (!currentPreview.value || currentPreview.value.status !== 'succeeded') {
-            currentPreview.value = task
-          }
-          return
-        }
-        if (data.status === 'failed') {
-          task.progress = 1
-          task.error = data.error
-          task.lastFailedStep = 'processing'
-          return
-        }
-      } catch {
-        retries++
-        if (retries >= maxRetries) {
-          task.status = 'failed'
-          task.progress = 1
-          task.error = 'Connection lost'
-          task.lastFailedStep = task.id ? 'processing' : 'upload'
-          return
-        }
-      }
-      // 指数退避：baseInterval, baseInterval*2, baseInterval*4...
-      const delay = baseInterval * Math.pow(2, retries - 1)
-      await new Promise(r => setTimeout(r, delay))
-    }
-    // 超时
-    task.status = 'failed'
-    task.progress = 1
-    task.error = 'Processing timeout'
-    task.lastFailedStep = task.id ? 'processing' : 'upload'
+    showNextPrompt(task)
+    scheduleUploads()
   }
 
   async function retryTask(task) {
-    if (!task || task.status !== 'failed' || task.retrying) return
+    if (!task || !isCurrent(task) || !['failed', 'unavailable'].includes(task.status) || task.retrying) return
+    const epoch = generation
+    const signal = controller.signal
     task.retrying = true
     task.error = null
-    task.progress = 0
-    isProcessing.value = true
-
     try {
-      if (task.lastFailedStep === 'upload' || !task.id) {
-        await uploadTask(task)
+      if (!task.id) {
+        uploadsPaused = false
+        task.status = 'pending'
+        await scheduleUploads()
         return
       }
-
-      if (task.lastFailedStep === 'confirm_logo') {
-        if (task.lastLogoChoice) {
-          await confirmTaskLogo(task, task.lastLogoChoice)
-        } else {
-          task.status = 'needs_logo'
-          currentPreview.value = task
-        }
-        return
-      }
-
-      if (task.lastFailedStep === 'confirm_options') {
-        await confirmTaskOptions(task, task.lastOptions || task.preserveOptions || {})
-        return
-      }
-
-      const res = await api.retryTask(task.id)
-      task.id = res.task_id || task.id
-      task.status = 'processing'
-      task.lastFailedStep = null
-      await pollTask(task)
-    } catch (e) {
-      task.status = 'failed'
-      task.progress = 1
-      task.error = e.message || 'Retry failed'
+      const data = await submitWithBackoff(task, () => api.getTaskStatus(task.id, 15000, { signal }))
+      if (!isCurrent(task, epoch)) return
+      applyServerStatus(task, data)
+      if (data.status === 'failed') {
+        const response = await submitWithBackoff(task, () => api.retryTask(task.id, { signal }))
+        if (!isCurrent(task, epoch)) return
+        task.id = response.task_id || task.id
+        task.status = 'processing'
+        task.stage = 'queued'
+        task.progress = 0
+        task.lastFailedStep = null
+        startPolling(task)
+      } else if (data.status === 'needs_logo') {
+        if (task.lastLogoChoice) await confirmTaskLogo(task, task.lastLogoChoice)
+        else currentPreview.value = task
+      } else if (data.status === 'needs_options') {
+        if (task.lastOptions) await confirmTaskOptions(task, task.lastOptions)
+        else currentPreview.value = task
+      } else if (!TERMINAL_STATUSES.has(data.status)) startPolling(task)
+      scheduleUploads()
+    } catch (error) {
+      if (!isCurrent(task, epoch) || signal.aborted) return
+      if (Number(error.response?.status ?? error.code) === 404) markMissing(task)
+      else markUnavailable(task, error, task.lastFailedStep || 'processing')
     } finally {
       task.retrying = false
-      isProcessing.value = false
+      if (isCurrent(task, epoch)) scheduleUploads()
     }
   }
 
-  async function downloadZip() {
-    if (!canDownloadZip.value) {
-      throw new Error('Burn-after-read files cannot be downloaded as ZIP')
-    }
-    const items = succeededTasks.value
-      .map(t => {
-        const url = t.result?.download_url
-        if (!url) return null
-        // URL 格式: /api/download/filename.jpg?token=...&expires=...&burn=1
-        const match = url.match(/\/download\/([^?]+)(?:\?(.*))?/)
-        if (!match) return null
-        const filename = match[1]
-        const queryString = match[2] || ''
-        const params = new URLSearchParams(queryString)
-        const token = params.get('token') || ''
-        const expires = params.get('expires') || ''
-        const burn = params.get('burn') || '0'
-        const action = params.get('action') || 'download'
-        return { filename, token, expires, burn, action }
-      })
-      .filter(Boolean)
-
-    if (items.length === 0) return
-    const data = await api.downloadZip(items)
-    if (data.zip_url) {
-      window.open(data.zip_url, '_blank')
-    }
+  function downloadZip() {
+    if (zipRequest) return zipRequest
+    if (!canDownloadZip.value) return Promise.resolve()
+    const epoch = generation
+    const signal = controller.signal
+    const items = succeededTasks.value.map(task => {
+      const match = task.result.download_url.match(/\/download\/([^?]+)(?:\?(.*))?/)
+      if (!match) return null
+      const params = new URLSearchParams(match[2] || '')
+      return {
+        filename: match[1], token: params.get('token') || '', expires: params.get('expires') || '',
+        burn: params.get('burn') || '0', action: params.get('action') || 'download',
+      }
+    }).filter(Boolean)
+    if (!items.length) return Promise.resolve()
+    isDownloadingZip.value = true
+    zipError.value = null
+    zipRequest = (async () => {
+      try {
+        const data = await api.downloadZip(items, { signal })
+        if (epoch === generation && data.zip_url) window.location.assign(data.zip_url)
+      } catch (error) {
+        if (epoch === generation && !signal.aborted) zipError.value = error.message || 'ZIP download failed'
+      } finally {
+        if (epoch === generation) {
+          isDownloadingZip.value = false
+          zipRequest = null
+        }
+      }
+    })()
+    return zipRequest
   }
 
   return {
-    files, watermarkStyles, selectedStyle, imageQuality,
-    burnAfterRead, logoPreference, isProcessing, tasks, currentPreview, completedCount, totalCount, allDone,
-    succeededTasks, canDownloadZip, stylesLoaded, loadStyles, addFiles,
-    clearFiles, reselectFiles, setPreview, processAll, processPendingLogoTasks,
-    processPendingOptionsTask, retryTask, downloadZip, hasPendingOptions,
+    files, watermarkStyles, selectedStyle, imageQuality, burnAfterRead, logoPreference,
+    isProcessing, hasActiveBatch, tasks, currentPreview, completedCount, totalCount, allDone,
+    succeededTasks, canDownloadZip, stylesLoaded, isDownloadingZip, zipError,
+    loadStyles, addFiles, clearFiles, reselectFiles, setPreview, processAll, processPendingLogoTasks,
+    processPendingOptionsTask, retryTask, downloadZip, hasPendingOptions, hasPendingLogo,
   }
 })

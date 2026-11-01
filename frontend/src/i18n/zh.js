@@ -18,6 +18,7 @@ export default {
     qualityLow: '低',
     burnAfterRead: '阅后即焚',
     burnTip: '下载后自动删除服务器文件',
+    batchFixed: '本批次已固定设置，重新选择照片后可修改。',
   },
   action: {
     process: '开始处理',
@@ -26,6 +27,9 @@ export default {
     preview: '预览',
     downloadAll: '打包下载全部',
     retry: '重试',
+    resume: '继续查询',
+    packing: '正在打包...',
+    closePreview: '关闭预览',
   },
   status: {
     uploading: '上传中...',
@@ -33,12 +37,25 @@ export default {
     success: '处理成功',
     failed: '处理失败',
     done: '全部完成',
+    queued: '等待处理...',
+    identifying: '上传完成，正在识别照片...',
+    unavailable: '暂时无法获取任务状态，后台可能仍在处理。',
+    stages: {
+      processing: '服务器处理中...',
+      loaded: '正在读取照片信息...',
+      metadata: '正在生成水印...',
+      rendered: '正在保存照片与媒体...',
+      saving: '正在保存照片与媒体...',
+      saved: '正在准备预览...',
+      previews: '正在准备预览...',
+    },
   },
   logo: {
     title: '选择 Logo 样式',
     message: '检测到小米设备拍摄，请选择水印 Logo：',
     xiaomi: '小米',
     leica: '徕卡',
+    continue: '继续选择 Logo',
   },
   compare: {
     original: '原图',
@@ -50,6 +67,7 @@ export default {
     preserve_motion: '保留动态照片',
     detected: '检测到特殊格式',
     confirm: '确认并处理',
+    applyAll: '将这些选项应用到本批剩余照片',
   },
   lang: {
     zh: '中文',

@@ -18,6 +18,7 @@ export default {
     qualityLow: 'Low',
     burnAfterRead: 'Burn After Read',
     burnTip: 'Auto-delete server files after download',
+    batchFixed: 'Settings are fixed for this batch. Reselect photos to change them.',
   },
   action: {
     process: 'Process',
@@ -26,6 +27,9 @@ export default {
     preview: 'Preview',
     downloadAll: 'Download All (ZIP)',
     retry: 'Retry',
+    resume: 'Resume Status Check',
+    packing: 'Creating ZIP...',
+    closePreview: 'Close preview',
   },
   status: {
     uploading: 'Uploading...',
@@ -33,12 +37,25 @@ export default {
     success: 'Success',
     failed: 'Failed',
     done: 'All Done',
+    queued: 'Waiting to process...',
+    identifying: 'Upload complete. Identifying photo...',
+    unavailable: 'Status is temporarily unavailable. Processing may still be running.',
+    stages: {
+      processing: 'Processing on server...',
+      loaded: 'Reading photo information...',
+      metadata: 'Rendering watermark...',
+      rendered: 'Saving photo and media...',
+      saving: 'Saving photo and media...',
+      saved: 'Preparing preview...',
+      previews: 'Preparing preview...',
+    },
   },
   logo: {
     title: 'Choose Logo Style',
     message: 'Xiaomi device detected. Choose watermark logo:',
     xiaomi: 'Xiaomi',
     leica: 'Leica',
+    continue: 'Continue Logo Selection',
   },
   compare: {
     original: 'Original',
@@ -50,6 +67,7 @@ export default {
     preserve_motion: 'Preserve Motion Photo',
     detected: 'Special Format Detected',
     confirm: 'Confirm & Process',
+    applyAll: 'Apply these options to remaining photos in this batch',
   },
   lang: {
     zh: '中文',

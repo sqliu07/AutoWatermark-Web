@@ -14,6 +14,7 @@
         <a-switch
           size="small"
           :checked="preserveHdr"
+          :aria-label="t('options.preserve_hdr')"
           @change="$emit('update:preserveHdr', $event)"
         />
         <span class="option-toggle-label">{{ t('options.preserve_hdr') }}</span>
@@ -22,11 +23,17 @@
         <a-switch
           size="small"
           :checked="preserveMotion"
+          :aria-label="t('options.preserve_motion')"
           @change="$emit('update:preserveMotion', $event)"
         />
         <span class="option-toggle-label">{{ t('options.preserve_motion') }}</span>
       </div>
     </div>
+
+    <label v-if="canApplyAll" class="option-toggle-item">
+      <input type="checkbox" :checked="applyAll" @change="$emit('update:applyAll', $event.target.checked)" />
+      <span class="option-toggle-label">{{ t('options.applyAll') }}</span>
+    </label>
 
     <a-button type="primary" size="large" @click="$emit('confirm')">
       {{ t('options.confirm') }}
@@ -41,9 +48,11 @@ defineProps({
   task: { type: Object, default: null },
   preserveHdr: { type: Boolean, default: true },
   preserveMotion: { type: Boolean, default: true },
+  applyAll: { type: Boolean, default: false },
+  canApplyAll: { type: Boolean, default: false },
 })
 
-defineEmits(['update:preserveHdr', 'update:preserveMotion', 'confirm'])
+defineEmits(['update:preserveHdr', 'update:preserveMotion', 'update:applyAll', 'confirm'])
 
 const { t } = useI18n()
 </script>

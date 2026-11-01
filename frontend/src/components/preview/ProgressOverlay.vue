@@ -1,7 +1,7 @@
 <template>
   <Transition name="fade">
     <div v-if="visible" class="progress-overlay">
-      <div class="progress-card">
+      <div class="progress-card" role="status" aria-live="polite">
         <a-progress
           type="circle"
           :percent="percent"
@@ -12,6 +12,7 @@
         />
 
         <div class="progress-info">
+          <span v-if="stage" class="progress-count">{{ stage }}</span>
           <span class="progress-count">
             {{ t('status.processing', { current: completedCount, total: totalCount }) }}
           </span>
@@ -28,7 +29,7 @@
             :class="{
               done: task.status === 'succeeded',
               fail: task.status === 'failed',
-              active: task.status === 'processing' || task.status === 'uploading',
+              active: ['queued', 'processing', 'uploading'].includes(task.status),
             }"
           />
         </div>
@@ -46,6 +47,7 @@ defineProps({
   completedCount: { type: Number, default: 0 },
   totalCount: { type: Number, default: 0 },
   currentName: { type: String, default: '' },
+  stage: { type: String, default: '' },
   tasks: { type: Array, default: () => [] },
 })
 

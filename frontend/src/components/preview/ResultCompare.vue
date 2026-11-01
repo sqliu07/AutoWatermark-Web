@@ -26,6 +26,7 @@
           :src="originalUrl"
           class="compare-img"
           :alt="task.originalName"
+          decoding="async"
           @click="$emit('fullscreen', originalUrl)"
         />
       </div>
@@ -59,7 +60,8 @@
           :src="task.result.preview_url"
           class="compare-img"
           :alt="task.originalName"
-          @click="$emit('fullscreen', task.result.preview_url)"
+          decoding="async"
+          @click="$emit('fullscreen', task.result.full_preview_url || task.result.preview_url)"
         />
       </div>
     </div>
@@ -67,20 +69,20 @@
     <div class="action-bar">
       <span class="action-filename">{{ task.originalName }}</span>
       <div class="action-buttons">
-        <a-button size="small" @click="$emit('fullscreen', task.result.preview_url)">
+        <a-button size="small" @click="$emit('fullscreen', task.result.full_preview_url || task.result.preview_url)">
           {{ t('action.preview') }}
         </a-button>
         <a-button
           type="primary"
           size="small"
           :href="task.result.download_url"
-          :download="task.originalName"
+          :download="task.result.download_name || task.originalName"
           tag="a"
         >
           {{ t('action.download') }}
         </a-button>
-        <a-button v-if="store.canDownloadZip" size="small" @click="store.downloadZip()">
-          {{ t('action.downloadAll') }}
+        <a-button v-if="store.canDownloadZip" size="small" :loading="store.isDownloadingZip" :disabled="store.isDownloadingZip" @click="store.downloadZip()">
+          {{ t(store.isDownloadingZip ? 'action.packing' : 'action.downloadAll') }}
         </a-button>
         <a-button size="small" @click="store.reselectFiles()">
           {{ t('upload.reselect') }}

@@ -1,8 +1,8 @@
 <template>
   <Transition name="fade">
-    <div v-if="src" class="fullscreen-overlay" @click="$emit('close')">
-      <img :src="src" class="fullscreen-img" @click.stop />
-      <button class="fullscreen-close" @click="$emit('close')">
+    <div v-if="src" class="fullscreen-overlay" role="dialog" aria-modal="true" :aria-label="t('action.preview')" @click="$emit('close')">
+      <img :src="src" :alt="alt" class="fullscreen-img" @click.stop />
+      <button ref="closeButton" class="fullscreen-close" :aria-label="t('action.closePreview')" @click="$emit('close')">
         <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
           <path d="M4 4l10 10M14 4L4 14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
         </svg>
@@ -12,11 +12,50 @@
 </template>
 
 <script setup>
-defineProps({
+import { ref, watch, nextTick, onMounted, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
+
+const props = defineProps({
   src: { type: String, default: null },
+  alt: { type: String, default: '' },
 })
 
-defineEmits(['close'])
+const emit = defineEmits(['close'])
+const { t } = useI18n()
+const closeButton = ref(null)
+let previousFocus = null
+
+function restoreFocus() {
+  if (previousFocus?.isConnected) previousFocus.focus()
+  previousFocus = null
+}
+
+watch(() => props.src, async (src, previous) => {
+  if (src) {
+    if (!previous) previousFocus = document.activeElement
+    await nextTick()
+    if (props.src) closeButton.value?.focus()
+  } else {
+    restoreFocus()
+  }
+})
+
+function onKeydown(event) {
+  if (!props.src) return
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    emit('close')
+  } else if (event.key === 'Tab') {
+    event.preventDefault()
+    closeButton.value?.focus()
+  }
+}
+
+onMounted(() => document.addEventListener('keydown', onKeydown))
+onUnmounted(() => {
+  document.removeEventListener('keydown', onKeydown)
+  restoreFocus()
+})
 </script>
 
 <style scoped>
