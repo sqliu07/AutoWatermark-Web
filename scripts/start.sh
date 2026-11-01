@@ -17,24 +17,26 @@ fi
 PYTHON="${VENV_DIR}/bin/python"
 PIP="${VENV_DIR}/bin/pip"
 
-requirements_ready() {
-  "${PYTHON}" - <<'PY' >/dev/null 2>&1
-import flask
-import flask_limiter
-import PIL
-import piexif
-PY
-}
-
 if [[ "${SKIP_PIP_INSTALL:-0}" == "1" ]]; then
   echo "Skipping dependency installation because SKIP_PIP_INSTALL=1"
-elif requirements_ready; then
-  touch "${VENV_DIR}/.requirements-installed"
-elif [[ ! -f "${VENV_DIR}/.requirements-installed" ]] || [[ requirements.txt -nt "${VENV_DIR}/.requirements-installed" ]]; then
-  echo "Installing Python dependencies"
-  "${PIP}" install --upgrade pip
-  "${PIP}" install -r requirements.txt
-  touch "${VENV_DIR}/.requirements-installed"
+else
+  REQUIREMENTS_HASH="$("${PYTHON}" - <<'PY'
+import hashlib
+from pathlib import Path
+print(hashlib.sha256(Path("requirements.txt").read_bytes()).hexdigest())
+PY
+)"
+  REQUIREMENTS_MARKER="${VENV_DIR}/.requirements-installed"
+  INSTALLED_REQUIREMENTS_HASH=""
+  if [[ -f "${REQUIREMENTS_MARKER}" ]]; then
+    INSTALLED_REQUIREMENTS_HASH="$(cat "${REQUIREMENTS_MARKER}")"
+  fi
+  if [[ "${INSTALLED_REQUIREMENTS_HASH}" != "${REQUIREMENTS_HASH}" ]]; then
+    echo "Installing Python dependencies"
+    "${PIP}" install --upgrade pip
+    "${PIP}" install --upgrade --upgrade-strategy eager -r requirements.txt
+    printf '%s\n' "${REQUIREMENTS_HASH}" > "${REQUIREMENTS_MARKER}"
+  fi
 fi
 
 if [[ -f "${ENV_FILE}" ]]; then
